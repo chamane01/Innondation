@@ -8,7 +8,7 @@ from shapely.geometry import Polygon
 import plotly.graph_objects as go
 
 # Streamlit - Titre de l'application
-st.title("Carte des zones inondées avec vue de haut, contours fermés et calcul de surface topographique")
+st.title("Carte des zones inondées avec contours fermés et calcul de surface")
 
 # Étape 1 : Téléverser le fichier Excel ou TXT
 uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
@@ -93,32 +93,33 @@ if uploaded_file is not None:
         if st.button("Afficher la carte"):
             plot_map_with_hatching(niveau_inondation)
 
-        # Étape 9 : Extraction des coordonnées XZ pour chaque polygonale
-        def extraire_coordonnees_XZ(polygones):
+        # Étape 9 : Extraction des coordonnées XY pour chaque polygonale
+        def extraire_coordonnees_XY(polygones):
             tables_coordonnees = []
             for polygon in polygones:
                 coords = np.array(polygon.exterior.coords)
-                table = pd.DataFrame({"X": coords[:, 0], "Z": coords[:, 1]})  # XZ car Y est considéré comme Z ici
+                table = pd.DataFrame({"X": coords[:, 0], "Y": coords[:, 1]})
                 tables_coordonnees.append(table)
             return tables_coordonnees
 
-        tables_coordonnees = extraire_coordonnees_XZ(polygones_inondes)
+        tables_coordonnees = extraire_coordonnees_XY(polygones_inondes)
 
-        # Affichage des tableaux de coordonnées pour chaque polygonale
-        st.subheader("Coordonnées des polygonales")
-        for i, table in enumerate(tables_coordonnees):
-            st.write(f"Polygonale {i+1}")
-            st.dataframe(table)
+        # Affichage des tableaux de coordonnées pour chaque polygonale sur demande
+        if st.checkbox("Afficher les tableaux de coordonnées des polygonales"):
+            st.subheader("Coordonnées des polygonales")
+            for i, table in enumerate(tables_coordonnees):
+                st.write(f"Polygonale {i+1}")
+                st.dataframe(table)
 
-        # Étape 10 : Calcul de la surface par une formule topographique
+        # Étape 10 : Calcul de la surface en utilisant les coordonnées projetées
         def calcul_surface_topographique(table):
             x = table['X'].values
-            z = table['Z'].values
+            y = table['Y'].values
             n = len(x)
             area = 0.0
             for i in range(n):
                 j = (i + 1) % n
-                area += x[i] * z[j] - x[j] * z[i]
+                area += x[i] * y[j] - x[j] * y[i]
             return abs(area) / 2.0
 
         surfaces_polygonales = [calcul_surface_topographique(table) for table in tables_coordonnees]
