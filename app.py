@@ -4,11 +4,11 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import griddata
-from shapely.geometry import Polygon, LineString
+from shapely.geometry import Polygon
 import plotly.graph_objects as go
 
 # Streamlit - Titre de l'application
-st.title("Carte des zones inondées avec vue de haut et calcul de surface topographique")
+st.title("Carte des zones inondées avec vue de haut, contours fermés et calcul de surface topographique")
 
 # Étape 1 : Téléverser le fichier Excel ou TXT
 uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
@@ -43,7 +43,7 @@ if uploaded_file is not None:
         grid_X, grid_Y = np.mgrid[X_min:X_max:resolution*1j, Y_min:Y_max:resolution*1j]
         grid_Z = griddata((df['X'], df['Y']), df['Z'], (grid_X, grid_Y), method=interpolation_method)
 
-        # Étape 7 : Calcul des contours fermés pour la zone inondée
+        # Étape 7 : Génération des contours fermés
         def generer_polygones_fermes(niveau_inondation):
             contour = plt.contour(grid_X, grid_Y, grid_Z, levels=[niveau_inondation], colors='none')
             paths = contour.collections[0].get_paths()
@@ -64,7 +64,36 @@ if uploaded_file is not None:
 
         polygones_inondes = generer_polygones_fermes(niveau_inondation)
 
-        # Étape 8 : Calcul des coordonnées XZ pour chaque polygonale
+        # Étape 8 : Affichage de la carte avec les contours fermés et hachures
+        def plot_map_with_hatching(niveau_inondation):
+            plt.close('all')
+
+            # Taille ajustée pour la carte
+            fig, ax_map = plt.subplots(figsize=(8, 6))
+
+            # Tracé de la carte de profondeur
+            contour = ax_map.contourf(grid_X, grid_Y, grid_Z, cmap='viridis', levels=100)
+            cbar = fig.colorbar(contour, ax=ax_map)
+            cbar.set_label('Profondeur (mètres)')
+
+            # Tracé du contour actuel du niveau d'inondation
+            contours_inondation = ax_map.contour(grid_X, grid_Y, grid_Z, levels=[niveau_inondation], colors='red', linewidths=2)
+            ax_map.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
+
+            # Tracé des hachures pour la zone inondée
+            ax_map.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, niveau_inondation], colors='none', hatches=['///'], alpha=0)
+
+            ax_map.set_title("Carte des zones inondées avec hachures")
+            ax_map.set_xlabel("Coordonnée X")
+            ax_map.set_ylabel("Coordonnée Y")
+
+            # Affichage
+            st.pyplot(fig)
+
+        if st.button("Afficher la carte"):
+            plot_map_with_hatching(niveau_inondation)
+
+        # Étape 9 : Extraction des coordonnées XZ pour chaque polygonale
         def extraire_coordonnees_XZ(polygones):
             tables_coordonnees = []
             for polygon in polygones:
@@ -81,7 +110,7 @@ if uploaded_file is not None:
             st.write(f"Polygonale {i+1}")
             st.dataframe(table)
 
-        # Étape 9 : Calcul de la surface par une formule topographique
+        # Étape 10 : Calcul de la surface par une formule topographique
         def calcul_surface_topographique(table):
             x = table['X'].values
             z = table['Z'].values
@@ -94,7 +123,7 @@ if uploaded_file is not None:
 
         surfaces_polygonales = [calcul_surface_topographique(table) for table in tables_coordonnees]
 
-        # Étape 10 : Affichage des surfaces calculées
+        # Étape 11 : Affichage des surfaces calculées
         st.subheader("Surface des zones inondées (formule topographique)")
         for i, surface in enumerate(surfaces_polygonales):
             st.write(f"Surface de la polygonale {i+1} : {surface:.2f} mètres carrés")
