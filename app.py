@@ -6,9 +6,10 @@ import numpy as np
 from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import plotly.graph_objects as go
+import io
 
 # Streamlit - Titre de l'application
-st.title("Carte des zones inondées avec contours fermés et calcul de surface")
+st.title("Carte des zones inondées avec polygones fermés et calcul de surface")
 
 # Étape 1 : Téléverser le fichier Excel ou TXT
 uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
@@ -43,7 +44,7 @@ if uploaded_file is not None:
         grid_X, grid_Y = np.mgrid[X_min:X_max:resolution*1j, Y_min:Y_max:resolution*1j]
         grid_Z = griddata((df['X'], df['Y']), df['Z'], (grid_X, grid_Y), method=interpolation_method)
 
-        # Étape 7 : Génération des contours fermés
+        # Étape 7 : Génération des polygones fermés
         def generer_polygones_fermes(niveau_inondation):
             contour = plt.contour(grid_X, grid_Y, grid_Z, levels=[niveau_inondation], colors='none')
             paths = contour.collections[0].get_paths()
@@ -64,8 +65,8 @@ if uploaded_file is not None:
 
         polygones_inondes = generer_polygones_fermes(niveau_inondation)
 
-        # Étape 8 : Affichage de la carte avec les contours fermés et hachures
-        def plot_map_with_hatching(niveau_inondation):
+        # Étape 8 : Affichage de la carte avec les polygones fermés et hachures
+        def plot_map_with_polygons_and_hatching(niveau_inondation, polygones):
             plt.close('all')
 
             # Taille ajustée pour la carte
@@ -76,22 +77,23 @@ if uploaded_file is not None:
             cbar = fig.colorbar(contour, ax=ax_map)
             cbar.set_label('Profondeur (mètres)')
 
-            # Tracé du contour actuel du niveau d'inondation
-            contours_inondation = ax_map.contour(grid_X, grid_Y, grid_Z, levels=[niveau_inondation], colors='red', linewidths=2)
-            ax_map.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
+            # Tracé des contours fermés
+            for polygon in polygones:
+                x, y = polygon.exterior.xy
+                ax_map.plot(x, y, 'r-', linewidth=2)
 
             # Tracé des hachures pour la zone inondée
             ax_map.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, niveau_inondation], colors='none', hatches=['///'], alpha=0)
 
-            ax_map.set_title("Carte des zones inondées avec hachures")
+            ax_map.set_title("Carte des zones inondées avec polygones fermés")
             ax_map.set_xlabel("Coordonnée X")
             ax_map.set_ylabel("Coordonnée Y")
 
             # Affichage
             st.pyplot(fig)
 
-        if st.button("Afficher la carte"):
-            plot_map_with_hatching(niveau_inondation)
+        if st.button("Afficher la carte avec les contours fermés"):
+            plot_map_with_polygons_and_hatching(niveau_inondation, polygones_inondes)
 
         # Étape 9 : Extraction des coordonnées XY pour chaque polygonale
         def extraire_coordonnees_XY(polygones):
@@ -104,31 +106,42 @@ if uploaded_file is not None:
 
         tables_coordonnees = extraire_coordonnees_XY(polygones_inondes)
 
-        # Affichage des tableaux de coordonnées pour chaque polygonale sur demande
+        # Étape 10 : Téléchargement des coordonnées en fichier TXT
+        def telecharger_coordonnees(tables_coordonnees):
+            output = io.StringIO()
+            for i, table in enumerate(tables_coordonnees):
+                output.write(f"# Polygonale {i+1}\n")
+                table.to_csv(output, index=False, sep="\t")
+                output.write("\n")
+
+            # Créer un fichier téléchargeable
+            st.download_button("Télécharger les coordonnées des polygones", data=output.getvalue(), file_name="coordonnees_polygonales.txt")
+
         if st.checkbox("Afficher les tableaux de coordonnées des polygonales"):
             st.subheader("Coordonnées des polygonales")
             for i, table in enumerate(tables_coordonnees):
                 st.write(f"Polygonale {i+1}")
                 st.dataframe(table)
 
-        # Étape 10 : Calcul de la surface en utilisant les coordonnées projetées
-        def calcul_surface_topographique(table):
-            x = table['X'].values
-            y = table['Y'].values
-            n = len(x)
+        telecharger_coordonnees(tables_coordonnees)
+
+        # Étape 11 : Calcul de la surface en utilisant ta formule
+        def calculer_surface_polygon(vertices):
+            n = len(vertices)
             area = 0.0
             for i in range(n):
-                j = (i + 1) % n
-                area += x[i] * y[j] - x[j] * y[i]
-            return abs(area) / 2.0
+                x1, y1 = vertices[i]
+                x2, y2 = vertices[(i + 1) % n]
+                area += x1 * y2 - x2 * y1
+            return abs(area) / 2.0  # Retourner l'aire en unités carrées
 
-        surfaces_polygonales = [calcul_surface_topographique(table) for table in tables_coordonnees]
+        surfaces_polygonales = [calculer_surface_polygon(table[['X', 'Y']].values) for table in tables_coordonnees]
 
-        # Étape 11 : Affichage des surfaces calculées
+        # Étape 12 : Affichage des surfaces calculées
         st.subheader("Surface des zones inondées (formule topographique)")
         for i, surface in enumerate(surfaces_polygonales):
             st.write(f"Surface de la polygonale {i+1} : {surface:.2f} mètres carrés")
-        
+
         surface_totale = sum(surfaces_polygonales)
         st.write(f"Surface totale : {surface_totale / 10000:.2f} hectares")
 
