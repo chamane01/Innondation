@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from shapely.geometry import Polygon
+import contextily as ctx
 
 # Streamlit - Titre de l'application avec logo
 st.image("POPOPO.jpg", width=150)
@@ -65,7 +66,14 @@ if uploaded_file is not None:
 
             # Tracer la carte de profondeur
             fig, ax = plt.subplots(figsize=(8, 6))
-            contourf = ax.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='viridis')
+
+            # Tracer le fond OpenStreetMap
+            ax.set_xlim(X_min, X_max)
+            ax.set_ylim(Y_min, Y_max)
+            ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+
+            # Tracer la carte de profondeur
+            contourf = ax.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='viridis', alpha=0.5)
             plt.colorbar(contourf, label='Profondeur (mètres)')
 
             # Tracer le contour du niveau d'inondation
