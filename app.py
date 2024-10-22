@@ -7,8 +7,6 @@ from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
 
-import streamlit as st
-
 # Load the custom CSS file
 def load_css():
     with open("static/styles.css") as f:
