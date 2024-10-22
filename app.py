@@ -72,10 +72,10 @@ if uploaded_file is not None:
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[niveau_inondation], colors='red', linewidths=2)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
 
-            # Tracer les hachures pour la zone inondée
+            # Tracer la zone inondée en cyan avec un bon alpha
             if polygon_inonde:
                 x_poly, y_poly = polygon_inonde.exterior.xy
-                ax.fill(x_poly, y_poly, alpha=0.3, fc='blue', ec='black', label='Zone inondée')
+                ax.fill(x_poly, y_poly, alpha=0.5, fc='cyan', ec='black', label='Zone inondée')
 
             ax.set_title("Carte des zones inondées")
             ax.set_xlabel("Coordonnée X")
