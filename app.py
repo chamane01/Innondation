@@ -41,13 +41,17 @@ if uploaded_file is not None:
         # Étape 7 : Calcul de la surface inondée
         def calculer_surface(niveau_inondation):
             # Détection des contours de la zone inondée
-            contour = plt.contour(grid_X, grid_Y, grid_Z, levels=[niveau_inondation], colors='red')
-            paths = contour.collections[0].get_paths()
-            polygons = [Polygon(path.vertices) for path in paths]
+            contours = []
+            for x in range(grid_X.shape[0]):
+                for y in range(grid_Y.shape[1]):
+                    if grid_Z[x, y] <= niveau_inondation:
+                        contours.append((grid_X[x, y], grid_Y[x, y]))
 
-            # Calculer la surface totale des polygones
-            surfaces = [polygon.area for polygon in polygons]
-            return sum(surfaces) / 10000  # Retourne en hectares
+            # Convertir les contours en un polygone
+            if contours:
+                polygon = Polygon(contours)
+                return polygon.area / 10000  # Retourne en hectares
+            return 0.0
 
         # Étape 8 : Calcul du volume d'eau
         def calculer_volume(niveau_inondation, surface_inondee):
