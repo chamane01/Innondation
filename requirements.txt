@@ -6,3 +6,4 @@ scipy
 shapely
 folium
 streamlit-folium
+matplotlib
