@@ -2,6 +2,7 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 
@@ -50,20 +51,40 @@ if uploaded_file is not None:
             # Convertir les contours en un polygone
             if contours:
                 polygon = Polygon(contours)
-                return polygon.area / 10000  # Retourne en hectares
-            return 0.0
+                return polygon, polygon.area / 10000  # Retourne le polygone et la surface en hectares
+            return None, 0.0
 
         # Étape 8 : Calcul du volume d'eau
-        def calculer_volume(niveau_inondation, surface_inondee):
+        def calculer_volume(surface_inondee):
             volume = surface_inondee * niveau_inondation * 10000  # Conversion en m³ (1 hectare = 10,000 m²)
             return volume
 
-        surface_inondee = calculer_surface(niveau_inondation)
-        volume_eau = calculer_volume(niveau_inondation, surface_inondee)
+        polygon_inonde = None
+        surface_inondee = 0.0
+        if st.button("Calculer la surface et afficher la carte"):
+            polygon_inonde, surface_inondee = calculer_surface(niveau_inondation)
+            volume_eau = calculer_volume(surface_inondee)
 
-        # Étape 9 : Affichage des résultats
-        st.write(f"Surface inondée : {surface_inondee:.2f} hectares")
-        st.write(f"Volume d'eau : {volume_eau:.2f} m³")
+            # Étape 9 : Affichage des résultats
+            st.write(f"Surface inondée : {surface_inondee:.2f} hectares")
+            st.write(f"Volume d'eau : {volume_eau:.2f} m³")
+
+            # Tracer la carte de profondeur
+            plt.figure(figsize=(8, 6))
+            plt.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='viridis')
+            plt.colorbar(label='Profondeur (mètres)')
+
+            # Tracer les hachures et le polygone
+            if polygon_inonde:
+                x_poly, y_poly = polygon_inonde.exterior.xy
+                plt.fill(x_poly, y_poly, alpha=0.3, fc='blue', ec='black', label='Zone inondée')
+            plt.title("Carte des zones inondées")
+            plt.xlabel("Coordonnée X")
+            plt.ylabel("Coordonnée Y")
+            plt.legend()
+
+            # Affichage de la carte
+            st.pyplot(plt)
 
 else:
     st.warning("Veuillez téléverser un fichier pour démarrer.")
