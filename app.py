@@ -7,7 +7,7 @@ from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 
 # Streamlit - Titre de l'application avec logo
-st.image("mon_logo.png", width=150)
+st.image("POPOPO.jpg", width=150)
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
 
 # Étape 1 : Téléverser le fichier Excel ou TXT
