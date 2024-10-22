@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
-from shapely.geometry import Polygon, MultiPolygon
+from shapely.geometry import Polygon
 
 # Streamlit - Titre de l'application avec logo
 st.image("POPOPO.jpg", width=150)
@@ -64,26 +64,28 @@ if uploaded_file is not None:
             volume_eau = calculer_volume(surface_inondee)
 
             # Tracer la carte de profondeur
-            plt.figure(figsize=(8, 6))
-            contourf = plt.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='viridis')
+            fig, ax = plt.subplots(figsize=(8, 6))
+            contourf = ax.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='viridis')
             plt.colorbar(contourf, label='Profondeur (mètres)')
 
             # Tracer les hachures pour la zone inondée
             if polygon_inonde:
                 x_poly, y_poly = polygon_inonde.exterior.xy
-                plt.fill(x_poly, y_poly, alpha=0.3, fc='blue', ec='black', label='Zone inondée')
+                ax.fill(x_poly, y_poly, alpha=0.3, fc='blue', ec='black', label='Zone inondée')
 
-            plt.title("Carte des zones inondées")
-            plt.xlabel("Coordonnée X")
-            plt.ylabel("Coordonnée Y")
-            plt.legend()
+            ax.set_title("Carte des zones inondées")
+            ax.set_xlabel("Coordonnée X")
+            ax.set_ylabel("Coordonnée Y")
+            ax.legend()
 
             # Affichage de la carte
-            st.pyplot(plt)
+            st.pyplot(fig)
 
-            # Affichage des résultats
-            st.write(f"Surface inondée : {surface_inondee:.2f} hectares")
-            st.write(f"Volume d'eau : {volume_eau:.2f} m³")
+            # Affichage des résultats à droite de la carte
+            col1, col2 = st.columns([3, 1])  # Créer deux colonnes
+            with col2:
+                st.write(f"**Surface inondée :** {surface_inondee:.2f} hectares")
+                st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")
 
 else:
     st.warning("Veuillez téléverser un fichier pour démarrer.")
