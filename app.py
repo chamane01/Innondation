@@ -68,10 +68,14 @@ if uploaded_file is not None:
             contourf = ax.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='viridis')
             plt.colorbar(contourf, label='Profondeur (mètres)')
 
+            # Tracer le contour du niveau d'inondation
+            contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[niveau_inondation], colors='red', linewidths=2)
+            ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
+
             # Tracer les hachures pour la zone inondée
             if polygon_inonde:
                 x_poly, y_poly = polygon_inonde.exterior.xy
-                ax.fill(x_poly, y_poly, alpha=0.5, fc='cyan', ec='black', label='Zone inondée')  # Changer la couleur ici
+                ax.fill(x_poly, y_poly, alpha=0.3, fc='blue', ec='black', label='Zone inondée')
 
             ax.set_title("Carte des zones inondées")
             ax.set_xlabel("Coordonnée X")
