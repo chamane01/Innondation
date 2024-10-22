@@ -9,7 +9,7 @@ import folium
 from streamlit_folium import st_folium
 
 # Ajouter un logo en haut
-st.image("POPOPO.jpg", width=200)
+st.image("path_to_your_logo.png", width=200)
 
 # Streamlit - Titre de l'application
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
@@ -41,7 +41,7 @@ folium.LayerControl().add_to(m)
 st_folium(m, width=700, height=500)
 
 # --- Séparateur ---
-st.markdown("---")
+st.markdown("---")  # LIGNE DE DÉMARCATION AJOUTÉE
 
 # --- Section 2: Téléversement et affichage de la carte d'inondation ---
 st.subheader("Téléverser et traiter les données d'inondation")
@@ -70,7 +70,7 @@ if uploaded_file is not None:
 
         resolution = st.number_input("Résolution de la grille", value=300, min_value=100, max_value=1000)
         grid_X, grid_Y = np.mgrid[X_min:X_max:resolution*1j, Y_min:Y_max:resolution*1j]
-        grid_Z = griddata((df['X'], df['Y']), df['Z'], (grid_X, grid_Y), method=interpolation_method)
+        grid_Z = griddata((df['X'], 'Y'), df['Z'], (grid_X, grid_Y), method=interpolation_method)
 
         # Étape 7 : Calcul de la surface inondée
         def calculer_surface(niveau_inondation):
