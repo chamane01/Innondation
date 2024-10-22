@@ -46,7 +46,7 @@ if uploaded_file is not None:
             surfaces = []
             for path in paths:
                 polygon = Polygon(path.vertices)
-                if polygon.is_valid:  # Vérifier que le polygone est valide
+                if polygon.is_valid and polygon.is_empty == False:  # Vérifier que le polygone est valide et non vide
                     surfaces.append(polygon)
             return MultiPolygon(surfaces)  # Retourner un MultiPolygon
 
