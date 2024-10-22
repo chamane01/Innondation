@@ -39,23 +39,27 @@ if uploaded_file is not None:
         grid_X, grid_Y = np.mgrid[X_min:X_max:resolution*1j, Y_min:Y_max:resolution*1j]
         grid_Z = griddata((df['X'], df['Y']), df['Z'], (grid_X, grid_Y), method=interpolation_method)
 
-        # Étape 7 : Calcul de la surface inondée
-        def calculer_surfaces_hachure(niveau_inondation):
+        # Étape 7 : Calcul de la surface inondée et des polygones fermés
+        def calculer_surface(niveau_inondation):
             contour = plt.contour(grid_X, grid_Y, grid_Z, levels=[niveau_inondation], colors='none')
             paths = contour.collections[0].get_paths()
             surfaces = []
             for path in paths:
                 polygon = Polygon(path.vertices)
-                if polygon.is_valid:  # Assurez-vous que le polygone est valide
+                if polygon.is_valid:  # Vérifier que le polygone est valide
                     surfaces.append(polygon)
-            return MultiPolygon(surfaces)  # Retourne un MultiPolygon
+            return MultiPolygon(surfaces)  # Retourner un MultiPolygon
 
         # Étape 8 : Calcul du volume d'eau
         def calculer_volume(surface_inondee, niveau_inondation):
-            volume = surface_inondee * niveau_inondation * 10000  # Conversion en m³ (1 hectare = 10,000 m²)
+            volume = surface_inondee.area * niveau_inondation * 10000  # Conversion en m³ (1 hectare = 10,000 m²)
             return volume
 
-        # Étape 9 : Fonction pour tracer la carte avec contours, hachures et polygones
+        surfaces_inondees = calculer_surface(niveau_inondation)
+        surface_inondee = sum([poly.area for poly in surfaces_inondees.geoms]) / 10000  # Surface en hectares
+        volume_eau = calculer_volume(surfaces_inondees, niveau_inondation)
+
+        # Étape 4 : Fonction pour tracer la carte avec contours actuels et hachures
         def plot_map_with_hatching(niveau_inondation):
             plt.close('all')
 
@@ -74,27 +78,22 @@ if uploaded_file is not None:
             # Tracé des hachures pour la zone inondée
             ax_map.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, niveau_inondation], colors='none', hatches=['///'], alpha=0)
 
-            # Tracé des polygones fermés pour les surfaces inondées
-            surfaces_inondees = calculer_surfaces_hachure(niveau_inondation)
+            # Tracer les polygones fermés
             for surface in surfaces_inondees.geoms:
                 ax_map.fill(surface.exterior.xy[0], surface.exterior.xy[1], alpha=0.3, fc='blue', ec='black')
 
-            ax_map.set_title("Carte des zones inondées avec hachures")
+            ax_map.set_title("Carte des zones inondées avec hachures et polygones")
             ax_map.set_xlabel("Coordonnée X")
             ax_map.set_ylabel("Coordonnée Y")
 
             # Affichage
             st.pyplot(fig)
 
-            # Calcul et affichage des surfaces
-            surface_totale = sum(surface.area for surface in surfaces_inondees.geoms) / 10000  # En hectares
-            volume_eau = calculer_volume(surface_totale, niveau_inondation)
-            st.write(f"Surface inondée : {surface_totale:.2f} hectares")
-            st.write(f"Volume d'eau : {volume_eau:.2f} m³")
-
-        # Étape 10 : Affichage de la carte d'inondation avec hachures et polygones
+        # Étape 9 : Affichage de la carte d'inondation avec hachures
         if st.button("Afficher la carte d'inondation"):
             plot_map_with_hatching(niveau_inondation)
+            st.write(f"Surface inondée : {surface_inondee:.2f} hectares")
+            st.write(f"Volume d'eau : {volume_eau:.2f} m³")
 
 else:
     st.warning("Veuillez téléverser un fichier pour démarrer.")
