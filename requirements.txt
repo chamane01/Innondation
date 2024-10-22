@@ -7,3 +7,6 @@ shapely
 folium
 streamlit-folium
 matplotlib
+geopandas
+requests
+osmnx
