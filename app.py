@@ -9,7 +9,7 @@ import folium
 from streamlit_folium import st_folium
 
 # Ajouter un logo en haut
-st.image("path_to_your_logo.png", width=200)
+st.image("POPOPO.jpg", width=200)
 
 # Streamlit - Titre de l'application
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
