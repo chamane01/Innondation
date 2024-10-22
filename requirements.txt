@@ -10,3 +10,4 @@ matplotlib
 geopandas
 requests
 osmnx
+contextily
