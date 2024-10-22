@@ -13,7 +13,7 @@ from folium.plugins import MousePosition
 # Titre de l'application et logo
 st.set_page_config(page_title="Inondation et Cartographie", layout="wide")
 st.title("Analyse d'Inondation et Carte Dynamique")
-st.image("logo.png", width=200)  # Remplacez 'logo.png' par le chemin vers votre logo
+st.image("POPOPO.jpg", width=200)  # Remplacez 'logo.png' par le chemin vers votre logo
 
 # Téléversement du fichier
 uploaded_file = st.file_uploader("Téléverser un fichier Excel ou TXT", type=["xlsx", "txt"])
