@@ -10,7 +10,7 @@ import folium  # Bibliothèque pour la carte interactive
 from streamlit_folium import st_folium  # Permet d'afficher Folium dans Streamlit
 
 # Streamlit - Logo et Titre de l'application
-st.image("chemin/vers/votre/logo.png", width=150)  # Remplacez par le chemin de votre image
+st.image("POPOPO.jpg", width=150)  # Remplacez par le chemin de votre image
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
 
 # Étape 1 : Téléverser le fichier Excel ou TXT
