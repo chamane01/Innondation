@@ -6,4 +6,3 @@ scipy
 shapely
 folium
 streamlit-folium
-Pillow
