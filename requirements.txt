@@ -1,7 +1,9 @@
 streamlit
 pandas
-matplotlib
 numpy
+matplotlib
 scipy
 shapely
-plotly
+folium
+streamlit-folium
+Pillow
