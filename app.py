@@ -9,7 +9,7 @@ import folium
 from streamlit_folium import st_folium
 
 # Streamlit - Titre de l'application avec logo
-st.image("POPOPO.jpg", width=150)
+st.image("mon_logo.png", width=150)
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
 
 # Étape 1 : Téléverser le fichier Excel ou TXT
@@ -21,6 +21,23 @@ if uploaded_file is not None:
         df = pd.read_excel(uploaded_file)
     elif uploaded_file.name.endswith('.txt'):
         df = pd.read_csv(uploaded_file, sep=",", header=None, names=["X", "Y", "Z"])
+
+    # Séparateur pour organiser l'affichage
+    st.markdown("---")  # Ligne de séparation
+
+    # Affichage de la carte interactive en bas après que le fichier a été téléchargé
+    st.write("Carte interactive avec fond satellite, OpenStreetMap et topographique")
+
+    # Création de la carte folium avec attribution pour chaque couche
+    map_sat = folium.Map(location=[df['Y'].mean(), df['X'].mean()], zoom_start=10)
+
+    folium.TileLayer('openstreetmap', attribution="OpenStreetMap contributors").add_to(map_sat)
+    folium.TileLayer('stamenterrain', attribution="Map tiles by Stamen Design, under CC BY 3.0. Data by OpenStreetMap, under ODbL").add_to(map_sat)
+    folium.TileLayer('cartodbpositron', attribution="CartoDB").add_to(map_sat)
+    folium.TileLayer('satellite', attribution="Satellite").add_to(map_sat)
+
+    # Affichage de la carte satellite interactive
+    st_folium(map_sat, width=725, height=500)
 
     # Étape 3 : Vérification du fichier
     if 'X' not in df.columns or 'Y' not in df.columns or 'Z' not in df.columns:
@@ -85,17 +102,5 @@ if uploaded_file is not None:
             st.write(f"Surface inondée : {surface_inondee:.2f} hectares")
             st.write(f"Volume d'eau : {volume_eau:.2f} m³")
 
-        # Affichage de la carte satellite après le traitement des données d'inondation
-        st.markdown("---")  # Ligne de séparation
-        st.write("Carte interactive avec fond satellite, OpenStreetMap et topographique")
-
-        # Création de la carte folium après avoir téléchargé le fichier
-        map_sat = folium.Map(location=[df['Y'].mean(), df['X'].mean()], zoom_start=10)
-        folium.TileLayer('openstreetmap').add_to(map_sat)
-        folium.TileLayer('stamenterrain').add_to(map_sat)
-        folium.TileLayer('cartodbpositron').add_to(map_sat)
-        folium.TileLayer('satellite').add_to(map_sat)
-
-        st_folium(map_sat, width=725, height=500)
 else:
     st.warning("Veuillez téléverser un fichier pour démarrer.")
