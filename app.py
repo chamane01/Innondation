@@ -8,43 +8,9 @@ from shapely.geometry import Polygon
 import folium
 from streamlit_folium import st_folium
 
-# Ajouter un logo en haut
-st.image("POPOPO.jpg", width=200)
-
-# Streamlit - Titre de l'application
+# Streamlit - Titre de l'application avec logo
+st.image("POPOPO.jpg", width=150)
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
-
-# --- Section 1: Carte interactive en haut ---
-st.subheader("Carte interactive avec différentes couches")
-
-# Création d'une carte interactive avec les couches de base (monde)
-map_center = [0, 0]  # Centré sur le monde
-m = folium.Map(location=map_center, zoom_start=2)
-
-# Ajouter différentes couches de fond (OpenStreetMap, satellite, etc.)
-folium.TileLayer('OpenStreetMap', name="OpenStreetMap").add_to(m)
-folium.TileLayer('Stamen Terrain', name="Topographique", attr="Stamen Terrain").add_to(m)
-folium.TileLayer('Stamen Toner', name="Toner", attr="Stamen Toner").add_to(m)
-folium.TileLayer('Stamen Watercolor', name="Watercolor", attr="Stamen Watercolor").add_to(m)
-
-# Ajouter une couche satellite avec attribution
-folium.TileLayer(
-    tiles="https://{s}.sat.owm.io/sql/base/{z}/{x}/{y}.png?appid=your_openweathermap_api_key",
-    attr="Satellite tiles by OpenWeatherMap",
-    name="Satellite"
-).add_to(m)
-
-# Ajout du contrôle de couches
-folium.LayerControl().add_to(m)
-
-# Afficher la carte dans Streamlit (carte monde sans relation avec le fichier CSV pour l'instant)
-st_folium(m, width=700, height=500)
-
-# --- Séparateur ---
-st.markdown("---")  # LIGNE DE DÉMARCATION AJOUTÉE
-
-# --- Section 2: Téléversement et affichage de la carte d'inondation ---
-st.subheader("Téléverser et traiter les données d'inondation")
 
 # Étape 1 : Téléverser le fichier Excel ou TXT
 uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
@@ -70,7 +36,7 @@ if uploaded_file is not None:
 
         resolution = st.number_input("Résolution de la grille", value=300, min_value=100, max_value=1000)
         grid_X, grid_Y = np.mgrid[X_min:X_max:resolution*1j, Y_min:Y_max:resolution*1j]
-        grid_Z = griddata((df['X'], 'Y'), df['Z'], (grid_X, grid_Y), method=interpolation_method)
+        grid_Z = griddata((df['X'], df['Y']), df['Z'], (grid_X, grid_Y), method=interpolation_method)
 
         # Étape 7 : Calcul de la surface inondée
         def calculer_surface(niveau_inondation):
@@ -113,11 +79,23 @@ if uploaded_file is not None:
             # Affichage
             st.pyplot(fig)
 
-        # Étape 9 : Affichage initial de la carte avec hachures et rapport
-        if st.button("Afficher la carte"):
+        # Étape 9 : Affichage de la carte d'inondation avec hachures
+        if st.button("Afficher la carte d'inondation"):
             plot_map_with_hatching(niveau_inondation, surface_inondee, volume_eau)
             st.write(f"Surface inondée : {surface_inondee:.2f} hectares")
             st.write(f"Volume d'eau : {volume_eau:.2f} m³")
 
+        # Affichage de la carte satellite après le traitement des données d'inondation
+        st.markdown("---")  # Ligne de séparation
+        st.write("Carte interactive avec fond satellite, OpenStreetMap et topographique")
+
+        # Création de la carte folium après avoir téléchargé le fichier
+        map_sat = folium.Map(location=[df['Y'].mean(), df['X'].mean()], zoom_start=10)
+        folium.TileLayer('openstreetmap').add_to(map_sat)
+        folium.TileLayer('stamenterrain').add_to(map_sat)
+        folium.TileLayer('cartodbpositron').add_to(map_sat)
+        folium.TileLayer('satellite').add_to(map_sat)
+
+        st_folium(map_sat, width=725, height=500)
 else:
     st.warning("Veuillez téléverser un fichier pour démarrer.")
