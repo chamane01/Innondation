@@ -1,10 +1,15 @@
 # Importer les bibliothèques nécessaires
 import streamlit as st
 import pandas as pd
-import matplotlib.pyplot as plt
 import numpy as np
+import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from shapely.geometry import Polygon
+import folium
+from streamlit_folium import st_folium
+
+# Ajouter un logo en haut
+st.image("path_to_your_logo.png", width=200)
 
 # Streamlit - Titre de l'application
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
@@ -50,37 +55,34 @@ if uploaded_file is not None:
         surface_inondee = calculer_surface(niveau_inondation)
         volume_eau = calculer_volume(niveau_inondation, surface_inondee)
 
-        # Étape 4 : Fonction pour tracer la carte avec contours actuels et hachures
-        def plot_map_with_hatching(niveau_inondation, surface_inondee, volume_eau):
-            plt.close('all')
+        # Étape 9 : Affichage d'une carte interactive avec folium
+        if st.button("Afficher la carte interactive"):
+            # Création de la carte interactive avec folium
+            map_center = [df['Y'].mean(), df['X'].mean()]
+            m = folium.Map(location=map_center, zoom_start=12)
 
-            # Taille ajustée pour la carte
-            fig, ax_map = plt.subplots(figsize=(8, 6))
+            # Ajouter différentes couches de fond (satellite, OpenStreetMap, etc.)
+            folium.TileLayer('OpenStreetMap').add_to(m)
+            folium.TileLayer('Stamen Terrain').add_to(m)
+            folium.TileLayer('Stamen Toner').add_to(m)
+            folium.TileLayer('Stamen Watercolor').add_to(m)
+            folium.TileLayer('CartoDB positron').add_to(m)
+            folium.TileLayer('CartoDB dark_matter').add_to(m)
 
-            # Tracé de la carte de profondeur
-            contour = ax_map.contourf(grid_X, grid_Y, grid_Z, cmap='viridis', levels=100)
-            cbar = fig.colorbar(contour, ax=ax_map)
-            cbar.set_label('Profondeur (mètres)')
+            # Ajouter une couche satellite
+            folium.TileLayer(
+                tiles="https://{s}.sat.owm.io/sql/base/{z}/{x}/{y}.png?appid=your_openweathermap_api_key",
+                attr="Satellite"
+            ).add_to(m)
 
-            # Tracé du contour actuel du niveau d'inondation
-            contours_inondation = ax_map.contour(grid_X, grid_Y, grid_Z, levels=[niveau_inondation], colors='red', linewidths=2)
-            ax_map.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
+            folium.LayerControl().add_to(m)
 
-            # Tracé des hachures pour la zone inondée
-            ax_map.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, niveau_inondation], colors='none', hatches=['///'], alpha=0)
+            # Afficher la carte dans Streamlit
+            st_folium(m, width=700, height=500)
 
-            ax_map.set_title("Carte des zones inondées avec hachures")
-            ax_map.set_xlabel("Coordonnée X")
-            ax_map.set_ylabel("Coordonnée Y")
-
-            # Affichage
-            st.pyplot(fig)
-
-        # Étape 9 : Affichage initial de la carte avec hachures et rapport
-        if st.button("Afficher la carte"):
-            plot_map_with_hatching(niveau_inondation, surface_inondee, volume_eau)
-            st.write(f"Surface inondée : {surface_inondee:.2f} hectares")
-            st.write(f"Volume d'eau : {volume_eau:.2f} m³")
+        # Étape 10 : Affichage de la surface et du volume
+        st.write(f"Surface inondée : {surface_inondee:.2f} hectares")
+        st.write(f"Volume d'eau : {volume_eau:.2f} m³")
 
 else:
     st.warning("Veuillez téléverser un fichier pour démarrer.")
