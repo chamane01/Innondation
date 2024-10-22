@@ -8,7 +8,7 @@ from shapely.geometry import Polygon
 import matplotlib.pyplot as plt
 
 # Affichage du logo
-st.image("path/to/logo.png", use_column_width=True)
+st.image("POPOPO.jpg", use_column_width=True)
 
 # Divider for better visual separation
 st.markdown("---")
