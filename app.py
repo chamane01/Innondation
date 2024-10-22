@@ -5,9 +5,46 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import griddata
 from shapely.geometry import Polygon
+import folium
+from streamlit_folium import st_folium
+
+# Ajouter un logo en haut
+st.image("POPOPO.jpg", width=200)
 
 # Streamlit - Titre de l'application
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
+
+# --- Section 1: Carte interactive en haut ---
+st.subheader("Carte interactive avec différentes couches")
+
+# Création d'une carte interactive avec les couches de base (monde)
+map_center = [0, 0]  # Centré sur le monde
+m = folium.Map(location=map_center, zoom_start=2)
+
+# Ajouter différentes couches de fond (OpenStreetMap, satellite, etc.)
+folium.TileLayer('OpenStreetMap', name="OpenStreetMap").add_to(m)
+folium.TileLayer('Stamen Terrain', name="Topographique", attr="Stamen Terrain").add_to(m)
+folium.TileLayer('Stamen Toner', name="Toner", attr="Stamen Toner").add_to(m)
+folium.TileLayer('Stamen Watercolor', name="Watercolor", attr="Stamen Watercolor").add_to(m)
+
+# Ajouter une couche satellite avec attribution
+folium.TileLayer(
+    tiles="https://{s}.sat.owm.io/sql/base/{z}/{x}/{y}.png?appid=your_openweathermap_api_key",
+    attr="Satellite tiles by OpenWeatherMap",
+    name="Satellite"
+).add_to(m)
+
+# Ajout du contrôle de couches
+folium.LayerControl().add_to(m)
+
+# Afficher la carte dans Streamlit (carte monde sans relation avec le fichier CSV pour l'instant)
+st_folium(m, width=700, height=500)
+
+# --- Séparateur ---
+st.markdown("---")
+
+# --- Section 2: Téléversement et affichage de la carte d'inondation ---
+st.subheader("Téléverser et traiter les données d'inondation")
 
 # Étape 1 : Téléverser le fichier Excel ou TXT
 uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
