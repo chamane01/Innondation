@@ -5,12 +5,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from scipy.interpolate import griddata
 from shapely.geometry import Polygon
-import plotly.graph_objects as go  # Bibliothèque pour visualisation 3D
-import folium  # Bibliothèque pour la carte interactive
-from streamlit_folium import st_folium  # Permet d'afficher Folium dans Streamlit
 
-# Streamlit - Logo et Titre de l'application
-st.image("POPOPO.jpg", width=150)  # Remplacez par le chemin de votre image
+# Streamlit - Titre de l'application
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
 
 # Étape 1 : Téléverser le fichier Excel ou TXT
@@ -27,30 +23,6 @@ if uploaded_file is not None:
     if 'X' not in df.columns or 'Y' not in df.columns or 'Z' not in df.columns:
         st.error("Erreur : colonnes 'X', 'Y' et 'Z' manquantes.")
     else:
-        # Étape 4 : Visualisation des points dans un espace CAD (3D)
-        def afficher_points_3D(df):
-            fig = go.Figure(data=[go.Scatter3d(
-                x=df['X'], y=df['Y'], z=df['Z'], 
-                mode='markers', 
-                marker=dict(size=5, color=df['Z'], colorscale='Viridis', opacity=0.8)
-            )])
-            
-            fig.update_layout(
-                title="Visualisation 3D des points",
-                scene=dict(
-                    xaxis_title="X",
-                    yaxis_title="Y",
-                    zaxis_title="Z",
-                ),
-                width=700,
-                margin=dict(r=20, b=10, l=10, t=50)
-            )
-            
-            st.plotly_chart(fig)
-
-        # Affichage de l'espace CAD (3D) avec les points
-        afficher_points_3D(df)
-
         # Étape 5 : Paramètres du niveau d'inondation
         niveau_inondation = st.number_input("Entrez le niveau d'eau (mètres)", min_value=0.0, step=0.1)
         interpolation_method = st.selectbox("Méthode d'interpolation", ['linear', 'nearest'])
@@ -78,27 +50,7 @@ if uploaded_file is not None:
         surface_inondee = calculer_surface(niveau_inondation)
         volume_eau = calculer_volume(niveau_inondation, surface_inondee)
 
-        # Étape 9 : Afficher une carte interactive avec des options de styles
-        st.subheader("Carte interactive")
-        
-        # Créer une carte centrée sur un point de coordonnées médianes
-        m = folium.Map(location=[df['Y'].mean(), df['X'].mean()], zoom_start=12)
-
-        # Ajouter des couches de base (Satellite, OpenStreetMap, etc.)
-        folium.TileLayer('openstreetmap').add_to(m)
-        folium.TileLayer('stamenterrain').add_to(m)
-        folium.TileLayer('stamenwatercolor').add_to(m)
-        folium.TileLayer('cartodbpositron').add_to(m)
-        folium.TileLayer('cartodbdark_matter').add_to(m)
-        folium.TileLayer('satellite').add_to(m)
-
-        # Ajouter un contrôle de couche
-        folium.LayerControl().add_to(m)
-
-        # Afficher la carte dans Streamlit
-        st_data = st_folium(m, width=700, height=500)
-
-        # Étape 10 : Fonction pour tracer la carte avec contours actuels et hachures
+        # Étape 4 : Fonction pour tracer la carte avec contours actuels et hachures
         def plot_map_with_hatching(niveau_inondation, surface_inondee, volume_eau):
             plt.close('all')
 
@@ -124,7 +76,7 @@ if uploaded_file is not None:
             # Affichage
             st.pyplot(fig)
 
-        # Étape 11 : Affichage initial de la carte avec hachures et rapport
+        # Étape 9 : Affichage initial de la carte avec hachures et rapport
         if st.button("Afficher la carte"):
             plot_map_with_hatching(niveau_inondation, surface_inondee, volume_eau)
             st.write(f"Surface inondée : {surface_inondee:.2f} hectares")
