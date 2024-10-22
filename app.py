@@ -72,14 +72,26 @@ if uploaded_file is not None:
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[niveau_inondation], colors='red', linewidths=2)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
 
-            # Afficher la zone inondée si le bouton est coché
-            afficher_zone_inondee = st.checkbox("Afficher la zone inondée", value=True)
-            if afficher_zone_inondee and polygon_inonde:
+            # Afficher la zone inondée
+            if polygon_inonde:
                 x_poly, y_poly = polygon_inonde.exterior.xy
-                ax.fill(x_poly, y_poly, alpha=0.5, fc='cyan', ec='black', lw=1, label='Zone inondée')  # Augmenter la visibilité
+                ax.fill(x_poly, y_poly, alpha=0.8, fc='cyan', ec='black', lw=1, label='Zone inondée')  # Rendre le cyan plus visible
 
-                # Tracer le contour fin de la zone inondée
-                ax.plot(x_poly, y_poly, color='black', linewidth=1)  # Contour fin
+            # Option pour afficher ou masquer les hachures
+            afficher_hachures = st.checkbox("Afficher les hachures", value=True)
+            if afficher_hachures:
+                # Tracer les hachures pour la zone inondée
+                ax.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, niveau_inondation], colors='none', hatches=['//'], alpha=0)
+            else:
+                # Régénérer la carte sans hachures
+                ax.fill(x_poly, y_poly, alpha=0.8, fc='cyan', ec='black', lw=1, label='Zone inondée')
+                ax.set_title("Carte des zones inondées (sans hachures)")
+                ax.set_xlabel("Coordonnée X")
+                ax.set_ylabel("Coordonnée Y")
+                st.pyplot(fig)
+                st.write(f"**Surface inondée :** {surface_inondee:.2f} hectares")
+                st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")
+                st.stop()  # Stoppe l'exécution ici pour ne pas afficher à nouveau la carte
 
             ax.set_title("Carte des zones inondées")
             ax.set_xlabel("Coordonnée X")
