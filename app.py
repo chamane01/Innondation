@@ -72,13 +72,10 @@ if uploaded_file is not None:
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[niveau_inondation], colors='red', linewidths=1)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
 
-            # Hachures pour la zone inondée avec un espacement accru et opacité réduite
+            # Tracer la zone inondée
             if polygon_inonde:
                 x_poly, y_poly = polygon_inonde.exterior.xy
                 ax.fill(x_poly, y_poly, alpha=0.5, fc='cyan', ec='black', lw=1, label='Zone inondée')  # Couleur cyan pour la zone inondée
-
-                # Ajout des hachures espacées
-                ax.fill_between(x_poly, y_poly, color='none', hatch='/', alpha=0.1, edgecolor='black')  # Hachures espacées
 
             ax.set_title("Carte des zones inondées")
             ax.set_xlabel("Coordonnée X")
@@ -93,34 +90,6 @@ if uploaded_file is not None:
             with col2:
                 st.write(f"**Surface inondée :** {surface_inondee:.2f} hectares")
                 st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")
-
-        # Nouveau bouton pour afficher la carte sans hachures
-        if st.button("Carte sans hachures"):
-            # Recalculer la surface et volume
-            polygon_inonde, surface_inondee = calculer_surface(niveau_inondation)
-            volume_eau = calculer_volume(surface_inondee)
-
-            # Tracer la carte de profondeur
-            fig, ax = plt.subplots(figsize=(8, 6))
-            contourf = ax.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='viridis')
-            plt.colorbar(contourf, label='Profondeur (mètres)')
-
-            # Tracer le contour du niveau d'inondation
-            contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[niveau_inondation], colors='red', linewidths=1)
-            ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
-
-            # Afficher la zone inondée sans hachures
-            if polygon_inonde:
-                x_poly, y_poly = polygon_inonde.exterior.xy
-                ax.fill(x_poly, y_poly, alpha=0.7, fc='cyan', ec='black', lw=1, label='Zone inondée')  # Couleur cyan
-
-            ax.set_title("Carte des zones inondées (sans hachures)")
-            ax.set_xlabel("Coordonnée X")
-            ax.set_ylabel("Coordonnée Y")
-            ax.legend()
-
-            # Affichage de la carte
-            st.pyplot(fig)
 
 else:
     st.warning("Veuillez téléverser un fichier pour démarrer.")
