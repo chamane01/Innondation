@@ -5,6 +5,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from shapely.geometry import Polygon
+import contextily as cx  # Pour ajouter la carte OpenStreetMap
+import geopandas as gpd  # Pour gérer les données géographiques
+from pyproj import Transformer  # Pour la conversion des coordonnées
 
 # Streamlit - Titre de l'application avec logo
 st.image("POPOPO.jpg", width=150)
@@ -27,11 +30,15 @@ if uploaded_file is not None:
     if 'X' not in df.columns or 'Y' not in df.columns or 'Z' not in df.columns:
         st.error("Erreur : colonnes 'X', 'Y' et 'Z' manquantes.")
     else:
-        # Étape 5 : Paramètres du niveau d'inondation
+        # Étape 4 : Paramètres du niveau d'inondation
         niveau_inondation = st.number_input("Entrez le niveau d'eau (mètres)", min_value=0.0, step=0.1)
         interpolation_method = st.selectbox("Méthode d'interpolation", ['linear', 'nearest'])
 
-        # Étape 6 : Création de la grille
+        # Étape 5 : Conversion des coordonnées UTM en WGS 84 (latitude/longitude)
+        transformer = Transformer.from_crs("EPSG:32630", "EPSG:4326")  # UTM 30N (EPSG:32630) vers WGS84
+        df[['lon', 'lat']] = df.apply(lambda row: transformer.transform(row['X'], row['Y']), axis=1, result_type="expand")
+
+        # Étape 6 : Création de la grille (toujours en UTM)
         X_min, X_max = df['X'].min(), df['X'].max()
         Y_min, Y_max = df['Y'].min(), df['Y'].max()
 
@@ -59,13 +66,15 @@ if uploaded_file is not None:
             return volume
 
         if st.button("Afficher la carte d'inondation"):
-            # Étape 9 : Calcul de la surface et volume
+            # Étape 9 : Calcul de la surface et du volume
             polygon_inonde, surface_inondee = calculer_surface(niveau_inondation)
             volume_eau = calculer_volume(surface_inondee)
 
-            # Tracer la carte de profondeur
+            # Tracer la carte de profondeur avec fond OpenStreetMap
             fig, ax = plt.subplots(figsize=(8, 6))
-            contourf = ax.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='viridis')
+
+            # Tracer les données de profondeur
+            contourf = ax.contourf(df['lon'], df['lat'], grid_Z, levels=100, cmap='viridis')
             plt.colorbar(contourf, label='Profondeur (mètres)')
 
             # Tracer le contour du niveau d'inondation
@@ -78,9 +87,13 @@ if uploaded_file is not None:
                 ax.fill(x_poly, y_poly, alpha=0.5, fc='cyan', ec='black', lw=1, label='Zone inondée')  # Couleur cyan pour la zone inondée
 
             ax.set_title("Carte des zones inondées")
-            ax.set_xlabel("Coordonnée X")
-            ax.set_ylabel("Coordonnée Y")
+            ax.set_xlabel("Longitude")
+            ax.set_ylabel("Latitude")
             ax.legend()
+
+            # Ajouter la carte OpenStreetMap avec contextily
+            gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df['lon'], df['lat']))
+            cx.add_basemap(ax, crs=gdf.crs.to_string(), source=cx.providers.OpenStreetMap.Mapnik)
 
             # Affichage de la carte
             st.pyplot(fig)
