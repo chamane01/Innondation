@@ -4,7 +4,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, MultiPolygon
 
 # Streamlit - Titre de l'application avec logo
 st.image("POPOPO.jpg", width=150)
@@ -49,9 +49,26 @@ if uploaded_file is not None:
 
             # Convertir les contours en un polygone
             if contours:
-                polygon = Polygon(contours)
-                return polygon, polygon.area / 10000  # Retourne le polygone et la surface en hectares
-            return None, 0.0
+                # Utilisation de MultiPolygon pour gérer les zones séparées
+                unique_x = np.unique([coord[0] for coord in contours])
+                unique_y = np.unique([coord[1] for coord in contours])
+                polygones = []
+                
+                for x in unique_x:
+                    for y in unique_y:
+                        if (x, y) in contours:
+                            # Créer un polygone pour chaque zone connectée
+                            zone_contour = [(x, y)]
+                            for dx in [-1, 0, 1]:
+                                for dy in [-1, 0, 1]:
+                                    if (x + dx, y + dy) in contours:
+                                        zone_contour.append((x + dx, y + dy))
+
+                            if len(zone_contour) > 2:  # S'assurer qu'il y a suffisamment de points pour former un polygone
+                                polygones.append(Polygon(zone_contour))
+
+                return MultiPolygon(polygones), sum(p.area for p in polygones) / 10000  # Retourne le MultiPolygon et la surface en hectares
+            return MultiPolygon(), 0.0
 
         # Étape 8 : Calcul du volume d'eau
         def calculer_volume(surface_inondee):
@@ -60,7 +77,7 @@ if uploaded_file is not None:
 
         if st.button("Afficher la carte d'inondation"):
             # Étape 9 : Calcul de la surface et volume
-            polygon_inonde, surface_inondee = calculer_surface(niveau_inondation)
+            multi_polygon_inonde, surface_inondee = calculer_surface(niveau_inondation)
             volume_eau = calculer_volume(surface_inondee)
 
             # Tracer la carte de profondeur
@@ -68,13 +85,9 @@ if uploaded_file is not None:
             contourf = ax.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='viridis')
             plt.colorbar(contourf, label='Profondeur (mètres)')
 
-            # Tracer le contour du niveau d'inondation
-            contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[niveau_inondation], colors='red', linewidths=2)
-            ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
-
-            # Tracer les hachures pour la zone inondée
-            if polygon_inonde:
-                x_poly, y_poly = polygon_inonde.exterior.xy
+            # Tracer les hachures pour les zones inondées
+            for polygon in multi_polygon_inonde.geoms:
+                x_poly, y_poly = polygon.exterior.xy
                 ax.fill(x_poly, y_poly, alpha=0.3, fc='blue', ec='black', label='Zone inondée')
 
             ax.set_title("Carte des zones inondées")
