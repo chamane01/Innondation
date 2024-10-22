@@ -7,9 +7,27 @@ from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
 
-# Streamlit - Titre de l'application avec logo
-st.image("POPOPO.jpg", width=150)
-st.title("Carte des zones inondées avec niveaux d'eau et surface")
+import streamlit as st
+
+# Load the custom CSS file
+def load_css():
+    with open("static/styles.css") as f:
+        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+
+# Call the function to apply CSS
+load_css()
+
+# Add logos and other elements
+st.markdown("""
+<div class="header-logo">
+    <img src="static/app_logo.png" alt="App Logo">
+    <img src="static/cie_logo.png" alt="CIE Logo">
+</div>
+""", unsafe_allow_html=True)
+
+# Main title of the application
+st.title("Votre Application Énergétique")
+
 
 # Étape 1 : Téléverser le fichier Excel ou TXT
 uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
