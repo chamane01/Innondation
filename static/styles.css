@@ -1,14 +1,14 @@
 /* styles.css */
 
-/* Background color and motifs */
+/* Couleur de fond et motifs */
 .main {
-    background-color: #FF8C00;  /* Soft, vibrant orange */
-    background-image: url('https://your-image-url');  /* African/electrical motif pattern */
+    background-color: #FF8C00;  /* Orange doux et vibrant */
+    background-image: url('https://your-image-url');  /* Motif électrique/africain */
     background-size: cover;
     background-repeat: no-repeat;
 }
 
-/* Logo section */
+/* Section d'en-tête */
 .header-logo {
     display: flex;
     justify-content: space-between;
@@ -16,30 +16,43 @@
     padding: 10px 20px;
 }
 
-/* Add custom logos */
+/* Ajout des logos personnalisés */
 .header-logo img {
     max-height: 100px;
 }
 
-/* Custom button */
+/* Bouton personnalisé */
 .stButton>button {
-    background-color: #ffffff;
-    color: #FF8C00;
+    background-color: #ffffff; /* Fond blanc */
+    color: #FF8C00;            /* Couleur du texte orange */
     border-radius: 8px;
     font-size: 16px;
+    border: 2px solid #007BFF; /* Bord bleu */
 }
 
 .stButton>button:hover {
-    border: 2px solid #32CD32;  /* Green outline */
+    border: 2px solid #32CD32;  /* Contour vert au survol */
 }
 
-/* Typography */
+/* Typographie */
 .title {
-    font-family: 'YourFont', sans-serif;
-    color: #FFFFFF;
+    font-family: 'YourFont', sans-serif; /* Remplacez par une vraie police si nécessaire */
+    color: #FFFFFF; /* Couleur blanche */
 }
 
-/* Text colors */
+/* Couleurs de texte */
 .stMarkdown {
-    color: #FFFFFF;
+    color: #FFFFFF; /* Texte en blanc */
+}
+
+/* Nouveau style pour les éléments en bleu */
+.blue-text {
+    color: #007BFF; /* Texte en bleu */
+}
+
+/* Style pour les sections accentuées */
+.accent-section {
+    background-color: rgba(0, 123, 255, 0.1); /* Fond bleu clair */
+    padding: 20px;
+    border-radius: 8px;
 }
