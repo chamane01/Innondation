@@ -18,8 +18,8 @@ load_css()
 # Add logos and other elements
 st.markdown("""
 <div class="header-logo">
-    <img src="static/app_logo.png" alt="App Logo">
-    <img src="static/cie_logo.png" alt="CIE Logo">
+    <img src="static/app_logo.jpeg" alt="App Logo">
+    <img src="static/cie_logo.jpeg" alt="CIE Logo">
 </div>
 """, unsafe_allow_html=True)
 
