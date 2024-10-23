@@ -1,3 +1,4 @@
+# Importer les bibliothèques nécessaires
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -6,65 +7,17 @@ from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
 
-# Appliquer le CSS personnalisé pour le design sophistiqué
-st.markdown("""
-    <style>
-        /* Background color and motifs */
-        .main {
-            background-color: #FF8C00;  /* Orange doux et vibrant */
-            background-image: url('https://your-image-url');  /* Motif africain/électrique */
-            background-size: cover;
-            background-repeat: no-repeat;
-        }
+# Streamlit - Titre de l'application avec logo
+st.image("POPOPO.jpg", width=150)
+st.title("Carte des zones inondées avec niveaux d'eau et surface")
 
-        /* Section des logos */
-        .header-logo {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 20px;
-        }
-
-        /* Ajouter les logos personnalisés */
-        .header-logo img {
-            max-height: 100px;
-        }
-
-        /* Bouton personnalisé */
-        .stButton>button {
-            background-color: #ffffff;  /* Blanc pour le bouton */
-            color: #FF8C00;             /* Texte orange */
-            border-radius: 8px;
-            font-size: 16px;
-        }
-
-        .stButton>button:hover {
-            border: 2px solid #32CD32;  /* Contour vert discret au survol */
-        }
-
-        /* Typographie */
-        .title {
-            font-family: 'YourFont', sans-serif;  /* Utiliser une police moderne */
-            color: #FFFFFF;  /* Texte blanc pour la lisibilité */
-        }
-
-        /* Couleurs du texte */
-        .stMarkdown {
-            color: #FFFFFF;  /* Texte général pour contraster avec l'arrière-plan orange */
-        }
-    </style>
-""", unsafe_allow_html=True)
-
-# Ajouter les espaces pour les logos
-st.markdown("""
-<div class="header-logo">
-    <img src="static/app_logo.jpeg" alt="App Logo">
-    <img src="static/cie_logo.jpeg" alt="CIE Logo">
-</div>
-""", unsafe_allow_html=True)
-
-# Titre principal de l'application
-st.title("Votre Application Énergétique")
+# Initialiser session_state pour stocker les données d'inondation
+if 'flood_data' not in st.session_state:
+    st.session_state.flood_data = {
+        'surface_inondee': None,
+        'volume_eau': None,
+        'niveau_inondation': 0.0
+    }
 
 # Étape 1 : Téléverser le fichier Excel ou TXT
 uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
@@ -84,7 +37,7 @@ if uploaded_file is not None:
         st.error("Erreur : colonnes 'X', 'Y' et 'Z' manquantes.")
     else:
         # Étape 5 : Paramètres du niveau d'inondation
-        niveau_inondation = st.number_input("Entrez le niveau d'eau (mètres)", min_value=0.0, step=0.1)
+        st.session_state.flood_data['niveau_inondation'] = st.number_input("Entrez le niveau d'eau (mètres)", min_value=0.0, step=0.1)
         interpolation_method = st.selectbox("Méthode d'interpolation", ['linear', 'nearest'])
 
         # Étape 6 : Création de la grille
@@ -111,13 +64,17 @@ if uploaded_file is not None:
 
         # Étape 8 : Calcul du volume d'eau
         def calculer_volume(surface_inondee):
-            volume = surface_inondee * niveau_inondation * 10000  # Conversion en m³ (1 hectare = 10,000 m²)
+            volume = surface_inondee * st.session_state.flood_data['niveau_inondation'] * 10000  # Conversion en m³ (1 hectare = 10,000 m²)
             return volume
 
         if st.button("Afficher la carte d'inondation"):
             # Étape 9 : Calcul de la surface et volume
-            polygon_inonde, surface_inondee = calculer_surface(niveau_inondation)
+            polygon_inonde, surface_inondee = calculer_surface(st.session_state.flood_data['niveau_inondation'])
             volume_eau = calculer_volume(surface_inondee)
+
+            # Stocker les résultats dans session_state
+            st.session_state.flood_data['surface_inondee'] = surface_inondee
+            st.session_state.flood_data['volume_eau'] = volume_eau
 
             # Tracer la carte de profondeur
             fig, ax = plt.subplots(figsize=(8, 6))
@@ -132,7 +89,7 @@ if uploaded_file is not None:
             plt.colorbar(contourf, label='Profondeur (mètres)')
 
             # Tracer le contour du niveau d'inondation
-            contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[niveau_inondation], colors='red', linewidths=1)
+            contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
 
             # Tracer la zone inondée
@@ -151,8 +108,8 @@ if uploaded_file is not None:
             # Affichage des résultats à droite de la carte
             col1, col2 = st.columns([3, 1])  # Créer deux colonnes
             with col2:
-                st.write(f"**Surface inondée :** {surface_inondee:.2f} hectares")
-                st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")
+                st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
+                st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
 
 else:
     st.warning("Veuillez téléverser un fichier pour démarrer.")
