@@ -1,4 +1,3 @@
-# Importer les bibliothèques nécessaires
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -7,19 +6,60 @@ from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
 
-# Charger le fichier CSS personnalisé
-def load_css():
-    with open("static/styles.css") as f:
-        st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
+# Appliquer le CSS personnalisé pour le design sophistiqué
+st.markdown("""
+    <style>
+        /* Background color and motifs */
+        .main {
+            background-color: #FF8C00;  /* Orange doux et vibrant */
+            background-image: url('https://your-image-url');  /* Motif africain/électrique */
+            background-size: cover;
+            background-repeat: no-repeat;
+        }
 
-# Appeler la fonction pour appliquer le CSS
-load_css()
+        /* Section des logos */
+        .header-logo {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 20px;
+        }
 
-# Ajout des logos et autres éléments
+        /* Ajouter les logos personnalisés */
+        .header-logo img {
+            max-height: 100px;
+        }
+
+        /* Bouton personnalisé */
+        .stButton>button {
+            background-color: #ffffff;  /* Blanc pour le bouton */
+            color: #FF8C00;             /* Texte orange */
+            border-radius: 8px;
+            font-size: 16px;
+        }
+
+        .stButton>button:hover {
+            border: 2px solid #32CD32;  /* Contour vert discret au survol */
+        }
+
+        /* Typographie */
+        .title {
+            font-family: 'YourFont', sans-serif;  /* Utiliser une police moderne */
+            color: #FFFFFF;  /* Texte blanc pour la lisibilité */
+        }
+
+        /* Couleurs du texte */
+        .stMarkdown {
+            color: #FFFFFF;  /* Texte général pour contraster avec l'arrière-plan orange */
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# Ajouter les espaces pour les logos
 st.markdown("""
 <div class="header-logo">
-    <img src="static/app_logo.png" >
-    <img src="static/cie_logo.png" >
+    <img src="static/app_logo.jpeg" alt="App Logo">
+    <img src="static/cie_logo.jpeg" alt="CIE Logo">
 </div>
 """, unsafe_allow_html=True)
 
