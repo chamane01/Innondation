@@ -7,15 +7,15 @@ from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
 
-# Load the custom CSS file
+# Charger le fichier CSS personnalisé
 def load_css():
     with open("static/styles.css") as f:
         st.markdown(f"<style>{f.read()}</style>", unsafe_allow_html=True)
 
-# Call the function to apply CSS
+# Appeler la fonction pour appliquer le CSS
 load_css()
 
-# Add logos and other elements
+# Ajout des logos et autres éléments
 st.markdown("""
 <div class="header-logo">
     <img src="static/app_logo.jpeg" alt="App Logo">
@@ -23,9 +23,8 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Main title of the application
+# Titre principal de l'application
 st.title("Votre Application Énergétique")
-
 
 # Étape 1 : Téléverser le fichier Excel ou TXT
 uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
