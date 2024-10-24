@@ -43,7 +43,7 @@ uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["
 if option_site == "AYAME 1":
     df = pd.read_csv('AYAME1.csv')
 elif option_site == "AYAME 2":
-    df = pd.read_csv('AYAME22.csv')
+    df = pd.read_csv('AYAME2.csv')
 elif uploaded_file is not None:
     # Charger le fichier téléversé
     if uploaded_file.name.endswith('.xlsx'):
