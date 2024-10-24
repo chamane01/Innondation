@@ -141,7 +141,7 @@ if df is not None:
                     for path in collection.get_paths():
                         # Récupérer les coordonnées des sommets du contour
                         contour = path.vertices  # Un tableau Nx2 (X, Y)
-                        # Convertir en liste de tuples
+                        # Convertir en liste de tuples et s'assurer que c'est un polygone fermé
                         contours_points.append(contour.tolist())
                 return contours_points
 
@@ -151,11 +151,12 @@ if df is not None:
 
                 # Ajouter chaque polygone comme polyligne dans le DXF
                 for polygone in polygones_points:
-                    msp.add_lwpolyline(polygone, is_closed=True)
+                    if len(polygone) >= 3:  # Assurez-vous que le polygone a au moins 3 points
+                        msp.add_lwpolyline(polygone, is_closed=True)
 
                 # Sauvegarde du fichier DXF
                 doc.saveas(fichier_sortie)
-                print(f"Fichier DXF généré avec succès : {fichier_sortie}")
+                st.success(f"Fichier DXF généré avec succès : {fichier_sortie}")
 
             # Exemple d'utilisation dans le flux principal de votre code
             # Extraire les points des polygones
