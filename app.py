@@ -1,52 +1,157 @@
+# Importer les bibliothèques nécessaires
 import streamlit as st
+import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.interpolate import griddata
+from shapely.geometry import Polygon
 import contextily as ctx
-from pyproj import Transformer
 
-# Exemple de données de coordonnées (latitude, longitude)
-# Remplace ces données par tes propres données
-grid_X = np.array([-74.006, -74.001, -74.005])  # Longitudes
-grid_Y = np.array([40.7128, 40.7130, 40.7135])  # Latitudes
+# Streamlit - Titre de l'application avec deux logos centrés
+col1, col2, col3 = st.columns([1, 1, 1])
 
-# Titre de l'application Streamlit
-st.title("Visualisation de la Carte avec Matplotlib")
+with col1:
+    st.image("POPOPO.jpg", width=150)
+with col2:
+    st.image("logo.png", width=150)
+with col3:
+    st.write("")  # Cette colonne est laissée vide pour centrer les logos
 
-# Transformer pour passer de EPSG:4326 (lat/lon) à EPSG:3857 (Web Mercator)
-transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
+st.title("Carte des zones inondées avec niveaux d'eau et surface")
 
-# Transformation des coordonnées en EPSG:3857 (Web Mercator)
-grid_X_3857, grid_Y_3857 = transformer.transform(grid_X, grid_Y)
+# Initialiser session_state pour stocker les données d'inondation
+if 'flood_data' not in st.session_state:
+    st.session_state.flood_data = {
+        'surface_inondee': None,
+        'volume_eau': None,
+        'niveau_inondation': 0.0
+    }
 
-# Vérification des NaN et des Inf
-valid_mask = np.isfinite(grid_X_3857) & np.isfinite(grid_Y_3857)
+# Étape 1 : Sélectionner un site ou téléverser un fichier
+st.markdown("## Sélectionner un site ou téléverser un fichier")
 
-# Appliquer le masque pour ne conserver que les valeurs valides
-grid_X_3857_valid = grid_X_3857[valid_mask]
-grid_Y_3857_valid = grid_Y_3857[valid_mask]
+# Ajouter une option pour sélectionner parmi des fichiers CSV existants (AYAME 1 et AYAME 2)
+option_site = st.selectbox(
+    "Sélectionnez un site",
+    ("Aucun", "AYAME 1", "AYAME 2")
+)
 
-# Vérification que les données filtrées ne sont pas vides
-if len(grid_X_3857_valid) == 0 or len(grid_Y_3857_valid) == 0:
-    st.error("Erreur : données transformées invalides (NaN ou Inf).")
+# Téléverser un fichier Excel ou TXT
+uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
+
+# Fonction pour charger le fichier (identique pour les fichiers prédéfinis et téléversés)
+def charger_fichier(fichier, is_uploaded=False):
+    try:
+        if is_uploaded:
+            # Si le fichier est téléversé, vérifier son type
+            if fichier.name.endswith('.xlsx'):
+                df = pd.read_excel(fichier)
+            elif fichier.name.endswith('.txt'):
+                df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
+        else:
+            # Si le fichier est prédéfini (site), il est déjà connu
+            df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
+        return df
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier : {e}")
+        return None
+
+# Charger les fichiers selon la sélection
+if option_site == "AYAME 1":
+    df = charger_fichier('AYAME1.txt')
+elif option_site == "AYAME 2":
+    df = charger_fichier('AYAME2.csv')
+elif uploaded_file is not None:
+    df = charger_fichier(uploaded_file, is_uploaded=True)
 else:
-    # Création de la figure et des axes
-    fig, ax = plt.subplots(figsize=(10, 6))
+    st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
+    df = None
 
-    # Ajouter des points (ou d'autres éléments) sur la carte
-    ax.scatter(grid_X_3857_valid, grid_Y_3857_valid, color='red', s=100, label='Points de données')
+# Traitement des données si le fichier est chargé
+if df is not None:
+    # Séparateur pour organiser l'affichage
+    st.markdown("---")  # Ligne de séparation
 
-    # Définir les limites des axes en fonction des valeurs valides
-    ax.set_xlim(grid_X_3857_valid.min(), grid_X_3857_valid.max())
-    ax.set_ylim(grid_Y_3857_valid.min(), grid_Y_3857_valid.max())
+    # Vérification du fichier : s'assurer que les colonnes X, Y, Z sont présentes
+    if 'X' not in df.columns or 'Y' not in df.columns or 'Z' not in df.columns:
+        st.error("Erreur : colonnes 'X', 'Y' et 'Z' manquantes.")
+    else:
+        # Étape 5 : Paramètres du niveau d'inondation
+        st.session_state.flood_data['niveau_inondation'] = st.number_input("Entrez le niveau d'eau (mètres)", min_value=0.0, step=0.1)
+        interpolation_method = st.selectbox("Méthode d'interpolation", ['linear', 'nearest'])
 
-    # Ajouter le fond de carte avec les bonnes limites
-    ctx.add_basemap(ax, crs="EPSG:3857", source=ctx.providers.OpenStreetMap.Mapnik)
+        # Étape 6 : Création de la grille
+        X_min, X_max = df['X'].min(), df['X'].max()
+        Y_min, Y_max = df['Y'].min(), df['Y'].max()
 
-    # Ajouter des labels et un titre
-    ax.set_title("Carte avec Points de Données")
-    ax.set_xlabel("Longitude (EPSG:3857)")
-    ax.set_ylabel("Latitude (EPSG:3857)")
-    ax.legend()
+        resolution = st.number_input("Résolution de la grille", value=300, min_value=100, max_value=1000)
+        grid_X, grid_Y = np.mgrid[X_min:X_max:resolution*1j, Y_min:Y_max:resolution*1j]
+        grid_Z = griddata((df['X'], df['Y']), df['Z'], (grid_X, grid_Y), method=interpolation_method)
 
-    # Afficher la carte dans Streamlit
-    st.pyplot(fig)
+        # Étape 7 : Calcul de la surface inondée
+        def calculer_surface(niveau_inondation):
+            contours = []
+            for x in range(grid_X.shape[0]):
+                for y in range(grid_Y.shape[1]):
+                    if grid_Z[x, y] <= niveau_inondation:
+                        contours.append((grid_X[x, y], grid_Y[x, y]))
+
+            # Convertir les contours en un polygone
+            if contours:
+                polygon = Polygon(contours)
+                return polygon, polygon.area / 10000  # Retourne le polygone et la surface en hectares
+            return None, 0.0
+
+        # Étape 8 : Calcul du volume d'eau
+        def calculer_volume(surface_inondee):
+            volume = surface_inondee * st.session_state.flood_data['niveau_inondation'] * 10000  # Conversion en m³ (1 hectare = 10,000 m²)
+            return volume
+
+        if st.button("Afficher la carte d'inondation"):
+            # Étape 9 : Calcul de la surface et volume
+            polygon_inonde, surface_inondee = calculer_surface(st.session_state.flood_data['niveau_inondation'])
+            volume_eau = calculer_volume(surface_inondee)
+
+            # Stocker les résultats dans session_state
+            st.session_state.flood_data['surface_inondee'] = surface_inondee
+            st.session_state.flood_data['volume_eau'] = volume_eau
+
+            # Tracer la carte de profondeur
+            fig, ax = plt.subplots(figsize=(8, 6))
+
+            # Tracer le fond OpenStreetMap
+            ax.set_xlim(X_min, X_max)
+            ax.set_ylim(Y_min, Y_max)
+            ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+
+            # Tracer la carte de profondeur
+           # contourf = ax.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='viridis', alpha=0.5)
+           # plt.colorbar(contourf, label='Profondeur (mètres)')
+
+            # Tracer le contour du niveau d'inondation
+            contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
+            ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
+            # Tracé des hachures pour la zone inondée
+            contourf_filled = ax.contourf(grid_X, grid_Y, grid_Z, 
+                               levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
+                               colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
+
+
+            # Tracer la zone inondée
+          #  if polygon_inonde:
+                #x_poly, y_poly = polygon_inonde.exterior.xy
+                #ax.fill(x_poly, y_poly, alpha=0.5, fc='cyan', ec='black', lw=1, label='Zone inondée')  # Couleur cyan pour la zone inondée
+
+            #ax.set_title("Carte des zones inondées")
+           # ax.set_xlabel("Coordonnée X")
+            #ax.set_ylabel("Coordonnée Y")
+            #ax.legend()
+
+            # Affichage de la carte
+            st.pyplot(fig)
+
+            # Affichage des résultats à droite de la carte
+            col1, col2 = st.columns([3, 1])  # Créer deux colonnes
+            with col2:
+                st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
+                st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
