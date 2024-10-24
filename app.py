@@ -10,7 +10,6 @@ import ezdxf  # Bibliothèque pour créer des fichiers DXF
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
-
 with col1:
     st.image("POPOPO.jpg", width=150)
 with col2:
@@ -30,27 +29,18 @@ if 'flood_data' not in st.session_state:
 
 # Étape 1 : Sélectionner un site ou téléverser un fichier
 st.markdown("## Sélectionner un site ou téléverser un fichier")
-
-# Ajouter une option pour sélectionner parmi des fichiers CSV existants (AYAME 1 et AYAME 2)
-option_site = st.selectbox(
-    "Sélectionnez un site",
-    ("Aucun", "AYAME 1", "AYAME 2")
-)
-
-# Téléverser un fichier Excel ou TXT
+option_site = st.selectbox("Sélectionnez un site", ("Aucun", "AYAME 1", "AYAME 2"))
 uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
 
-# Fonction pour charger le fichier (identique pour les fichiers prédéfinis et téléversés)
+# Fonction pour charger un fichier
 def charger_fichier(fichier, is_uploaded=False):
     try:
         if is_uploaded:
-            # Si le fichier est téléversé, vérifier son type
             if fichier.name.endswith('.xlsx'):
                 df = pd.read_excel(fichier)
             elif fichier.name.endswith('.txt'):
                 df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
         else:
-            # Si le fichier est prédéfini (site), il est déjà connu
             df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
         return df
     except Exception as e:
@@ -112,6 +102,7 @@ if df is not None:
             st.session_state.flood_data['surface_inondee'] = surface_inondee
             st.session_state.flood_data['volume_eau'] = volume_eau
 
+            # Affichage de la carte
             fig, ax = plt.subplots(figsize=(8, 6))
             ax.set_xlim(X_min, X_max)
             ax.set_ylim(Y_min, Y_max)
@@ -130,37 +121,28 @@ if df is not None:
 
             st.markdown("## Génération du fichier DXF avec les polylignes rouges")
 
-            # Fonction pour générer un fichier DXF à partir des points des contours
-            def extraire_points_contours(contours_inondation):
+            # Extraction des points des contours
+            contours_points = extraire_points_contours(contours_inondation)
+
+            # Génération du fichier DXF
+            generer_dxf_depuis_contours(contours_points, fichier_sortie="contours_traces.dxf")
+
+# Fonction pour extraire les points des contours
+def extraire_points_contours(contours_inondation):
     contours_points = []
-    # Pour chaque collection dans l'objet contours_inondation
     for collection in contours_inondation.collections:
-        # Pour chaque chemin dans la collection
         for path in collection.get_paths():
-            # Récupérer les coordonnées des sommets du contour
             contour = path.vertices  # Un tableau Nx2 (X, Y)
-            # Convertir en liste de tuples
             contours_points.append(contour.tolist())
     return contours_points
 
+# Fonction pour générer un fichier DXF
 def generer_dxf_depuis_contours(contours_points, fichier_sortie="contours_traces.dxf"):
     doc = ezdxf.new(dxfversion="R2010")
     msp = doc.modelspace()
 
-    # Ajouter chaque contour comme polyligne dans le DXF
     for contour in contours_points:
         msp.add_lwpolyline(contour, is_closed=True)
 
-    # Sauvegarde du fichier DXF
     doc.saveas(fichier_sortie)
     print(f"Fichier DXF généré avec succès : {fichier_sortie}")
-
-# Exemple d'utilisation dans le flux principal de votre code
-# Supposons que contours_inondation soit l'objet retourné par ax.contour(...)
-contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
-
-# Extraire les points des contours
-contours_points = extraire_points_contours(contours_inondation)
-
-# Générer le fichier DXF
-generer_dxf_depuis_contours(contours_points, fichier_sortie="contours_traces.dxf")
