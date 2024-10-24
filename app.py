@@ -143,9 +143,6 @@ if df is not None:
                 st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
                 st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
 
-import io
-import ezdxf
-
 # Téléversement et visualisation du fichier DXF
 st.markdown("---")
 st.markdown("## Téléverser et visualiser un fichier DXF")
