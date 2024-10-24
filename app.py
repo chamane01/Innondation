@@ -153,7 +153,7 @@ if uploaded_dxf is not None:
     try:
         # Lecture du fichier DXF depuis le flux en mémoire
         dxf_data = io.BytesIO(uploaded_dxf.read())  # Lire le fichier téléversé en tant que bytes
-        dxf = ezdxf.read(dxf_data)  # Lire le contenu DXF depuis la mémoire
+        dxf = ezdxf.read(dxf_data)  # Lire le fichier DXF depuis le flux binaire
 
         # Création d'une nouvelle carte pour visualiser les entités DXF
         fig_dxf, ax_dxf = plt.subplots(figsize=(8, 6))
@@ -173,4 +173,3 @@ if uploaded_dxf is not None:
 
     except Exception as e:
         st.error(f"Erreur lors de la lecture du fichier DXF : {e}")
-
