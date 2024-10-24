@@ -128,14 +128,14 @@ if df is not None:
             ax.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], colors='#007FFF', alpha=0.5)
 
             # Tracer la zone inondée
-            if polygon_inonde:
-                x_poly, y_poly = polygon_inonde.exterior.xy
-                ax.fill(x_poly, y_poly, alpha=0.5, fc='cyan', ec='black', lw=1, label='Zone inondée')
+           # if polygon_inonde:
+           #     x_poly, y_poly = polygon_inonde.exterior.xy
+            #    ax.fill(x_poly, y_poly, alpha=0.5, fc='cyan', ec='black', lw=1, label='Zone inondée')
 
-            ax.set_title("Carte des zones inondées")
-            ax.set_xlabel("Coordonnée X")
-            ax.set_ylabel("Coordonnée Y")
-            ax.legend()
+            #ax.set_title("Carte des zones inondées")
+            #ax.set_xlabel("Coordonnée X")
+            #ax.set_ylabel("Coordonnée Y")
+            #ax.legend()
 
             # Affichage de la carte
             st.pyplot(fig)
