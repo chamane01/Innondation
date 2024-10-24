@@ -125,24 +125,12 @@ if df is not None:
             ax.set_ylim(Y_min, Y_max)
             ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
 
-
-
-            # Tracer la carte de profondeur
+            # Tracer la carte de profondeur avec des contours rouges
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
 
             # Tracé des hachures pour la zone inondée
             ax.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], colors='#007FFF', alpha=0.5)
-
-            # Tracer la zone inondée
-           # if polygon_inonde:
-           #     x_poly, y_poly = polygon_inonde.exterior.xy
-            #    ax.fill(x_poly, y_poly, alpha=0.5, fc='cyan', ec='black', lw=1, label='Zone inondée')
-
-            #ax.set_title("Carte des zones inondées")
-            #ax.set_xlabel("Coordonnée X")
-            #ax.set_ylabel("Coordonnée Y")
-            #ax.legend()
 
             # Affichage de la carte
             st.pyplot(fig)
@@ -153,24 +141,24 @@ if df is not None:
                 st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
                 st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
 
-            # Étape 10 : Génération du fichier DXF avec les contours
-            st.markdown("## Génération du fichier DXF avec les polylignes")
+            # Étape 10 : Génération du fichier DXF avec les contours rouges
+            st.markdown("## Génération du fichier DXF avec les polylignes rouges")
 
             def generer_dxf(polygon):
                 # Créer un nouveau document DXF
                 doc = ezdxf.new(dxfversion="R2010")
                 msp = doc.modelspace()
 
-                # Ajouter les contours sous forme de polylignes
+                # Ajouter les contours sous forme de polylignes rouges
                 if polygon:
                     x_poly, y_poly = polygon.exterior.xy
                     points = list(zip(x_poly, y_poly))
 
-                    # Créer une polyligne dans le fichier DXF
-                    msp.add_lwpolyline(points)
+                    # Créer une polyligne dans le fichier DXF avec la couleur rouge
+                    msp.add_lwpolyline(points, dxfattribs={'color': 1})  # Couleur 1 = rouge dans le format DXF
 
                 # Sauvegarder le fichier DXF
-                fichier_dxf = "contours_inondation.dxf"
+                fichier_dxf = "contours_inondation_rouge.dxf"
                 doc.saveas(fichier_dxf)
                 return fichier_dxf
 
@@ -181,39 +169,7 @@ if df is not None:
                     st.download_button(
                         label="Télécharger le fichier DXF",
                         data=file,
-                        file_name=fichier_dxf,
-                        mime="application/dxf"
+                        file_name=fichier_dxf
                     )
-                    # Fonction pour afficher le fichier DXF
-def afficher_dxf(fichier_dxf):
-    # Lire le fichier DXF
-    doc = ezdxf.readfile(fichier_dxf)
-    msp = doc.modelspace()
-    
-    # Extraire les polylignes du fichier DXF
-    polylines = [e for e in msp.query('LWPOLYLINE')]
-    
-    # Création d'une figure avec matplotlib
-    fig, ax = plt.subplots(figsize=(8, 6))
-
-    # Tracer chaque polyligne
-    for polyline in polylines:
-        points = np.array(polyline.get_points())
-        ax.plot(points[:, 0], points[:, 1], label='Polyligne', color='blue')
-    
-    # Configurer les axes et le titre
-    ax.set_title('Visualisation du fichier DXF')
-    ax.set_xlabel('Coordonnée X')
-    ax.set_ylabel('Coordonnée Y')
-    
-    st.pyplot(fig)
-
-# Téléversement du fichier DXF généré
-uploaded_dxf = st.file_uploader("Téléversez un fichier DXF", type=["dxf"])
-
-# Afficher le contenu du fichier DXF téléversé
-if uploaded_dxf is not None:
-    with open("fichier_temp.dxf", "wb") as f:
-        f.write(uploaded_dxf.getbuffer())
-    afficher_dxf("fichier_temp.dxf")
-
+            else:
+                st.warning("Aucune zone inondée à exporter en DXF.")
