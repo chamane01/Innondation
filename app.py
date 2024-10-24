@@ -135,7 +135,7 @@ if df is not None:
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, 
                                   levels=levels, 
                                   colors='#FF4D4D',  # Rouge glacé
-                                  linewidths=2,      # Épaisseur des lignes
+                                  linewidths=1,      # Épaisseur des lignes
                                   linestyles='solid') # Style de ligne solide
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
             # Tracé des hachures pour la zone inondée
