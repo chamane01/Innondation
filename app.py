@@ -4,9 +4,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
-from shapely.geometry import Polygon, Point
-from shapely.ops import unary_union
 import contextily as ctx
+from shapely.geometry import Polygon
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -90,31 +89,34 @@ if df is not None:
         grid_Z = griddata((df['X'], df['Y']), df['Z'], (grid_X, grid_Y), method=interpolation_method)
 
         # Étape 7 : Calcul de la surface inondée
-        def calculer_surface(niveau_inondation):
-            contours = []
-            for x in range(grid_X.shape[0]):
-                for y in range(grid_Y.shape[1]):
-                    if grid_Z[x, y] <= niveau_inondation:
-                        contours.append(Point(grid_X[x, y], grid_Y[x, y]))
+        def calculer_surface_inondee(niveau_inondation):
+            # On crée un masque pour les zones où la hauteur est inférieure ou égale au niveau d'inondation
+            masque_inonde = grid_Z <= niveau_inondation
 
-            # Création d'un polygone à partir des points inondés
-            if contours:
-                poly_inonde = unary_union([p.buffer(0.1) for p in contours])
-                if isinstance(poly_inonde, Polygon):
-                    return poly_inonde, poly_inonde.area / 10000  # Retourne le polygone et la surface en hectares
-                elif isinstance(poly_inonde, (list, tuple)):
-                    poly_combined = unary_union(poly_inonde)
-                    return poly_combined, poly_combined.area / 10000
-            return None, 0.0
+            # On extrait les coordonnées des points inondés
+            x_inonde = grid_X[masque_inonde]
+            y_inonde = grid_Y[masque_inonde]
+
+            if len(x_inonde) > 0 and len(y_inonde) > 0:
+                # Création du polygone approximatif
+                points = np.column_stack((x_inonde, y_inonde))
+                polygone = Polygon(points).convex_hull  # On prend l'enveloppe convexe des points
+
+                # Calcul de la surface du polygone en hectares (1 hectare = 10 000 m²)
+                surface_inondee = polygone.area / 10000
+                return surface_inondee, polygone
+            else:
+                return 0.0, None
 
         # Étape 8 : Calcul du volume d'eau
         def calculer_volume(surface_inondee):
+            # Volume = Surface x Hauteur (niveau d'eau)
             volume = surface_inondee * st.session_state.flood_data['niveau_inondation'] * 10000  # Conversion en m³ (1 hectare = 10,000 m²)
             return volume
 
         if st.button("Afficher la carte d'inondation"):
             # Étape 9 : Calcul de la surface et du volume
-            polygon_inonde, surface_inondee = calculer_surface(st.session_state.flood_data['niveau_inondation'])
+            surface_inondee, polygone_inonde = calculer_surface_inondee(st.session_state.flood_data['niveau_inondation'])
             volume_eau = calculer_volume(surface_inondee)
 
             # Stocker les résultats dans session_state
@@ -136,9 +138,9 @@ if df is not None:
             # Tracé des hachures pour la zone inondée
             ax.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], colors='#007FFF', alpha=0.5)
 
-            # Tracer la zone inondée
-            if polygon_inonde:
-                x_poly, y_poly = polygon_inonde.exterior.xy
+            # Tracer la zone inondée si le polygone est valide
+            if polygone_inonde:
+                x_poly, y_poly = polygone_inonde.exterior.xy
                 ax.fill(x_poly, y_poly, alpha=0.5, fc='cyan', ec='black', lw=1, label='Zone inondée')
 
             ax.set_title("Carte des zones inondées")
