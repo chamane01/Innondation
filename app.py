@@ -143,25 +143,31 @@ if df is not None:
 
             # Étape 10 : Génération du fichier DXF avec les contours rouges
             st.markdown("## Génération du fichier DXF avec les polylignes rouges")
-
-           # Fonction pour créer un fichier DXF avec des polylignes représentant les contours
-def generer_dxf_contours(df, fichier_sortie="contours.dxf"):
+            # Fonction pour générer un fichier DXF à partir des points des contours déjà disponibles
+def generer_dxf_depuis_contours(contours_points, fichier_sortie="contours_traces.dxf"):
     # Créer un nouveau fichier DXF
     doc = ezdxf.new(dxfversion="R2010")
     msp = doc.modelspace()
 
-    # Récupérer les points de contour (filtrer ou extraire les points selon votre logique)
-    # Dans cet exemple, nous supposons que les points sont les lignes à tracer
-    points_contour = df[['X', 'Y']].values  # Récupération des colonnes X et Y
-
-    # Créer une polyligne pour les contours identifiés
-    msp.add_lwpolyline(points_contour, is_closed=False)  # Trace la polyligne ouverte
+    # Parcourir chaque contour (chaque contour est une liste de points)
+    for contour in contours_points:
+        # Ajouter une polyligne pour chaque contour dans le fichier DXF
+        msp.add_lwpolyline(contour, is_closed=True)  # Ferme la polyligne pour former un contour complet
 
     # Sauvegarder le fichier DXF
     doc.saveas(fichier_sortie)
-    st.success(f"Fichier DXF généré avec succès : {fichier_sortie}")
+    print(f"Fichier DXF généré avec succès : {fichier_sortie}")
 
-# Utilisation de la fonction si le fichier est chargé
-if df is not None:
-    # Appel de la fonction pour générer le DXF des contours
-    generer_dxf_contours(df)
+# Exemple de données de contours déjà calculés (chaque contour est une liste de tuples)
+# Remplace `contours_points` par tes propres coordonnées calculées lors du tracé
+contours_points = [
+    [(100, 200), (150, 250), (200, 200), (150, 150)],  # Contour 1
+    [(300, 400), (350, 450), (400, 400), (350, 350)]   # Contour 2
+]
+
+# Générer le fichier DXF à partir des contours déjà tracés
+generer_dxf_depuis_contours(contours_points, fichier_sortie="contours_traces.dxf")
+
+
+           # Fonction pour créer un fichier DXF avec des polylignes représentant les contours
+
