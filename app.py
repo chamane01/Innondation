@@ -127,15 +127,6 @@ if st.button("Afficher la carte d'inondation"):
     # Tracer le contour du niveau d'inondation
     contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
 
-    # Remplissage de l'intérieur du contour
-    for collection in contours_inondation.collections:
-        paths = collection.get_paths()
-        for path in paths:
-            # Récupérer les coordonnées du contour
-            x, y = path.vertices[:, 0], path.vertices[:, 1]
-            # Remplir avec un bleu semi-transparent
-            ax.fill(x, y, color='blue', alpha=0.3)  # Ajustez alpha pour plus ou moins de transparence
-
     # Autres configurations pour la carte
     #ax.set_title("Carte des zones inondées")
     #ax.set_xlabel("Coordonnée X")
