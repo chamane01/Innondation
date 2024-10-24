@@ -11,4 +11,4 @@ geopandas
 requests
 osmnx
 contextily
-pyproj==3.6.0  # Pour la conversion des coordonnées
+pyproj # Pour la conversion des coordonnées
