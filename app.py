@@ -2,9 +2,11 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import folium
-from streamlit_folium import st_folium
+import matplotlib.pyplot as plt
+from scipy.interpolate import griddata
 from shapely.geometry import Polygon
+import contextily as ctx
+from pyproj import Transformer
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -16,7 +18,7 @@ with col2:
 with col3:
     st.write("")  # Cette colonne est laissée vide pour centrer les logos
 
-st.title("Carte interactive des zones inondées avec niveaux d'eau et surface")
+st.title("Carte des zones inondées avec niveaux d'eau et surface")
 
 # Initialiser session_state pour stocker les données d'inondation
 if 'flood_data' not in st.session_state:
@@ -68,12 +70,16 @@ else:
 
 # Traitement des données si le fichier est chargé
 if df is not None:
+    # Séparateur pour organiser l'affichage
+    st.markdown("---")  # Ligne de séparation
+
     # Vérification du fichier : s'assurer que les colonnes X, Y, Z sont présentes
     if 'X' not in df.columns or 'Y' not in df.columns or 'Z' not in df.columns:
         st.error("Erreur : colonnes 'X', 'Y' et 'Z' manquantes.")
     else:
         # Étape 5 : Paramètres du niveau d'inondation
         st.session_state.flood_data['niveau_inondation'] = st.number_input("Entrez le niveau d'eau (mètres)", min_value=0.0, step=0.1)
+        interpolation_method = st.selectbox("Méthode d'interpolation", ['linear', 'nearest'])
 
         # Étape 6 : Création de la grille
         X_min, X_max = df['X'].min(), df['X'].max()
@@ -81,14 +87,19 @@ if df is not None:
 
         resolution = st.number_input("Résolution de la grille", value=300, min_value=100, max_value=1000)
         grid_X, grid_Y = np.mgrid[X_min:X_max:resolution*1j, Y_min:Y_max:resolution*1j]
+        grid_Z = griddata((df['X'], df['Y']), df['Z'], (grid_X, grid_Y), method=interpolation_method)
+
+        # Convertir les coordonnées en EPSG:3857 pour le fond de carte
+        transformer = Transformer.from_crs("epsg:4326", "epsg:3857", always_xy=True)
+        grid_X_3857, grid_Y_3857 = transformer.transform(grid_X, grid_Y)
 
         # Étape 7 : Calcul de la surface inondée
         def calculer_surface(niveau_inondation):
             contours = []
             for x in range(grid_X.shape[0]):
                 for y in range(grid_Y.shape[1]):
-                    if df['Z'][x] <= niveau_inondation:
-                        contours.append((df['X'][x], df['Y'][y]))
+                    if grid_Z[x, y] <= niveau_inondation:
+                        contours.append((grid_X[x, y], grid_Y[x, y]))
 
             # Convertir les contours en un polygone
             if contours:
@@ -110,23 +121,28 @@ if df is not None:
             st.session_state.flood_data['surface_inondee'] = surface_inondee
             st.session_state.flood_data['volume_eau'] = volume_eau
 
-            # Créer la carte interactive avec folium
-            map_center = [(Y_min + Y_max) / 2, (X_min + X_max) / 2]
-            m = folium.Map(location=map_center, zoom_start=13)
+            # Tracer la carte de profondeur
+            fig, ax = plt.subplots(figsize=(8, 6))
 
-            # Ajouter les données d'inondation à la carte
-            if polygon_inonde:
-                folium.Polygon(
-                    locations=[(x, y) for x, y in zip(df['X'], df['Y'])],
-                    color='blue', 
-                    fill=True,
-                    fill_opacity=0.5,
-                    popup=f'Surface inondée: {surface_inondee:.2f} hectares'
-                ).add_to(m)
+            # Tracer le fond OpenStreetMap en EPSG:3857
+            ax.set_xlim(grid_X_3857.min(), grid_X_3857.max())
+            ax.set_ylim(grid_Y_3857.min(), grid_Y_3857.max())
+            ctx.add_basemap(ax, crs="EPSG:3857", source=ctx.providers.OpenStreetMap.Mapnik)
 
-            # Afficher la carte interactive
-            st_data = st_folium(m, width=700, height=500)
+            # Tracer la carte de profondeur
+            contours_inondation = ax.contour(grid_X_3857, grid_Y_3857, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
+            ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
 
-            # Afficher les résultats
-            st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
-            st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
+            # Tracé des hachures pour la zone inondée
+            contourf_filled = ax.contourf(grid_X_3857, grid_Y_3857, grid_Z, 
+                               levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
+                               colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
+
+            # Affichage de la carte
+            st.pyplot(fig)
+
+            # Affichage des résultats à droite de la carte
+            col1, col2 = st.columns([3, 1])  # Créer deux colonnes
+            with col2:
+                st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
+                st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
