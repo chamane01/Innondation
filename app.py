@@ -119,6 +119,12 @@ if df is not None:
 
             # Tracer la carte de profondeur
             fig, ax = plt.subplots(figsize=(8, 6))
+            # Tracer le fond OpenStreetMap
+            ax.set_xlim(X_min, X_max)
+            ax.set_ylim(Y_min, Y_max)
+            ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+
+
 
             # Tracer la carte de profondeur
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
