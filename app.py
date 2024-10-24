@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
+import ezdxf  # Bibliothèque pour créer des fichiers DXF
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -124,31 +125,36 @@ if df is not None:
             ax.set_ylim(Y_min, Y_max)
             ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
 
-            # Tracer la carte de profondeur
-           # contourf = ax.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='viridis', alpha=0.5)
-           # plt.colorbar(contourf, label='Profondeur (mètres)')
-
             # Tracer le contour du niveau d'inondation
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
+
             # Tracé des hachures pour la zone inondée
             contourf_filled = ax.contourf(grid_X, grid_Y, grid_Z, 
                                levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
                                colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
 
-
-            # Tracer la zone inondée
-          #  if polygon_inonde:
-                #x_poly, y_poly = polygon_inonde.exterior.xy
-                #ax.fill(x_poly, y_poly, alpha=0.5, fc='cyan', ec='black', lw=1, label='Zone inondée')  # Couleur cyan pour la zone inondée
-
-            #ax.set_title("Carte des zones inondées")
-           # ax.set_xlabel("Coordonnée X")
-            #ax.set_ylabel("Coordonnée Y")
-            #ax.legend()
-
             # Affichage de la carte
             st.pyplot(fig)
+
+            # Création du fichier DXF avec contours
+            doc = ezdxf.new(dxfversion='R2010')
+            msp = doc.modelspace()
+
+            # Ajouter les contours au DXF
+            for collection in contours_inondation.collections:
+                for path in collection.get_paths():
+                    points = path.vertices
+                    for i in range(len(points)-1):
+                        msp.add_line(points[i], points[i+1])
+
+            # Sauvegarder le fichier DXF
+            dxf_file = "contours_inondation.dxf"
+            doc.saveas(dxf_file)
+
+            # Proposer le téléchargement du fichier DXF
+            with open(dxf_file, "rb") as dxf:
+                st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
 
             # Affichage des résultats à droite de la carte
             col1, col2 = st.columns([3, 1])  # Créer deux colonnes
