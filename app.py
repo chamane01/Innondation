@@ -5,6 +5,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from shapely.geometry import Polygon, LineString
+import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from ezdxf.addons import meshex
 
