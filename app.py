@@ -7,36 +7,6 @@ from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
 
-# Ajouter des styles CSS personnalisés
-st.markdown("""
-    <style>
-    /* Couleur de fond de l'application */
-    .reportview-container {
-        background-color: #f0f8ff;  /* Couleur bleu très clair */
-    }
-    /* Style des titres */
-    .stTitle {
-        color: #007FFF;  /* Couleur bleue pour le titre */
-    }
-    /* Style des boutons */
-    .stButton {
-        background-color: #FF4D4D;  /* Rouge glacé */
-        color: white;               /* Couleur du texte en blanc */
-        border-radius: 5px;        /* Bords arrondis */
-        padding: 10px 20px;        /* Espacement intérieur */
-        transition: background-color 0.3s ease; /* Transition pour l'effet au survol */
-    }
-    /* Changement de couleur au survol des boutons */
-    .stButton:hover {
-        background-color: #FF3333;  /* Couleur rouge plus foncée au survol */
-    }
-    /* Style des colonnes */
-    .stColumn {
-        margin: 10px;  /* Espacement entre les colonnes */
-    }
-    </style>
-    """, unsafe_allow_html=True)
-
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
 
@@ -63,7 +33,9 @@ st.markdown("## Sélectionner un site ou téléverser un fichier")
 # Ajouter une option pour sélectionner parmi des fichiers CSV existants (AYAME 1 et AYAME 2)
 option_site = st.selectbox(
     "Sélectionnez un site",
-    ("Aucun", "AYAME 1", "AYAME 2")
+    ("Aucun", "AYAME 1", "AYAME 2"),
+    help="Choisissez un site parmi les options disponibles.",
+    index=0
 )
 
 # Téléverser un fichier Excel ou TXT
@@ -107,14 +79,29 @@ if df is not None:
         st.error("Erreur : colonnes 'X', 'Y' et 'Z' manquantes.")
     else:
         # Étape 5 : Paramètres du niveau d'inondation
-        st.session_state.flood_data['niveau_inondation'] = st.number_input("Entrez le niveau d'eau (mètres)", min_value=0.0, step=0.1)
-        interpolation_method = st.selectbox("Méthode d'interpolation", ['linear', 'nearest'])
+        st.session_state.flood_data['niveau_inondation'] = st.number_input(
+            "Entrez le niveau d'eau (mètres)", 
+            min_value=0.0, 
+            step=0.1,
+            help="Entrez le niveau d'eau pour la simulation."
+        )
+        interpolation_method = st.selectbox(
+            "Méthode d'interpolation", 
+            ['linear', 'nearest'],
+            help="Choisissez la méthode d'interpolation pour les données."
+        )
 
         # Étape 6 : Création de la grille
         X_min, X_max = df['X'].min(), df['X'].max()
         Y_min, Y_max = df['Y'].min(), df['Y'].max()
 
-        resolution = st.number_input("Résolution de la grille", value=300, min_value=100, max_value=1000)
+        resolution = st.number_input(
+            "Résolution de la grille", 
+            value=300, 
+            min_value=100, 
+            max_value=1000,
+            help="Définissez la résolution de la grille pour la carte."
+        )
         grid_X, grid_Y = np.mgrid[X_min:X_max:resolution*1j, Y_min:Y_max:resolution*1j]
         grid_Z = griddata((df['X'], df['Y']), df['Z'], (grid_X, grid_Y), method=interpolation_method)
 
@@ -154,4 +141,19 @@ if df is not None:
             ax.set_ylim(Y_min, Y_max)
             ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
 
-            #
+            # Tracer le contour du niveau d'inondation
+            contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
+            ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
+            # Tracé des hachures pour la zone inondée
+            contourf_filled = ax.contourf(grid_X, grid_Y, grid_Z, 
+                               levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
+                               colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
+
+            # Affichage de la carte
+            st.pyplot(fig)
+
+            # Affichage des résultats à droite de la carte
+            col1, col2 = st.columns([3, 1])  # Créer deux colonnes
+            with col2:
+                st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
+                st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
