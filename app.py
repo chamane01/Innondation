@@ -4,8 +4,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
-from shapely.geometry import Polygon
-import contextily as ctx
+from shapely.geometry import Polygon, LineString
+import ezdxf  # Bibliothèque pour créer des fichiers DXF
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -17,7 +17,7 @@ with col2:
 with col3:
     st.write("")  # Cette colonne est laissée vide pour centrer les logos
 
-st.title("Carte des zones inondées avec niveaux d'eau et surface")
+st.title("Carte des zones inondées avec niveaux d'eau et génération de polylignes DXF")
 
 # Initialiser session_state pour stocker les données d'inondation
 if 'flood_data' not in st.session_state:
@@ -119,11 +119,6 @@ if df is not None:
             # Tracer la carte de profondeur
             fig, ax = plt.subplots(figsize=(8, 6))
 
-            # Tracer le fond OpenStreetMap
-            ax.set_xlim(X_min, X_max)
-            ax.set_ylim(Y_min, Y_max)
-            ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
-
             # Tracer la carte de profondeur
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
@@ -150,33 +145,35 @@ if df is not None:
                 st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
                 st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
 
-            # Étape 10 : Création de la deuxième carte avec transformation des contours en polygonales
-            st.markdown("## Deuxième carte avec système de coordonnées locales")
+            # Étape 10 : Génération du fichier DXF avec les contours
+            st.markdown("## Génération du fichier DXF avec les polylignes")
 
-            # Transformation des coordonnées pour la deuxième carte automatiquement
-            df_local = df.copy()  # Créer une copie du DataFrame d'origine
+            def generer_dxf(polygon):
+                # Créer un nouveau document DXF
+                doc = ezdxf.new(dxfversion="R2010")
+                msp = doc.modelspace()
 
-            # Transformation des coordonnées en coordonnées locales
-            df_local['X_local'] = df['X'] - df['X'].min()
-            df_local['Y_local'] = df['Y'] - df['Y'].min()
+                # Ajouter les contours sous forme de polylignes
+                if polygon:
+                    x_poly, y_poly = polygon.exterior.xy
+                    points = list(zip(x_poly, y_poly))
 
-            # Tracer la deuxième carte avec les contours transformés en polygones
-            fig2, ax2 = plt.subplots(figsize=(8, 6))
-            ax2.set_title("Carte locale avec contours transformés en polygones")
+                    # Créer une polyligne dans le fichier DXF
+                    msp.add_lwpolyline(points)
 
-            # Tracer les contours polygonaux sur la deuxième carte
+                # Sauvegarder le fichier DXF
+                fichier_dxf = "contours_inondation.dxf"
+                doc.saveas(fichier_dxf)
+                return fichier_dxf
+
             if polygon_inonde:
-                x_poly_local, y_poly_local = polygon_inonde.exterior.xy
-                ax2.fill(x_poly_local, y_poly_local, alpha=0.5, fc='orange', ec='black', lw=1, label='Contours en polygones')
+                fichier_dxf = generer_dxf(polygon_inonde)
+                st.success(f"Fichier DXF généré : {fichier_dxf}")
+                with open(fichier_dxf, "rb") as file:
+                    st.download_button(
+                        label="Télécharger le fichier DXF",
+                        data=file,
+                        file_name=fichier_dxf,
+                        mime="application/dxf"
+                    )
 
-            # Tracer le fond OpenStreetMap
-            ax2.set_xlim(df_local['X_local'].min(), df_local['X_local'].max())
-            ax2.set_ylim(df_local['Y_local'].min(), df_local['Y_local'].max())
-            ctx.add_basemap(ax2, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
-
-            ax2.set_xlabel("Coordonnée X locale")
-            ax2.set_ylabel("Coordonnée Y locale")
-            ax2.legend()
-
-            # Affichage de la deuxième carte
-            st.pyplot(fig2)
