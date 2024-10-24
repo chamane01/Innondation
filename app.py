@@ -131,10 +131,17 @@ if df is not None:
             # Tracer le contour du niveau d'inondation
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
+            niveaux = np.linspace(-np.inf, st.session_state.flood_data['niveau_inondation'], 100)
+            colors = plt.cm.Blues(np.linspace(0, 1, len(niveaux)))
+
             # Tracé des hachures pour la zone inondée
             contourf_filled = ax.contourf(grid_X, grid_Y, grid_Z, 
-                               levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
-                               colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
+                               levels=niveaux, 
+                               colors=colors, 
+                               alpha=0.5)eur bleue semi-transparente
+            cbar = plt.colorbar(contourf_filled, ax=ax)
+            cbar.set_label('Profondeur de l\'inondation (m)')
+
 
 
             # Tracer la zone inondée
