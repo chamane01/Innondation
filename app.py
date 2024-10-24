@@ -61,7 +61,7 @@ def charger_fichier(fichier, is_uploaded=False):
 if option_site == "AYAME 1":
     df = charger_fichier('AYAME1.txt')
 elif option_site == "AYAME 2":
-    df = charger_fichier('AYAME2.csv')
+    df = charger_fichier('AYAME2.txt')
 elif uploaded_file is not None:
     df = charger_fichier(uploaded_file, is_uploaded=True)
 else:
