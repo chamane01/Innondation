@@ -14,8 +14,8 @@ def load_predefined_data(file_path):
 
 # Chemins vers les fichiers CSV prédéfinis dans votre repo
 predefined_files = {
-    "AYAME 1": "AYAME1.csv",  # Mettez à jour le chemin réel
-    "AYAME 2": "AYAME22.csv"  # Mettez à jour le chemin réel
+    "AYAME 1": "path/to/your/repo/AYAME1.csv",  # Mettez à jour le chemin réel
+    "AYAME 2": "path/to/your/repo/AYAME22.csv"  # Mettez à jour le chemin réel
 }
 
 # Streamlit - Titre de l'application avec le logo centré
@@ -85,8 +85,9 @@ if 'df' in locals():
 
         # Étape 6 : Création de la grille
         try:
-            X_min, X_max = df['X'].min(), df['X'].max()
-            Y_min, Y_max = df['Y'].min(), df['Y'].max()
+            # Définir les limites
+            X_min, X_max = float(df['X'].min()), float(df['X'].max())
+            Y_min, Y_max = float(df['Y'].min()), float(df['Y'].max())
 
             # Vérification des valeurs
             st.write(f"Valeurs X: min={X_min}, max={X_max}")
