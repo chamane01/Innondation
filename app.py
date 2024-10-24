@@ -131,19 +131,36 @@ if df is not None:
             st.markdown("## Génération du fichier DXF avec les polylignes rouges")
 
             # Fonction pour générer un fichier DXF à partir des points des contours
-            def generer_dxf_depuis_contours(contours_points, fichier_sortie="contours_traces.dxf"):
-                doc = ezdxf.new(dxfversion="R2010")
-                msp = doc.modelspace()
+            def extraire_points_contours(contours_inondation):
+    contours_points = []
+    # Pour chaque collection dans l'objet contours_inondation
+    for collection in contours_inondation.collections:
+        # Pour chaque chemin dans la collection
+        for path in collection.get_paths():
+            # Récupérer les coordonnées des sommets du contour
+            contour = path.vertices  # Un tableau Nx2 (X, Y)
+            # Convertir en liste de tuples
+            contours_points.append(contour.tolist())
+    return contours_points
 
-                for contour in contours_points:
-                    msp.add_lwpolyline(contour, is_closed=True)
+def generer_dxf_depuis_contours(contours_points, fichier_sortie="contours_traces.dxf"):
+    doc = ezdxf.new(dxfversion="R2010")
+    msp = doc.modelspace()
 
-                doc.saveas(fichier_sortie)
-                print(f"Fichier DXF généré avec succès : {fichier_sortie}")
+    # Ajouter chaque contour comme polyligne dans le DXF
+    for contour in contours_points:
+        msp.add_lwpolyline(contour, is_closed=True)
 
-            contours_points = [
-                [(100, 200), (150, 250), (200, 200), (150, 150)],  # Contour 1
-                [(300, 400), (350, 450), (400, 400), (350, 350)]   # Contour 2
-            ]
+    # Sauvegarde du fichier DXF
+    doc.saveas(fichier_sortie)
+    print(f"Fichier DXF généré avec succès : {fichier_sortie}")
 
-            generer_dxf_depuis_contours(contours_points, fichier_sortie="contours_traces.dxf")
+# Exemple d'utilisation dans le flux principal de votre code
+# Supposons que contours_inondation soit l'objet retourné par ax.contour(...)
+contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
+
+# Extraire les points des contours
+contours_points = extraire_points_contours(contours_inondation)
+
+# Générer le fichier DXF
+generer_dxf_depuis_contours(contours_points, fichier_sortie="contours_traces.dxf")
