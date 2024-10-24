@@ -39,26 +39,40 @@ option_site = st.selectbox(
 # Téléverser un fichier Excel ou TXT
 uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
 
-# Charger les fichiers CSV prédéfinis si sélectionné
+# Fonction pour charger le fichier (identique pour les fichiers prédéfinis et téléversés)
+def charger_fichier(fichier, is_uploaded=False):
+    try:
+        if is_uploaded:
+            # Si le fichier est téléversé, vérifier son type
+            if fichier.name.endswith('.xlsx'):
+                df = pd.read_excel(fichier)
+            elif fichier.name.endswith('.txt'):
+                df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
+        else:
+            # Si le fichier est prédéfini (site), il est déjà connu
+            df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
+        return df
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier : {e}")
+        return None
+
+# Charger les fichiers selon la sélection
 if option_site == "AYAME 1":
-    df = pd.read_csv('AYAME1.txt')
+    df = charger_fichier('AYAME1.txt')
 elif option_site == "AYAME 2":
-    df = pd.read_csv('AYAME2.csv')
+    df = charger_fichier('AYAME2.csv')
 elif uploaded_file is not None:
-    # Charger le fichier téléversé
-    if uploaded_file.name.endswith('.xlsx'):
-        df = pd.read_excel(uploaded_file)
-    elif uploaded_file.name.endswith('.txt'):
-        df = pd.read_csv(uploaded_file, sep=",", header=None, names=["X", "Y", "Z"])
+    df = charger_fichier(uploaded_file, is_uploaded=True)
 else:
     st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
     df = None
 
+# Traitement des données si le fichier est chargé
 if df is not None:
     # Séparateur pour organiser l'affichage
     st.markdown("---")  # Ligne de séparation
 
-    # Étape 3 : Vérification du fichier
+    # Vérification du fichier : s'assurer que les colonnes X, Y, Z sont présentes
     if 'X' not in df.columns or 'Y' not in df.columns or 'Z' not in df.columns:
         st.error("Erreur : colonnes 'X', 'Y' et 'Z' manquantes.")
     else:
@@ -80,7 +94,7 @@ if df is not None:
             for x in range(grid_X.shape[0]):
                 for y in range(grid_Y.shape[1]):
                     if grid_Z[x, y] <= niveau_inondation:
-                        contours.append((grid_X[x, y], grid_Y[y, y]))
+                        contours.append((grid_X[x, y], grid_Y[x, y]))
 
             # Convertir les contours en un polygone
             if contours:
