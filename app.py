@@ -7,13 +7,24 @@ from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
 
+# Charger les fichiers txt prédéfinis
+def load_predefined_data(file_path):
+    df = pd.read_csv(file_path, sep=",", header=None, names=["X", "Y", "Z"])
+    return df
+
+# Chemins vers les fichiers txt prédéfinis dans votre repo
+predefined_files = {
+    "AYAME 1": "AYAME1.csv",
+    "AYAME 2": "AYAME22.csv"
+}
+
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
 
 with col1:
     st.image("POPOPO.jpg", width=150)
 with col2:
-    st.image("logo.png", width=150)
+    st.image("SECOND_LOGO.jpg", width=150)
 with col3:
     st.write("")  # Cette colonne est laissée vide pour centrer les logos
 
@@ -27,37 +38,51 @@ if 'flood_data' not in st.session_state:
         'niveau_inondation': 0.0
     }
 
-# Étape 1 : Téléverser le fichier Excel ou TXT avec un style personnalisé
-st.markdown(
-    """
-    <style>
-    .stFileUploader label {
-        color: white;
-        background-color: #1E90FF; /* Bleu élégant */
-        padding: 5px;
-        border-radius: 5px;
-    }
-    .stSelectbox .st-bq {
-        background: linear-gradient(135deg, #1E90FF, #87CEEB); /* Dégradé bleu */
-        color: white;
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
+# Étape 1 : Sélectionner une carte existante ou téléverser un fichier
+st.markdown("### Sélectionner une carte existante")
 
-uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
+# Barre de sélection pour les cartes existantes
+carte_selectionnee = st.selectbox("Choisir une carte existante", ["", "AYAME 1", "AYAME 2"])
 
-if uploaded_file is not None:
-    # Étape 2 : Identifier le type de fichier et charger les données en fonction
-    if uploaded_file.name.endswith('.xlsx'):
-        df = pd.read_excel(uploaded_file)
-    elif uploaded_file.name.endswith('.txt'):
-        df = pd.read_csv(uploaded_file, sep=",", header=None, names=["X", "Y", "Z"])
-
-    # Séparateur pour organiser l'affichage
+# Charger les données de la carte sélectionnée ou option de téléversement
+if carte_selectionnee:
+    # Charger la carte prédéfinie à partir du dépôt
+    df = load_predefined_data(predefined_files[carte_selectionnee])
+    st.success(f"Carte '{carte_selectionnee}' chargée avec succès.")
+else:
+    # Option de téléversement d'un fichier
     st.markdown("---")  # Ligne de séparation
+    st.markdown("### Ou téléversez un fichier")
 
+    st.markdown(
+        """
+        <style>
+        .stFileUploader label {
+            color: white;
+            background-color: #1E90FF; /* Bleu élégant */
+            padding: 5px;
+            border-radius: 5px;
+        }
+        .stSelectbox .st-bq {
+            background: linear-gradient(135deg, #1E90FF, #87CEEB); /* Dégradé bleu */
+            color: white;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
+
+    if uploaded_file is not None:
+        # Identifier le type de fichier et charger les données en fonction
+        if uploaded_file.name.endswith('.xlsx'):
+            df = pd.read_excel(uploaded_file)
+        elif uploaded_file.name.endswith('.txt'):
+            df = pd.read_csv(uploaded_file, sep=",", header=None, names=["X", "Y", "Z"])
+
+# Si un fichier est sélectionné ou téléversé
+if 'df' in locals():
     # Étape 3 : Vérification du fichier
     if 'X' not in df.columns or 'Y' not in df.columns or 'Z' not in df.columns:
         st.error("Erreur : colonnes 'X', 'Y' et 'Z' manquantes.")
@@ -136,6 +161,5 @@ if uploaded_file is not None:
             with col2:
                 st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
                 st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
-
 else:
-    st.warning("Veuillez téléverser un fichier pour démarrer.")
+    st.warning("Veuillez sélectionner une carte existante ou téléverser un fichier.")
