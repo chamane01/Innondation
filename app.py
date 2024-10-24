@@ -83,7 +83,7 @@ if df is not None:
             for x in range(grid_X.shape[0]):
                 for y in range(grid_Y.shape[1]):
                     if grid_Z[x, y] <= niveau_inondation:
-                        contours.append((grid_X[x, y], grid_Y[x, y]))
+                        contours.append((grid_X[x, y], grid_Y[y]))
 
             if contours:
                 polygon = Polygon(contours)
@@ -107,10 +107,8 @@ if df is not None:
             ax.set_ylim(Y_min, Y_max)
             ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)  # Carte OpenStreetMap plus visible
 
-            contourf = ax.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='viridis', alpha=0.5)
-            plt.colorbar(contourf, label='Profondeur (mètres)')
-
-            contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
+            # Tracer la ligne de contour à 100m
+            contour_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[100], colors='cyan', linewidths=2)
 
             if polygon_inonde:
                 x_poly, y_poly = polygon_inonde.exterior.xy
