@@ -144,32 +144,24 @@ if df is not None:
             # Étape 10 : Génération du fichier DXF avec les contours rouges
             st.markdown("## Génération du fichier DXF avec les polylignes rouges")
 
-            def generer_dxf(polygon):
-                # Créer un nouveau document DXF
-                doc = ezdxf.new(dxfversion="R2010")
-                msp = doc.modelspace()
+           # Fonction pour créer un fichier DXF avec des polylignes représentant les contours
+def generer_dxf_contours(df, fichier_sortie="contours.dxf"):
+    # Créer un nouveau fichier DXF
+    doc = ezdxf.new(dxfversion="R2010")
+    msp = doc.modelspace()
 
-                # Ajouter les contours sous forme de polylignes rouges
-                if polygon:
-                    x_poly, y_poly = polygon.exterior.xy
-                    points = list(zip(x_poly, y_poly))
+    # Récupérer les points de contour (filtrer ou extraire les points selon votre logique)
+    # Dans cet exemple, nous supposons que les points sont les lignes à tracer
+    points_contour = df[['X', 'Y']].values  # Récupération des colonnes X et Y
 
-                    # Créer une polyligne dans le fichier DXF avec la couleur rouge
-                    msp.add_lwpolyline(points, dxfattribs={'color': 1})  # Couleur 1 = rouge dans le format DXF
+    # Créer une polyligne pour les contours identifiés
+    msp.add_lwpolyline(points_contour, is_closed=False)  # Trace la polyligne ouverte
 
-                # Sauvegarder le fichier DXF
-                fichier_dxf = "contours_inondation_rouge.dxf"
-                doc.saveas(fichier_dxf)
-                return fichier_dxf
+    # Sauvegarder le fichier DXF
+    doc.saveas(fichier_sortie)
+    st.success(f"Fichier DXF généré avec succès : {fichier_sortie}")
 
-            if polygon_inonde:
-                fichier_dxf = generer_dxf(polygon_inonde)
-                st.success(f"Fichier DXF généré : {fichier_dxf}")
-                with open(fichier_dxf, "rb") as file:
-                    st.download_button(
-                        label="Télécharger le fichier DXF",
-                        data=file,
-                        file_name=fichier_dxf
-                    )
-            else:
-                st.warning("Aucune zone inondée à exporter en DXF.")
+# Utilisation de la fonction si le fichier est chargé
+if df is not None:
+    # Appel de la fonction pour générer le DXF des contours
+    generer_dxf_contours(df)
