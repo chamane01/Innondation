@@ -117,7 +117,7 @@ if df is not None:
             st.session_state.flood_data['volume_eau'] = volume_eau
 
             # Tracer la carte de profondeur
-            #fig, ax = plt.subplots(figsize=(8, 6))
+            fig, ax = plt.subplots(figsize=(8, 6))
 
             # Tracer le fond OpenStreetMap
             ax.set_xlim(X_min, X_max)
