@@ -132,9 +132,7 @@ if df is not None:
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
             # Tracé des hachures pour la zone inondée
-           ax.contourf(grid_X, grid_Y, grid_Z, 
-            levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
-            colors='#007FFF', alpha=0.5)  # Couleur bleu semi-transparent
+            ax_map.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, niveau_inondation], colors='none', hatches=['///'], alpha=0)
 
             # Tracer la zone inondée
           #  if polygon_inonde:
