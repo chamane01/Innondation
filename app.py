@@ -116,7 +116,7 @@ if df is not None:
             st.session_state.flood_data['surface_inondee'] = surface_inondee
             st.session_state.flood_data['volume_eau'] = volume_eau
 
-            # Tracer la carte des zones inondées
+            # Tracer la carte de profondeur
             fig, ax = plt.subplots(figsize=(8, 6))
 
             # Tracer le fond OpenStreetMap
@@ -124,14 +124,18 @@ if df is not None:
             ax.set_ylim(Y_min, Y_max)
             ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
 
-            # Tracer la zone inondée avec filtre transparent
-            inondee_mask = grid_Z <= st.session_state.flood_data['niveau_inondation']
-            ax.fill_between(grid_X[0], grid_Y[:, 0], color='skyblue', alpha=0.4, where=inondee_mask[0, :], label='Zone inondée')  # Appliquer le filtre transparent
+            # Tracer la carte de profondeur
+            contourf = ax.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='viridis', alpha=0.5)
+            plt.colorbar(contourf, label='Profondeur (mètres)')
 
-            # Tracer les contours des zones inondées
+            # Tracer le contour du niveau d'inondation
+            contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
+            ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
+
+            # Tracer la zone inondée
             if polygon_inonde:
                 x_poly, y_poly = polygon_inonde.exterior.xy
-                ax.plot(x_poly, y_poly, color='red', linewidth=1, label='Contours des zones inondées')  # Contours rouges
+                ax.fill(x_poly, y_poly, alpha=0.5, fc='cyan', ec='black', lw=1, label='Zone inondée')  # Couleur cyan pour la zone inondée
 
             ax.set_title("Carte des zones inondées")
             ax.set_xlabel("Coordonnée X")
