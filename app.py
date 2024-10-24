@@ -130,6 +130,10 @@ if df is not None:
             levels = np.linspace(st.session_state.flood_data['niveau_inondation'] - 1, 
                      st.session_state.flood_data['niveau_inondation'] + 1, 
                      num=5)  # Créez plus de niveaux pour une meilleure lissage
+            grid_z_lisse = griddata((grid_X.flatten(), grid_Y.flatten()), 
+                         grid_Z.flatten(), 
+                         (grid_X, grid_Y), 
+                         method='cubic')
 
             # Tracer le contour du niveau d'inondation
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, 
