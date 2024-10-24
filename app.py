@@ -142,6 +142,9 @@ if df is not None:
                 st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
                 st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
 
+import io
+import ezdxf
+
 # Téléversement et visualisation du fichier DXF
 st.markdown("---")
 st.markdown("## Téléverser et visualiser un fichier DXF")
@@ -150,8 +153,9 @@ uploaded_dxf = st.file_uploader("Téléversez un fichier DXF", type=["dxf"])
 
 if uploaded_dxf is not None:
     try:
-        # Lecture du fichier DXF
-        dxf = ezdxf.readfile(uploaded_dxf)
+        # Lecture du fichier DXF depuis le flux en mémoire
+        dxf_data = io.BytesIO(uploaded_dxf.read())  # Lire le fichier téléversé en tant que bytes
+        dxf = ezdxf.read(dxf_data)  # Lire le contenu DXF depuis la mémoire
 
         # Création d'une nouvelle carte pour visualiser les entités DXF
         fig_dxf, ax_dxf = plt.subplots(figsize=(8, 6))
@@ -171,3 +175,4 @@ if uploaded_dxf is not None:
 
     except Exception as e:
         st.error(f"Erreur lors de la lecture du fichier DXF : {e}")
+
