@@ -4,12 +4,14 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, LineString
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
+from ezdxf.addons import meshex
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
+
 with col1:
     st.image("POPOPO.jpg", width=150)
 with col2:
@@ -29,18 +31,27 @@ if 'flood_data' not in st.session_state:
 
 # Étape 1 : Sélectionner un site ou téléverser un fichier
 st.markdown("## Sélectionner un site ou téléverser un fichier")
-option_site = st.selectbox("Sélectionnez un site", ("Aucun", "AYAME 1", "AYAME 2"))
+
+# Ajouter une option pour sélectionner parmi des fichiers CSV existants (AYAME 1 et AYAME 2)
+option_site = st.selectbox(
+    "Sélectionnez un site",
+    ("Aucun", "AYAME 1", "AYAME 2")
+)
+
+# Téléverser un fichier Excel ou TXT
 uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
 
-# Fonction pour charger un fichier
+# Fonction pour charger le fichier (identique pour les fichiers prédéfinis et téléversés)
 def charger_fichier(fichier, is_uploaded=False):
     try:
         if is_uploaded:
+            # Si le fichier est téléversé, vérifier son type
             if fichier.name.endswith('.xlsx'):
                 df = pd.read_excel(fichier)
             elif fichier.name.endswith('.txt'):
                 df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
         else:
+            # Si le fichier est prédéfini (site), il est déjà connu
             df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
         return df
     except Exception as e:
@@ -60,8 +71,10 @@ else:
 
 # Traitement des données si le fichier est chargé
 if df is not None:
+    # Séparateur pour organiser l'affichage
     st.markdown("---")  # Ligne de séparation
 
+    # Vérification du fichier : s'assurer que les colonnes X, Y, Z sont présentes
     if 'X' not in df.columns or 'Y' not in df.columns or 'Z' not in df.columns:
         st.error("Erreur : colonnes 'X', 'Y' et 'Z' manquantes.")
     else:
@@ -85,64 +98,70 @@ if df is not None:
                     if grid_Z[x, y] <= niveau_inondation:
                         contours.append((grid_X[x, y], grid_Y[x, y]))
 
+            # Convertir les contours en un polygone
             if contours:
                 polygon = Polygon(contours)
-                return polygon, polygon.area / 10000  # Surface en hectares
+                return polygon, polygon.area / 10000  # Retourne le polygone et la surface en hectares
             return None, 0.0
 
         # Étape 8 : Calcul du volume d'eau
         def calculer_volume(surface_inondee):
-            volume = surface_inondee * st.session_state.flood_data['niveau_inondation'] * 10000  # En m³
+            volume = surface_inondee * st.session_state.flood_data['niveau_inondation'] * 10000  # Conversion en m³ (1 hectare = 10,000 m²)
             return volume
 
         if st.button("Afficher la carte d'inondation"):
+            # Étape 9 : Calcul de la surface et volume
             polygon_inonde, surface_inondee = calculer_surface(st.session_state.flood_data['niveau_inondation'])
             volume_eau = calculer_volume(surface_inondee)
 
+            # Stocker les résultats dans session_state
             st.session_state.flood_data['surface_inondee'] = surface_inondee
             st.session_state.flood_data['volume_eau'] = volume_eau
 
-            # Affichage de la carte
+            # Tracer la carte de profondeur
             fig, ax = plt.subplots(figsize=(8, 6))
+            # Tracer le fond OpenStreetMap
             ax.set_xlim(X_min, X_max)
             ax.set_ylim(Y_min, Y_max)
             ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
 
+            # Tracer la carte de profondeur avec des contours rouges
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
 
+            # Tracé des hachures pour la zone inondée
             ax.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], colors='#007FFF', alpha=0.5)
+
+            # Affichage de la carte
             st.pyplot(fig)
 
-            col1, col2 = st.columns([3, 1])
+            # Affichage des résultats à droite de la carte
+            col1, col2 = st.columns([3, 1])  # Créer deux colonnes
             with col2:
                 st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
                 st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
 
+            # Étape 10 : Génération du fichier DXF avec les contours rouges
             st.markdown("## Génération du fichier DXF avec les polylignes rouges")
 
-            # Extraction des points des contours
-            contours_points = extraire_points_contours(contours_inondation)
-
-            # Génération du fichier DXF
-            generer_dxf_depuis_contours(contours_points, fichier_sortie="contours_traces.dxf")
-
-# Fonction pour extraire les points des contours
-def extraire_points_contours(contours_inondation):
-    contours_points = []
-    for collection in contours_inondation.collections:
-        for path in collection.get_paths():
-            contour = path.vertices  # Un tableau Nx2 (X, Y)
-            contours_points.append(contour.tolist())
-    return contours_points
-
-# Fonction pour générer un fichier DXF
-def generer_dxf_depuis_contours(contours_points, fichier_sortie="contours_traces.dxf"):
+           # Fonction pour créer un fichier DXF avec des polylignes représentant les contours
+def generer_dxf_contours(df, fichier_sortie="contours.dxf"):
+    # Créer un nouveau fichier DXF
     doc = ezdxf.new(dxfversion="R2010")
     msp = doc.modelspace()
 
-    for contour in contours_points:
-        msp.add_lwpolyline(contour, is_closed=True)
+    # Récupérer les points de contour (filtrer ou extraire les points selon votre logique)
+    # Dans cet exemple, nous supposons que les points sont les lignes à tracer
+    points_contour = df[['X', 'Y']].values  # Récupération des colonnes X et Y
 
+    # Créer une polyligne pour les contours identifiés
+    msp.add_lwpolyline(points_contour, is_closed=False)  # Trace la polyligne ouverte
+
+    # Sauvegarder le fichier DXF
     doc.saveas(fichier_sortie)
-    print(f"Fichier DXF généré avec succès : {fichier_sortie}")
+    st.success(f"Fichier DXF généré avec succès : {fichier_sortie}")
+
+# Utilisation de la fonction si le fichier est chargé
+if df is not None:
+    # Appel de la fonction pour générer le DXF des contours
+    generer_dxf_contours(df)
