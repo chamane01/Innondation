@@ -138,7 +138,7 @@ if df is not None:
             contourf_filled = ax.contourf(grid_X, grid_Y, grid_Z, 
                                levels=niveaux, 
                                colors=colors, 
-                               alpha=0.5)eur bleue semi-transparente
+                               alpha=0.5)
             cbar = plt.colorbar(contourf_filled, ax=ax)
             cbar.set_label('Profondeur de l\'inondation (m)')
 
