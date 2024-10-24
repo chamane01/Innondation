@@ -7,6 +7,36 @@ from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
 
+# Ajouter des styles CSS personnalisés
+st.markdown("""
+    <style>
+    /* Couleur de fond de l'application */
+    .reportview-container {
+        background-color: #f0f8ff;  /* Couleur bleu très clair */
+    }
+    /* Style des titres */
+    .stTitle {
+        color: #007FFF;  /* Couleur bleue pour le titre */
+    }
+    /* Style des boutons */
+    .stButton {
+        background-color: #FF4D4D;  /* Rouge glacé */
+        color: white;               /* Couleur du texte en blanc */
+        border-radius: 5px;        /* Bords arrondis */
+        padding: 10px 20px;        /* Espacement intérieur */
+        transition: background-color 0.3s ease; /* Transition pour l'effet au survol */
+    }
+    /* Changement de couleur au survol des boutons */
+    .stButton:hover {
+        background-color: #FF3333;  /* Couleur rouge plus foncée au survol */
+    }
+    /* Style des colonnes */
+    .stColumn {
+        margin: 10px;  /* Espacement entre les colonnes */
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
 
@@ -124,34 +154,4 @@ if df is not None:
             ax.set_ylim(Y_min, Y_max)
             ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
 
-            # Tracer la carte de profondeur
-           # contourf = ax.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='viridis', alpha=0.5)
-           # plt.colorbar(contourf, label='Profondeur (mètres)')
-
-            # Tracer le contour du niveau d'inondation
-            contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
-            ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
-            # Tracé des hachures pour la zone inondée
-            contourf_filled = ax.contourf(grid_X, grid_Y, grid_Z, 
-                               levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
-                               colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
-
-
-            # Tracer la zone inondée
-          #  if polygon_inonde:
-                #x_poly, y_poly = polygon_inonde.exterior.xy
-                #ax.fill(x_poly, y_poly, alpha=0.5, fc='cyan', ec='black', lw=1, label='Zone inondée')  # Couleur cyan pour la zone inondée
-
-            #ax.set_title("Carte des zones inondées")
-           # ax.set_xlabel("Coordonnée X")
-            #ax.set_ylabel("Coordonnée Y")
-            #ax.legend()
-
-            # Affichage de la carte
-            st.pyplot(fig)
-
-            # Affichage des résultats à droite de la carte
-            col1, col2 = st.columns([3, 1])  # Créer deux colonnes
-            with col2:
-                st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
-                st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
+            #
