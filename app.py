@@ -6,6 +6,7 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from shapely.geometry import Polygon, LineString
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
+from ezdxf.addons import meshex
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -176,4 +177,36 @@ if df is not None:
                         file_name=fichier_dxf,
                         mime="application/dxf"
                     )
+                    # Fonction pour afficher le fichier DXF
+def afficher_dxf(fichier_dxf):
+    # Lire le fichier DXF
+    doc = ezdxf.readfile(fichier_dxf)
+    msp = doc.modelspace()
+    
+    # Extraire les polylignes du fichier DXF
+    polylines = [e for e in msp.query('LWPOLYLINE')]
+    
+    # Création d'une figure avec matplotlib
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    # Tracer chaque polyligne
+    for polyline in polylines:
+        points = np.array(polyline.get_points())
+        ax.plot(points[:, 0], points[:, 1], label='Polyligne', color='blue')
+    
+    # Configurer les axes et le titre
+    ax.set_title('Visualisation du fichier DXF')
+    ax.set_xlabel('Coordonnée X')
+    ax.set_ylabel('Coordonnée Y')
+    
+    st.pyplot(fig)
+
+# Téléversement du fichier DXF généré
+uploaded_dxf = st.file_uploader("Téléversez un fichier DXF", type=["dxf"])
+
+# Afficher le contenu du fichier DXF téléversé
+if uploaded_dxf is not None:
+    with open("fichier_temp.dxf", "wb") as f:
+        f.write(uploaded_dxf.getbuffer())
+    afficher_dxf("fichier_temp.dxf")
 
