@@ -33,9 +33,7 @@ st.markdown("## Sélectionner un site ou téléverser un fichier")
 # Ajouter une option pour sélectionner parmi des fichiers CSV existants (AYAME 1 et AYAME 2)
 option_site = st.selectbox(
     "Sélectionnez un site",
-    ("Aucun", "AYAME 1", "AYAME 2"),
-    help="Choisissez un site parmi les options disponibles.",
-    index=0
+    ("Aucun", "AYAME 1", "AYAME 2")
 )
 
 # Téléverser un fichier Excel ou TXT
@@ -62,7 +60,7 @@ def charger_fichier(fichier, is_uploaded=False):
 if option_site == "AYAME 1":
     df = charger_fichier('AYAME1.txt')
 elif option_site == "AYAME 2":
-    df = charger_fichier('AYAME2.txt')
+    df = charger_fichier('AYAME2.csv')
 elif uploaded_file is not None:
     df = charger_fichier(uploaded_file, is_uploaded=True)
 else:
@@ -79,29 +77,14 @@ if df is not None:
         st.error("Erreur : colonnes 'X', 'Y' et 'Z' manquantes.")
     else:
         # Étape 5 : Paramètres du niveau d'inondation
-        st.session_state.flood_data['niveau_inondation'] = st.number_input(
-            "Entrez le niveau d'eau (mètres)", 
-            min_value=0.0, 
-            step=0.1,
-            help="Entrez le niveau d'eau pour la simulation."
-        )
-        interpolation_method = st.selectbox(
-            "Méthode d'interpolation", 
-            ['linear', 'nearest'],
-            help="Choisissez la méthode d'interpolation pour les données."
-        )
+        st.session_state.flood_data['niveau_inondation'] = st.number_input("Entrez le niveau d'eau (mètres)", min_value=0.0, step=0.1)
+        interpolation_method = st.selectbox("Méthode d'interpolation", ['linear', 'nearest'])
 
         # Étape 6 : Création de la grille
         X_min, X_max = df['X'].min(), df['X'].max()
         Y_min, Y_max = df['Y'].min(), df['Y'].max()
 
-        resolution = st.number_input(
-            "Résolution de la grille", 
-            value=300, 
-            min_value=100, 
-            max_value=1000,
-            help="Définissez la résolution de la grille pour la carte."
-        )
+        resolution = st.number_input("Résolution de la grille", value=300, min_value=100, max_value=1000)
         grid_X, grid_Y = np.mgrid[X_min:X_max:resolution*1j, Y_min:Y_max:resolution*1j]
         grid_Z = griddata((df['X'], df['Y']), df['Z'], (grid_X, grid_Y), method=interpolation_method)
 
@@ -141,6 +124,10 @@ if df is not None:
             ax.set_ylim(Y_min, Y_max)
             ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
 
+            # Tracer la carte de profondeur
+           # contourf = ax.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='viridis', alpha=0.5)
+           # plt.colorbar(contourf, label='Profondeur (mètres)')
+
             # Tracer le contour du niveau d'inondation
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
@@ -148,6 +135,17 @@ if df is not None:
             contourf_filled = ax.contourf(grid_X, grid_Y, grid_Z, 
                                levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
                                colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
+
+
+            # Tracer la zone inondée
+          #  if polygon_inonde:
+                #x_poly, y_poly = polygon_inonde.exterior.xy
+                #ax.fill(x_poly, y_poly, alpha=0.5, fc='cyan', ec='black', lw=1, label='Zone inondée')  # Couleur cyan pour la zone inondée
+
+            #ax.set_title("Carte des zones inondées")
+           # ax.set_xlabel("Coordonnée X")
+            #ax.set_ylabel("Coordonnée Y")
+            #ax.legend()
 
             # Affichage de la carte
             st.pyplot(fig)
