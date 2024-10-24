@@ -131,6 +131,12 @@ if df is not None:
             # Tracer le contour du niveau d'inondation
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
+            # Remplissage de l'intérieur du contour
+for collection in contours_inondation.collections:
+    paths = collection.get_paths()
+    for path in paths:
+        x, y = path.vertices[:, 0], path.vertices[:, 1]
+        ax.fill(x, y, color='blue', alpha=0.3)  # Remplissage bleu semi-transparent
 
             # Tracer la zone inondée
           #  if polygon_inonde:
