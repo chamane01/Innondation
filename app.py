@@ -12,22 +12,14 @@ def load_predefined_data(file_path):
     df = pd.read_csv(file_path, sep=",", header=None, names=["X", "Y", "Z"])
     return df
 
-# Chemins vers les fichiers txt prédéfinis dans votre repo
+# Chemins vers les fichiers CSV prédéfinis dans votre repo
 predefined_files = {
-    "AYAME 1": "AYAME1.csv",
-    "AYAME 2": "AYAME22.csv"
+    "AYAME 1": "AYAME1.csv",  # Mettez à jour le chemin réel
+    "AYAME 2": "AYAME22.csv"  # Mettez à jour le chemin réel
 }
 
-# Streamlit - Titre de l'application avec deux logos centrés
-col1, col2, col3 = st.columns([1, 1, 1])
-
-with col1:
-    st.image("POPOPO.jpg", width=150)
-with col2:
-    st.image("logo.png", width=150)
-with col3:
-    st.write("")  # Cette colonne est laissée vide pour centrer les logos
-
+# Streamlit - Titre de l'application avec le logo centré
+st.image("logo.png", width=150)
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
 
 # Initialiser session_state pour stocker les données d'inondation
@@ -72,16 +64,16 @@ else:
         unsafe_allow_html=True
     )
 
-    uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
+    uploaded_file = st.file_uploader("Téléversez un fichier Excel ou CSV", type=["xlsx", "csv"])
 
     if uploaded_file is not None:
         # Identifier le type de fichier et charger les données en fonction
         if uploaded_file.name.endswith('.xlsx'):
             df = pd.read_excel(uploaded_file)
-        elif uploaded_file.name.endswith('.txt'):
+        elif uploaded_file.name.endswith('.csv'):
             df = pd.read_csv(uploaded_file, sep=",", header=None, names=["X", "Y", "Z"])
 
-# Si un fichier est sélectionné ou téléversé
+# Vérification que le DataFrame est chargé
 if 'df' in locals():
     # Étape 3 : Vérification du fichier
     if 'X' not in df.columns or 'Y' not in df.columns or 'Z' not in df.columns:
@@ -164,4 +156,9 @@ if 'df' in locals():
                 # Affichage des résultats à droite de la carte
                 col1, col2 = st.columns([3, 1])  # Créer deux colonnes
                 with col2:
-                    st.write(f"
+                    st.write(f"**Surface inondée :** {surface_inondee:.2f} hectares")
+                    st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")
+        except Exception as e:
+            st.error(f"Erreur lors de la création de la grille : {e}")
+else:
+    st.warning("Veuillez choisir une carte ou téléverser un fichier pour continuer.")
