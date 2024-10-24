@@ -133,14 +133,14 @@ if df is not None:
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
 
             # Tracer la zone inondée
-            if polygon_inonde:
+          #  if polygon_inonde:
                 x_poly, y_poly = polygon_inonde.exterior.xy
                 ax.fill(x_poly, y_poly, alpha=0.5, fc='cyan', ec='black', lw=1, label='Zone inondée')  # Couleur cyan pour la zone inondée
 
             ax.set_title("Carte des zones inondées")
             ax.set_xlabel("Coordonnée X")
             ax.set_ylabel("Coordonnée Y")
-            ax.legend()
+            #ax.legend()
 
             # Affichage de la carte
             st.pyplot(fig)
