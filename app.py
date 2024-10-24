@@ -117,7 +117,7 @@ if df is not None:
             st.session_state.flood_data['volume_eau'] = volume_eau
 
             # Tracer la carte de profondeur
-            fig, ax = plt.subplots(figsize=(8, 6))
+            #fig, ax = plt.subplots(figsize=(8, 6))
 
             # Tracer le fond OpenStreetMap
             ax.set_xlim(X_min, X_max)
@@ -125,8 +125,8 @@ if df is not None:
             ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
 
             # Tracer la carte de profondeur
-            contourf = ax.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='viridis', alpha=0.5)
-            plt.colorbar(contourf, label='Profondeur (mètres)')
+           # contourf = ax.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='viridis', alpha=0.5)
+           # plt.colorbar(contourf, label='Profondeur (mètres)')
 
             # Tracer le contour du niveau d'inondation
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
