@@ -2,12 +2,12 @@
 import streamlit as st
 import pandas as pd
 import numpy as np
-import folium
-from folium.plugins import Draw
-from shapely.geometry import Polygon, MultiPolygon
+import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
-import geopandas as gpd
-from io import BytesIO
+from shapely.geometry import Polygon
+import contextily as ctx
+import folium
+from streamlit_folium import folium_static
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -45,11 +45,13 @@ uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["
 def charger_fichier(fichier, is_uploaded=False):
     try:
         if is_uploaded:
+            # Si le fichier est téléversé, vérifier son type
             if fichier.name.endswith('.xlsx'):
                 df = pd.read_excel(fichier)
             elif fichier.name.endswith('.txt'):
                 df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
         else:
+            # Si le fichier est prédéfini (site), il est déjà connu
             df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
         return df
     except Exception as e:
@@ -69,16 +71,18 @@ else:
 
 # Traitement des données si le fichier est chargé
 if df is not None:
+    # Séparateur pour organiser l'affichage
     st.markdown("---")  # Ligne de séparation
 
     # Vérification du fichier : s'assurer que les colonnes X, Y, Z sont présentes
     if 'X' not in df.columns or 'Y' not in df.columns or 'Z' not in df.columns:
         st.error("Erreur : colonnes 'X', 'Y' et 'Z' manquantes.")
     else:
+        # Étape 5 : Paramètres du niveau d'inondation
         st.session_state.flood_data['niveau_inondation'] = st.number_input("Entrez le niveau d'eau (mètres)", min_value=0.0, step=0.1)
         interpolation_method = st.selectbox("Méthode d'interpolation", ['linear', 'nearest'])
 
-        # Création de la grille
+        # Étape 6 : Création de la grille
         X_min, X_max = df['X'].min(), df['X'].max()
         Y_min, Y_max = df['Y'].min(), df['Y'].max()
 
@@ -86,7 +90,7 @@ if df is not None:
         grid_X, grid_Y = np.mgrid[X_min:X_max:resolution*1j, Y_min:Y_max:resolution*1j]
         grid_Z = griddata((df['X'], df['Y']), df['Z'], (grid_X, grid_Y), method=interpolation_method)
 
-        # Calcul de la surface inondée
+        # Étape 7 : Calcul de la surface inondée
         def calculer_surface(niveau_inondation):
             contours = []
             for x in range(grid_X.shape[0]):
@@ -94,39 +98,44 @@ if df is not None:
                     if grid_Z[x, y] <= niveau_inondation:
                         contours.append((grid_X[x, y], grid_Y[x, y]))
 
+            # Convertir les contours en un polygone
             if contours:
                 polygon = Polygon(contours)
-                return polygon, polygon.area / 10000  # Surface en hectares
+                return polygon, polygon.area / 10000  # Retourne le polygone et la surface en hectares
             return None, 0.0
 
-        # Calcul du volume d'eau
+        # Étape 8 : Calcul du volume d'eau
         def calculer_volume(surface_inondee):
-            volume = surface_inondee * st.session_state.flood_data['niveau_inondation'] * 10000  # Conversion en m³
+            volume = surface_inondee * st.session_state.flood_data['niveau_inondation'] * 10000  # Conversion en m³ (1 hectare = 10,000 m²)
             return volume
 
         if st.button("Afficher la carte d'inondation"):
+            # Étape 9 : Calcul de la surface et volume
             polygon_inonde, surface_inondee = calculer_surface(st.session_state.flood_data['niveau_inondation'])
             volume_eau = calculer_volume(surface_inondee)
 
+            # Stocker les résultats dans session_state
             st.session_state.flood_data['surface_inondee'] = surface_inondee
             st.session_state.flood_data['volume_eau'] = volume_eau
 
-            # Création de la carte dynamique avec Folium
-            m = folium.Map(location=[(Y_min + Y_max) / 2, (X_min + X_max) / 2], zoom_start=12, crs='EPSG3857')
+            # Créer une carte Folium
+            m = folium.Map(location=[(Y_max + Y_min) / 2, (X_max + X_min) / 2], zoom_start=13, crs='EPSG32630')
 
-            # Ajout des couches dynamiques (polygones)
+            # Ajouter le polygone représentant la zone inondée
             if polygon_inonde:
-                folium.GeoJson(polygon_inonde, style_function=lambda x: {'fillColor': '#007FFF', 'color': 'blue', 'weight': 1.5}).add_to(m)
+                folium.Polygon(
+                    locations=[(y, x) for x, y in polygon_inonde.exterior.coords],  # Coordonnées du polygone
+                    color='blue',
+                    fill=True,
+                    fill_opacity=0.5,
+                    popup=f'Surface inondée: {surface_inondee:.2f} hectares'
+                ).add_to(m)
 
-            # Ajouter les outils de dessin pour créer des polygones manuellement
-            draw = Draw(export=True)
-            draw.add_to(m)
-
-            # Affichage de la carte
+            # Afficher la carte dans Streamlit
             folium_static(m)
 
-            # Affichage des résultats à côté
-            col1, col2 = st.columns([3, 1])
+            # Affichage des résultats à droite de la carte
+            col1, col2 = st.columns([3, 1])  # Créer deux colonnes
             with col2:
                 st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
                 st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
