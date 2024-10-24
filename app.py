@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
-import ezdxf  # Bibliothèque pour créer des fichiers DXF
+import ezdxf  # Pour lire les fichiers DXF
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -128,7 +128,6 @@ if df is not None:
             # Tracer le contour du niveau d'inondation
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
-
             # Tracé des hachures pour la zone inondée
             contourf_filled = ax.contourf(grid_X, grid_Y, grid_Z, 
                                levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
@@ -137,27 +136,38 @@ if df is not None:
             # Affichage de la carte
             st.pyplot(fig)
 
-            # Création du fichier DXF avec contours
-            doc = ezdxf.new(dxfversion='R2010')
-            msp = doc.modelspace()
-
-            # Ajouter les contours au DXF
-            for collection in contours_inondation.collections:
-                for path in collection.get_paths():
-                    points = path.vertices
-                    for i in range(len(points)-1):
-                        msp.add_line(points[i], points[i+1])
-
-            # Sauvegarder le fichier DXF
-            dxf_file = "contours_inondation.dxf"
-            doc.saveas(dxf_file)
-
-            # Proposer le téléchargement du fichier DXF
-            with open(dxf_file, "rb") as dxf:
-                st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
-
             # Affichage des résultats à droite de la carte
             col1, col2 = st.columns([3, 1])  # Créer deux colonnes
             with col2:
                 st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
                 st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
+
+# Téléversement et visualisation du fichier DXF
+st.markdown("---")
+st.markdown("## Téléverser et visualiser un fichier DXF")
+
+uploaded_dxf = st.file_uploader("Téléversez un fichier DXF", type=["dxf"])
+
+if uploaded_dxf is not None:
+    try:
+        # Lecture du fichier DXF
+        dxf = ezdxf.readfile(uploaded_dxf)
+
+        # Création d'une nouvelle carte pour visualiser les entités DXF
+        fig_dxf, ax_dxf = plt.subplots(figsize=(8, 6))
+
+        # Extraire et visualiser les polylignes
+        for entity in dxf.entities:
+            if entity.dxftype() == 'LWPOLYLINE' or entity.dxftype() == 'POLYLINE':
+                points = np.array([point[:2] for point in entity.points()])
+                ax_dxf.plot(points[:, 0], points[:, 1], color='green', linewidth=1)
+
+        ax_dxf.set_title("Visualisation des polygones du fichier DXF")
+        ax_dxf.set_xlabel("Coordonnée X")
+        ax_dxf.set_ylabel("Coordonnée Y")
+
+        # Affichage de la carte DXF
+        st.pyplot(fig_dxf)
+
+    except Exception as e:
+        st.error(f"Erreur lors de la lecture du fichier DXF : {e}")
