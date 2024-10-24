@@ -127,12 +127,16 @@ if df is not None:
             # Tracer la carte de profondeur
            # contourf = ax.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='viridis', alpha=0.5)
            # plt.colorbar(contourf, label='Profondeur (mètres)')
+            niveaux = np.linspace(st.session_state.flood_data['niveau_inondation'] - 1, 
+                      st.session_state.flood_data['niveau_inondation'] + 1, 
+                      num=100) 
 
             # Interpolation pour lisser les contours
             grid_z_lisse = griddata((grid_X.flatten(), grid_Y.flatten()), 
                          grid_Z.flatten(), 
                          (grid_X, grid_Y), 
                          method='cubic')
+            
 
             # Tracer le contour du niveau d'inondation
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, 
