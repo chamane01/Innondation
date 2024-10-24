@@ -6,7 +6,6 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
-from matplotlib.path import Path
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -91,25 +90,17 @@ if df is not None:
 
         # Étape 7 : Calcul de la surface inondée
         def calculer_surface(niveau_inondation):
-            # Masquer les zones inondées
-            mask_inondee = grid_Z <= niveau_inondation
+            contours = []
+            for x in range(grid_X.shape[0]):
+                for y in range(grid_Y.shape[1]):
+                    if grid_Z[x, y] <= niveau_inondation:
+                        contours.append((grid_X[x, y], grid_Y[x, y]))
 
-            # Extraire les contours des zones inondées
-            contours = plt.contour(grid_X, grid_Y, mask_inondee, levels=[0.5])
-            polygons = []
-            total_surface = 0.0
-
-            for contour in contours.collections[0].get_paths():
-                # Transformer chaque contour en polygone
-                vertices = contour.vertices
-                polygon = Polygon(vertices)
-                
-                # Ajouter le polygone à la liste si valide
-                if polygon.is_valid:
-                    polygons.append(polygon)
-                    total_surface += polygon.area / 10000  # Conversion en hectares
-
-            return polygons, total_surface
+            # Convertir les contours en un polygone
+            if contours:
+                polygon = Polygon(contours)
+                return polygon, polygon.area / 10000  # Retourne le polygone et la surface en hectares
+            return None, 0.0
 
         # Étape 8 : Calcul du volume d'eau
         def calculer_volume(surface_inondee):
@@ -118,11 +109,11 @@ if df is not None:
 
         if st.button("Afficher la carte d'inondation"):
             # Étape 9 : Calcul de la surface et volume
-            polygons_inondes, surface_inondee_totale = calculer_surface(st.session_state.flood_data['niveau_inondation'])
-            volume_eau = calculer_volume(surface_inondee_totale)
+            polygon_inonde, surface_inondee = calculer_surface(st.session_state.flood_data['niveau_inondation'])
+            volume_eau = calculer_volume(surface_inondee)
 
             # Stocker les résultats dans session_state
-            st.session_state.flood_data['surface_inondee'] = surface_inondee_totale
+            st.session_state.flood_data['surface_inondee'] = surface_inondee
             st.session_state.flood_data['volume_eau'] = volume_eau
 
             # Tracer la carte de profondeur
@@ -133,13 +124,28 @@ if df is not None:
             ax.set_ylim(Y_min, Y_max)
             ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
 
-            # Tracer les contours des zones inondées
+            # Tracer la carte de profondeur
+           # contourf = ax.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='viridis', alpha=0.5)
+           # plt.colorbar(contourf, label='Profondeur (mètres)')
+
+            # Tracer le contour du niveau d'inondation
+            contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
+            ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
+            # Tracé des hachures pour la zone inondée
             contourf_filled = ax.contourf(grid_X, grid_Y, grid_Z, 
                                levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
                                colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
-            for polygon in polygons_inondes:
-                x, y = polygon.exterior.xy
-                ax.plot(x, y, color='red')
+
+
+            # Tracer la zone inondée
+          #  if polygon_inonde:
+                #x_poly, y_poly = polygon_inonde.exterior.xy
+                #ax.fill(x_poly, y_poly, alpha=0.5, fc='cyan', ec='black', lw=1, label='Zone inondée')  # Couleur cyan pour la zone inondée
+
+            #ax.set_title("Carte des zones inondées")
+           # ax.set_xlabel("Coordonnée X")
+            #ax.set_ylabel("Coordonnée Y")
+            #ax.legend()
 
             # Affichage de la carte
             st.pyplot(fig)
