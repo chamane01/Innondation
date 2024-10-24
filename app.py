@@ -24,7 +24,7 @@ col1, col2, col3 = st.columns([1, 1, 1])
 with col1:
     st.image("POPOPO.jpg", width=150)
 with col2:
-    st.image("SECOND_LOGO.jpg", width=150)
+    st.image("logo.png", width=150)
 with col3:
     st.write("")  # Cette colonne est laissée vide pour centrer les logos
 
