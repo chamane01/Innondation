@@ -134,12 +134,12 @@ if df is not None:
 
             # Tracer la zone inondée
           #  if polygon_inonde:
-                x_poly, y_poly = polygon_inonde.exterior.xy
-                ax.fill(x_poly, y_poly, alpha=0.5, fc='cyan', ec='black', lw=1, label='Zone inondée')  # Couleur cyan pour la zone inondée
+                #x_poly, y_poly = polygon_inonde.exterior.xy
+                #ax.fill(x_poly, y_poly, alpha=0.5, fc='cyan', ec='black', lw=1, label='Zone inondée')  # Couleur cyan pour la zone inondée
 
-            ax.set_title("Carte des zones inondées")
-            ax.set_xlabel("Coordonnée X")
-            ax.set_ylabel("Coordonnée Y")
+            #ax.set_title("Carte des zones inondées")
+           # ax.set_xlabel("Coordonnée X")
+            #ax.set_ylabel("Coordonnée Y")
             #ax.legend()
 
             # Affichage de la carte
