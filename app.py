@@ -128,22 +128,38 @@ if df is not None:
                 st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
                 st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
 
-            st.markdown("## Génération du fichier DXF avec les polylignes rouges")
+            st.markdown("## Génération du fichier DXF avec les polygones rouges")
 
-            # Fonction pour générer un fichier DXF à partir des points des contours
-            def generer_dxf_depuis_contours(contours_points, fichier_sortie="contours_traces.dxf"):
+            # Fonction pour générer un fichier DXF à partir des points des polygones
+            def extraire_points_polygones():
+                contours_points = []
+                # Trouver les niveaux de contour pour le remplissage
+                contours_remplissage = ax.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], colors='#007FFF', alpha=0.5)
+                # Pour chaque collection dans l'objet contours_remplissage
+                for collection in contours_remplissage.collections:
+                    # Pour chaque chemin dans la collection
+                    for path in collection.get_paths():
+                        # Récupérer les coordonnées des sommets du contour
+                        contour = path.vertices  # Un tableau Nx2 (X, Y)
+                        # Convertir en liste de tuples
+                        contours_points.append(contour.tolist())
+                return contours_points
+
+            def generer_dxf_depuis_polygones(polygones_points, fichier_sortie="polygones_traces.dxf"):
                 doc = ezdxf.new(dxfversion="R2010")
                 msp = doc.modelspace()
 
-                for contour in contours_points:
-                    msp.add_lwpolyline(contour, is_closed=True)
+                # Ajouter chaque polygone comme polyligne dans le DXF
+                for polygone in polygones_points:
+                    msp.add_lwpolyline(polygone, is_closed=True)
 
+                # Sauvegarde du fichier DXF
                 doc.saveas(fichier_sortie)
                 print(f"Fichier DXF généré avec succès : {fichier_sortie}")
 
-            contours_points = [
-                [(100, 200), (150, 250), (200, 200), (150, 150)],  # Contour 1
-                [(300, 400), (350, 450), (400, 400), (350, 350)]   # Contour 2
-            ]
+            # Exemple d'utilisation dans le flux principal de votre code
+            # Extraire les points des polygones
+            polygones_points = extraire_points_polygones()
 
-            generer_dxf_depuis_contours(contours_points, fichier_sortie="contours_traces.dxf")
+            # Générer le fichier DXF
+            generer_dxf_depuis_polygones(polygones_points, fichier_sortie="polygones_traces.dxf")
