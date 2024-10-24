@@ -136,9 +136,6 @@ if st.button("Afficher la carte d'inondation"):
     # Affichage de la carte
     st.pyplot(fig)
 
-
             # Affichage des résultats à droite de la carte
-            col1, col2 = st.columns([3, 1])  # Créer deux colonnes
-            with col2:
                 st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
                 st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
