@@ -125,27 +125,21 @@ if df is not None:
             ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
 
             # Tracer la carte de profondeur
-           # contourf = ax.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='viridis', alpha=0.5)
-           # plt.colorbar(contourf, label='Profondeur (mètres)')
-
-            # Tracer le contour du niveau d'inondation
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
-            # Tracé des hachures pour la zone inondée
-            contourf_filled = ax.contourf(grid_X, grid_Y, grid_Z, 
-                               levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
-                               colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
 
+            # Tracé des hachures pour la zone inondée
+            ax.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], colors='#007FFF', alpha=0.5)
 
             # Tracer la zone inondée
-          #  if polygon_inonde:
-                #x_poly, y_poly = polygon_inonde.exterior.xy
-                #ax.fill(x_poly, y_poly, alpha=0.5, fc='cyan', ec='black', lw=1, label='Zone inondée')  # Couleur cyan pour la zone inondée
+            if polygon_inonde:
+                x_poly, y_poly = polygon_inonde.exterior.xy
+                ax.fill(x_poly, y_poly, alpha=0.5, fc='cyan', ec='black', lw=1, label='Zone inondée')
 
-            #ax.set_title("Carte des zones inondées")
-           # ax.set_xlabel("Coordonnée X")
-            #ax.set_ylabel("Coordonnée Y")
-            #ax.legend()
+            ax.set_title("Carte des zones inondées")
+            ax.set_xlabel("Coordonnée X")
+            ax.set_ylabel("Coordonnée Y")
+            ax.legend()
 
             # Affichage de la carte
             st.pyplot(fig)
@@ -156,64 +150,33 @@ if df is not None:
                 st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
                 st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
 
-# Etape 1 : Fonction pour charger les coordonnées locales et transformer les contours en polygones
-def charger_coordonnees_locales(fichier_local):
-    try:
-        if fichier_local.name.endswith('.txt'):
-            df_local = pd.read_csv(fichier_local, sep=",", header=None, names=["Local_X", "Local_Y", "Local_Z"])
-        elif fichier_local.name.endswith('.csv'):
-            df_local = pd.read_csv(fichier_local)
-        else:
-            st.error("Format de fichier non supporté. Veuillez téléverser un fichier TXT ou CSV.")
-            return None
-        return df_local
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier local : {e}")
-        return None
+            # Étape 10 : Création de la deuxième carte avec transformation des contours en polygonales
+            st.markdown("## Deuxième carte avec système de coordonnées locales")
 
-# Etape 2 : Transformer les contours de la première carte en polygones
-def transformer_contours_en_polygones(contours):
-    polygons = []
-    for contour in contours.collections:
-        for path in contour.get_paths():
-            vertices = path.vertices
-            polygons.append(Polygon(vertices))
-    return polygons
+            # Transformation des coordonnées pour la deuxième carte automatiquement
+            df_local = df.copy()  # Créer une copie du DataFrame d'origine
 
-# Téléverser le fichier avec les coordonnées locales pour la deuxième carte
-uploaded_local_file = st.file_uploader("Téléversez un fichier avec les coordonnées locales (TXT ou CSV)", type=["txt", "csv"])
+            # Transformation des coordonnées en coordonnées locales
+            df_local['X_local'] = df['X'] - df['X'].min()
+            df_local['Y_local'] = df['Y'] - df['Y'].min()
 
-# Si le fichier local est chargé, créer la deuxième carte
-if uploaded_local_file is not None:
-    df_local = charger_coordonnees_locales(uploaded_local_file)
-    
-    if df_local is not None and df is not None:
-        st.markdown("---")  # Ligne de séparation
+            # Tracer la deuxième carte avec les contours transformés en polygones
+            fig2, ax2 = plt.subplots(figsize=(8, 6))
+            ax2.set_title("Carte locale avec contours transformés en polygones")
 
-        # Etape 3 : Création de la deuxième carte avec les coordonnées locales
-        if st.button("Afficher la deuxième carte avec coordonnées locales"):
-            fig, ax = plt.subplots(figsize=(8, 6))
+            # Tracer les contours polygonaux sur la deuxième carte
+            if polygon_inonde:
+                x_poly_local, y_poly_local = polygon_inonde.exterior.xy
+                ax2.fill(x_poly_local, y_poly_local, alpha=0.5, fc='orange', ec='black', lw=1, label='Contours en polygones')
 
-            # Extraire les contours de la première carte
-            contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
-            
-            # Transformer les contours en polygones
-            polygons = transformer_contours_en_polygones(contours_inondation)
-            
-            # Affichage des polygones sur la carte des coordonnées locales
-            for polygon in polygons:
-                if polygon is not None:
-                    x_poly, y_poly = polygon.exterior.xy
-                    ax.fill(x_poly, y_poly, alpha=0.5, fc='orange', ec='black', lw=1, label='Polygone extrait')
+            # Tracer le fond OpenStreetMap
+            ax2.set_xlim(df_local['X_local'].min(), df_local['X_local'].max())
+            ax2.set_ylim(df_local['Y_local'].min(), df_local['Y_local'].max())
+            ctx.add_basemap(ax2, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
 
-            # Tracer les coordonnées locales (si nécessaires)
-            ax.scatter(df_local["Local_X"], df_local["Local_Y"], c='blue', marker='x', label="Coordonnées locales")
+            ax2.set_xlabel("Coordonnée X locale")
+            ax2.set_ylabel("Coordonnée Y locale")
+            ax2.legend()
 
-            ax.set_title("Deuxième carte avec contours transformés en polygonales")
-            ax.set_xlabel("Coordonnée X locale")
-            ax.set_ylabel("Coordonnée Y locale")
-            ax.legend()
-
-            # Afficher la carte finale
-            st.pyplot(fig)
-
+            # Affichage de la deuxième carte
+            st.pyplot(fig2)
