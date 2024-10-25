@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
-import ezdxf  # Bibliothèque pour créer et lire des fichiers DXF
+import ezdxf  # Bibliothèque pour créer des fichiers DXF
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -165,26 +165,25 @@ if df is not None:
                 st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
                 st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
 
-# Affichage de la carte DXF téléversée
+# Afficher la carte avec le fichier DXF si téléversé
 if uploaded_dxf is not None:
-    # Lire le fichier DXF
     try:
-        doc = ezdxf.read(uploaded_dxf.read())  # Utilisez read() pour lire l'objet de fichier
-        msp = doc.modelspace()
+        doc = ezdxf.readfile(uploaded_dxf)
+        fig2, ax2 = plt.subplots(figsize=(8, 6))
 
-        # Extraire les lignes et polygones du fichier DXF
-        lines = []
-        for entity in msp.query('LINE'):
-            lines.append([(entity.dxf.start.x, entity.dxf.start.y), (entity.dxf.end.x, entity.dxf.end.y)])
+        # Tracer le fond OpenStreetMap
+        ax2.set_xlim(X_min, X_max)
+        ax2.set_ylim(Y_min, Y_max)
+        ctx.add_basemap(ax2, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
 
-        # Tracer le DXF
-        fig_dxf, ax_dxf = plt.subplots(figsize=(8, 6))
-        for line in lines:
-            ax_dxf.plot(*zip(*line), color='black')
+        # Ajouter les entités DXF à la carte
+        for entity in doc.modelspace().query('LINE'):
+            x0, y0 = entity.dxf.start.x, entity.dxf.start.y
+            x1, y1 = entity.dxf.end.x, entity.dxf.end.y
+            ax2.plot([x0, x1], [y0, y1], color='black', linewidth=1)
 
-        ax_dxf.set_title("Contours du fichier DXF")
-        ax_dxf.set_xlabel("X (m)")
-        ax_dxf.set_ylabel("Y (m)")
-        st.pyplot(fig_dxf)
+        # Afficher la carte
+        st.pyplot(fig2)
+
     except Exception as e:
-        st.error(f"Erreur lors de la lecture du fichier DXF : {e}")
+        st.error(f"Erreur lors du chargement du fichier DXF : {e}")
