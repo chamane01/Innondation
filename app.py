@@ -7,6 +7,7 @@ from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
+import os
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -141,6 +142,7 @@ if df is not None:
             st.pyplot(fig)
 
             # Création du fichier DXF avec contours
+            dxf_file = "contours_inondation.dxf"
             doc = ezdxf.new(dxfversion='R2010')
             msp = doc.modelspace()
 
@@ -152,7 +154,6 @@ if df is not None:
                         msp.add_line(points[i], points[i+1])
 
             # Sauvegarder le fichier DXF
-            dxf_file = "contours_inondation.dxf"
             doc.saveas(dxf_file)
 
             # Proposer le téléchargement du fichier DXF
@@ -165,10 +166,17 @@ if df is not None:
                 st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
                 st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
 
-# Afficher la carte avec le fichier DXF si téléversé
+# Afficher la carte DXF si téléversée
 if uploaded_dxf is not None:
+    # Enregistrer le fichier DXF sur le disque
+    dxf_temp_file_path = os.path.join("temp", uploaded_dxf.name)
+    os.makedirs("temp", exist_ok=True)  # Créer le dossier "temp" s'il n'existe pas
+
+    with open(dxf_temp_file_path, "wb") as f:
+        f.write(uploaded_dxf.getbuffer())  # Écrire le contenu du fichier téléversé
+
     try:
-        doc = ezdxf.readfile(uploaded_dxf)
+        doc = ezdxf.readfile(dxf_temp_file_path)  # Lire le fichier DXF enregistré
         fig2, ax2 = plt.subplots(figsize=(8, 6))
 
         # Tracer le fond OpenStreetMap
@@ -187,3 +195,12 @@ if uploaded_dxf is not None:
 
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier DXF : {e}")
+
+    # Optionnel : supprimer le fichier temporaire après utilisation
+    os.remove(dxf_temp_file_path)
+
+# Affichage des résultats globaux
+st.markdown("---")  # Ligne de séparation
+st.header("Détails des inondations")
+st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
+st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
