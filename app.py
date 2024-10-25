@@ -7,6 +7,26 @@ from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
+import cv2  # OpenCV pour la détection de contours
+
+# Fonction pour détecter les contours d'une couleur spécifique
+def detecter_contours_pour_couleur(image, couleur_hex, tolerance=30):
+    # Convertir le code hexadécimal en format RGB
+    couleur_rgb = tuple(int(couleur_hex[i:i + 2], 16) for i in (1, 3, 5))
+    # Convertir l'image de la carte en format RGB
+    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+
+    # Créer un masque basé sur la couleur spécifiée
+    lower_bound = np.array([max(0, c - tolerance) for c in couleur_rgb])
+    upper_bound = np.array([min(255, c + tolerance) for c in couleur_rgb])
+    mask = cv2.inRange(image_rgb, lower_bound, upper_bound)
+
+    # Détecter les contours
+    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours_image = np.zeros_like(mask)
+    cv2.drawContours(contours_image, contours, -1, (255), thickness=cv2.FILLED)
+
+    return contours_image
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -137,6 +157,16 @@ if df is not None:
             # Affichage de la carte
             st.pyplot(fig)
 
+            # Détection et affichage des contours pour la couleur #007FFF
+            contours_image = detecter_contours_pour_couleur(np.array(fig.canvas.buffer_rgba()), '#007FFF', tolerance=30)
+
+            # Affichage des contours détectés
+            plt.figure(figsize=(8, 6))
+            plt.imshow(contours_image, cmap='gray')
+            plt.title(f"Contours pour la couleur #007FFF")
+            plt.axis('off')
+            st.pyplot(plt)
+
             # Création du fichier DXF avec contours
             doc = ezdxf.new(dxfversion='R2010')
             msp = doc.modelspace()
@@ -149,15 +179,15 @@ if df is not None:
                         msp.add_line(points[i], points[i+1])
 
             # Sauvegarder le fichier DXF
-            dxf_file = "contours_inondation.dxf"
-            doc.saveas(dxf_file)
+            dxf_filename = "contours_inondation.dxf"
+            doc.saveas(dxf_filename)
+            st.success(f"Fichier DXF enregistré : {dxf_filename}")
 
-            # Proposer le téléchargement du fichier DXF
-            with open(dxf_file, "rb") as dxf:
-                st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
+            # Affichage des résultats
+            st.success(f"Surface inondée : {surface_inondee:.2f} hectares")
+            st.success(f"Volume d'eau : {volume_eau:.2f} m³")
 
-            # Affichage des résultats à droite de la carte
-            col1, col2 = st.columns([3, 1])  # Créer deux colonnes
-            with col2:
-                st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
-                st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
+# En-tête de l'application
+st.markdown("---")  # Ligne de séparation
+st.markdown("## Informations sur le projet")
+st.write("Ce projet utilise Streamlit pour visualiser les zones inondées et calculer les surfaces et volumes d'eau.")
