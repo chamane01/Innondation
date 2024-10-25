@@ -6,27 +6,6 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
-import ezdxf  # Bibliothèque pour créer des fichiers DXF
-import cv2  # OpenCV pour la détection de contours
-
-# Fonction pour détecter les contours d'une couleur spécifique
-def detecter_contours_pour_couleur(image, couleur_hex, tolerance=30):
-    # Convertir le code hexadécimal en format RGB
-    couleur_rgb = tuple(int(couleur_hex[i:i + 2], 16) for i in (1, 3, 5))
-    # Convertir l'image de la carte en format RGB
-    image_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-
-    # Créer un masque basé sur la couleur spécifiée
-    lower_bound = np.array([max(0, c - tolerance) for c in couleur_rgb])
-    upper_bound = np.array([min(255, c + tolerance) for c in couleur_rgb])
-    mask = cv2.inRange(image_rgb, lower_bound, upper_bound)
-
-    # Détecter les contours
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    contours_image = np.zeros_like(mask)
-    cv2.drawContours(contours_image, contours, -1, (255), thickness=cv2.FILLED)
-
-    return contours_image
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -81,7 +60,7 @@ def charger_fichier(fichier, is_uploaded=False):
 if option_site == "AYAME 1":
     df = charger_fichier('AYAME1.txt')
 elif option_site == "AYAME 2":
-    df = charger_fichier('AYAME2.txt')
+    df = charger_fichier('AYAME2.csv')
 elif uploaded_file is not None:
     df = charger_fichier(uploaded_file, is_uploaded=True)
 else:
@@ -145,49 +124,34 @@ if df is not None:
             ax.set_ylim(Y_min, Y_max)
             ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
 
+            # Tracer la carte de profondeur
+           # contourf = ax.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='viridis', alpha=0.5)
+           # plt.colorbar(contourf, label='Profondeur (mètres)')
+
             # Tracer le contour du niveau d'inondation
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
-
             # Tracé des hachures pour la zone inondée
             contourf_filled = ax.contourf(grid_X, grid_Y, grid_Z, 
                                levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
                                colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
 
+
+            # Tracer la zone inondée
+          #  if polygon_inonde:
+                #x_poly, y_poly = polygon_inonde.exterior.xy
+                #ax.fill(x_poly, y_poly, alpha=0.5, fc='cyan', ec='black', lw=1, label='Zone inondée')  # Couleur cyan pour la zone inondée
+
+            #ax.set_title("Carte des zones inondées")
+           # ax.set_xlabel("Coordonnée X")
+            #ax.set_ylabel("Coordonnée Y")
+            #ax.legend()
+
             # Affichage de la carte
             st.pyplot(fig)
 
-            # Détection et affichage des contours pour la couleur #007FFF
-            contours_image = detecter_contours_pour_couleur(np.array(fig.canvas.buffer_rgba()), '#007FFF', tolerance=30)
-
-            # Affichage des contours détectés
-            plt.figure(figsize=(8, 6))
-            plt.imshow(contours_image, cmap='gray')
-            plt.title(f"Contours pour la couleur #007FFF")
-            plt.axis('off')
-            st.pyplot(plt)
-
-            # Création du fichier DXF avec contours
-            doc = ezdxf.new(dxfversion='R2010')
-            msp = doc.modelspace()
-
-            # Ajouter les contours au DXF
-            for collection in contours_inondation.collections:
-                for path in collection.get_paths():
-                    points = path.vertices
-                    for i in range(len(points)-1):
-                        msp.add_line(points[i], points[i+1])
-
-            # Sauvegarder le fichier DXF
-            dxf_filename = "contours_inondation.dxf"
-            doc.saveas(dxf_filename)
-            st.success(f"Fichier DXF enregistré : {dxf_filename}")
-
-            # Affichage des résultats
-            st.success(f"Surface inondée : {surface_inondee:.2f} hectares")
-            st.success(f"Volume d'eau : {volume_eau:.2f} m³")
-
-# En-tête de l'application
-st.markdown("---")  # Ligne de séparation
-st.markdown("## Informations sur le projet")
-st.write("Ce projet utilise Streamlit pour visualiser les zones inondées et calculer les surfaces et volumes d'eau.")
+            # Affichage des résultats à droite de la carte
+            col1, col2 = st.columns([3, 1])  # Créer deux colonnes
+            with col2:
+                st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
+                st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
