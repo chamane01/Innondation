@@ -6,8 +6,7 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
-import ezdxf  # Bibliothèque pour créer des fichiers DXF
-import os
+import ezdxf  # Bibliothèque pour lire et créer des fichiers DXF
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -40,9 +39,6 @@ option_site = st.selectbox(
 
 # Téléverser un fichier Excel ou TXT
 uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
-
-# Téléverser un fichier DXF
-uploaded_dxf = st.file_uploader("Téléversez un fichier DXF", type=["dxf"])
 
 # Fonction pour charger le fichier (identique pour les fichiers prédéfinis et téléversés)
 def charger_fichier(fichier, is_uploaded=False):
@@ -166,41 +162,32 @@ if df is not None:
                 st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
                 st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
 
-# Afficher la carte DXF si téléversée
+# Étape 10 : Téléversez un fichier DXF pour afficher les polygones
+st.markdown("## Téléversez un fichier DXF pour afficher les polygones")
+uploaded_dxf = st.file_uploader("Téléversez un fichier DXF", type=["dxf"])
+
+# Traitement du fichier DXF
 if uploaded_dxf is not None:
-    # Enregistrer le fichier DXF sur le disque
-    dxf_temp_file_path = os.path.join("temp", uploaded_dxf.name)
-    os.makedirs("temp", exist_ok=True)  # Créer le dossier "temp" s'il n'existe pas
-
-    with open(dxf_temp_file_path, "wb") as f:
-        f.write(uploaded_dxf.getbuffer())  # Écrire le contenu du fichier téléversé
-
     try:
-        doc = ezdxf.readfile(dxf_temp_file_path)  # Lire le fichier DXF enregistré
+        doc = ezdxf.readfile(uploaded_dxf)
+        msp = doc.modelspace()
+
+        # Récupération des entités polygones dans le fichier DXF
+        polygones = []
+        for polyline in msp.query('LWPOLYLINE'):
+            points = [(p[0], p[1]) for p in polyline.points()]
+            polygones.append(points)
+
+        # Affichage des polygones
         fig2, ax2 = plt.subplots(figsize=(8, 6))
+        for p in polygones:
+            poly = Polygon(p)
+            x, y = poly.exterior.xy
+            ax2.fill(x, y, alpha=0.5, fc='orange', ec='black')
 
-        # Tracer le fond OpenStreetMap
-        ax2.set_xlim(X_min, X_max)
-        ax2.set_ylim(Y_min, Y_max)
-        ctx.add_basemap(ax2, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
-
-        # Ajouter les entités DXF à la carte
-        for entity in doc.modelspace().query('LINE'):
-            x0, y0 = entity.dxf.start.x, entity.dxf.start.y
-            x1, y1 = entity.dxf.end.x, entity.dxf.end.y
-            ax2.plot([x0, x1], [y0, y1], color='black', linewidth=1)
-
-        # Afficher la carte
+        ax2.set_title("Polygones du fichier DXF")
         st.pyplot(fig2)
 
     except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier DXF : {e}")
+        st.error(f"Erreur lors du traitement du fichier DXF : {e}")
 
-    # Optionnel : supprimer le fichier temporaire après utilisation
-    os.remove(dxf_temp_file_path)
-
-# Affichage des résultats globaux
-st.markdown("---")  # Ligne de séparation
-st.header("Détails des inondations")
-st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
-st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
