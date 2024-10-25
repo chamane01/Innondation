@@ -7,7 +7,6 @@ from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
-from io import BytesIO
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -40,9 +39,6 @@ option_site = st.selectbox(
 
 # Téléverser un fichier Excel ou TXT
 uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
-
-# Téléverser un fichier DXF
-uploaded_dxf = st.file_uploader("Téléversez un fichier DXF", type=["dxf"])
 
 # Fonction pour charger le fichier (identique pour les fichiers prédéfinis et téléversés)
 def charger_fichier(fichier, is_uploaded=False):
@@ -135,14 +131,13 @@ if df is not None:
 
             # Tracé des hachures pour la zone inondée
             contourf_filled = ax.contourf(grid_X, grid_Y, grid_Z, 
-                                           levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
-                                           colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
+                               levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
+                               colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
 
             # Affichage de la carte
             st.pyplot(fig)
 
             # Création du fichier DXF avec contours
-            dxf_file = BytesIO()  # Utiliser BytesIO au lieu d'un chemin de fichier
             doc = ezdxf.new(dxfversion='R2010')
             msp = doc.modelspace()
 
@@ -150,45 +145,19 @@ if df is not None:
             for collection in contours_inondation.collections:
                 for path in collection.get_paths():
                     points = path.vertices
-                    for i in range(len(points) - 1):
-                        msp.add_line(points[i], points[i + 1])
+                    for i in range(len(points)-1):
+                        msp.add_line(points[i], points[i+1])
 
-            # Sauvegarder le fichier DXF dans BytesIO
+            # Sauvegarder le fichier DXF
+            dxf_file = "contours_inondation.dxf"
             doc.saveas(dxf_file)
-            dxf_file.seek(0)  # Revenir au début du BytesIO pour le téléchargement
 
             # Proposer le téléchargement du fichier DXF
-            st.download_button(label="Télécharger le fichier DXF", data=dxf_file, file_name="contours_inondation.dxf", mime="application/dxf")
+            with open(dxf_file, "rb") as dxf:
+                st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
 
             # Affichage des résultats à droite de la carte
             col1, col2 = st.columns([3, 1])  # Créer deux colonnes
             with col2:
                 st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
                 st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
-                st.write(f"**Niveau d'inondation :** {st.session_state.flood_data['niveau_inondation']:.2f} mètres")
-
-        # Affichage du fichier DXF
-        if uploaded_dxf is not None:
-            try:
-                # Charger le fichier DXF depuis BytesIO
-                doc = ezdxf.readfile(uploaded_dxf)  # Remplacez readfile par read
-                lignes_dxf = []
-
-                # Parcourir les entités du fichier DXF
-                for entity in doc.modelspace().query('LINE'):
-                    start = entity.dxf.start.to_2d_tuple()  # Convertir le point de départ en tuple
-                    end = entity.dxf.end.to_2d_tuple()      # Convertir le point d'arrivée en tuple
-                    lignes_dxf.append((start, end))
-
-                # Affichage des lignes sur une carte
-                fig, ax = plt.subplots(figsize=(8, 6))
-
-                # Tracer les lignes du fichier DXF
-                for ligne in lignes_dxf:
-                    ax.plot([ligne[0][0], ligne[1][0]], [ligne[0][1], ligne[1][1]], color='green')
-
-                ax.set_title("Affichage du fichier DXF")
-                st.pyplot(fig)
-
-            except Exception as e:
-                st.error(f"Erreur lors du traitement du fichier DXF : {e}")
