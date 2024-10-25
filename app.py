@@ -165,30 +165,30 @@ if df is not None:
             with col2:
                 st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
                 st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
+                st.write(f"**Niveau d'inondation :** {st.session_state.flood_data['niveau_inondation']:.2f} mètres")
 
-# Traitement du fichier DXF uploadé
-if uploaded_dxf is not None:
-    try:
-        # Charger le fichier DXF à partir de l'objet BytesIO
-        doc = ezdxf.readfile(BytesIO(uploaded_dxf.read()))
-        msp = doc.modelspace()
+        # Affichage du fichier DXF
+        if uploaded_dxf is not None:
+            try:
+                # Charger le fichier DXF depuis BytesIO
+                doc = ezdxf.readfile(uploaded_dxf)  # Remplacez readfile par read
+                lignes_dxf = []
 
-        # Extraire les lignes du fichier DXF
-        lignes_dxf = []
-        for entity in msp:
-            if entity.dxftype() == 'LINE':
-                lignes_dxf.append(((entity.dxf.start.x, entity.dxf.start.y), (entity.dxf.end.x, entity.dxf.end.y)))
+                # Parcourir les entités du fichier DXF
+                for entity in doc.modelspace().query('LINE'):
+                    start = entity.dxf.start.to_2d_tuple()  # Convertir le point de départ en tuple
+                    end = entity.dxf.end.to_2d_tuple()      # Convertir le point d'arrivée en tuple
+                    lignes_dxf.append((start, end))
 
-        # Affichage du fichier DXF sur une carte
-        fig, ax = plt.subplots(figsize=(8, 6))
+                # Affichage des lignes sur une carte
+                fig, ax = plt.subplots(figsize=(8, 6))
 
-        # Tracer les lignes du fichier DXF
-        for ligne in lignes_dxf:
-            ax.plot([ligne[0][0], ligne[1][0]], [ligne[0][1], ligne[1][1]], color='green')
+                # Tracer les lignes du fichier DXF
+                for ligne in lignes_dxf:
+                    ax.plot([ligne[0][0], ligne[1][0]], [ligne[0][1], ligne[1][1]], color='green')
 
-        ax.set_title("Affichage du fichier DXF")
-        st.pyplot(fig)
+                ax.set_title("Affichage du fichier DXF")
+                st.pyplot(fig)
 
-    except Exception as e:
-        st.error(f"Erreur lors du traitement du fichier DXF : {e}")
-
+            except Exception as e:
+                st.error(f"Erreur lors du traitement du fichier DXF : {e}")
