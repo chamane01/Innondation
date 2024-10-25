@@ -7,6 +7,7 @@ from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
 import ezdxf  # Bibliothèque pour lire et créer des fichiers DXF
+import io  # Ajoutez cette importation en haut du fichier
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
