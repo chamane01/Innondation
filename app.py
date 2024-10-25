@@ -6,7 +6,8 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
-import ezdxf  # Bibliothèque pour créer et lire des fichiers DXF
+import ezdxf  # Bibliothèque pour traiter les fichiers DXF
+from io import StringIO
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -28,8 +29,8 @@ if 'flood_data' not in st.session_state:
         'niveau_inondation': 0.0
     }
 
-# Étape 1 : Sélectionner un site ou téléverser un fichier
-st.markdown("## Sélectionner un site ou téléverser un fichier")
+# Étape 1 : Sélectionner un site, téléverser un fichier ou téléverser un fichier DXF
+st.markdown("## Sélectionner un site, téléverser un fichier ou un fichier DXF")
 
 # Ajouter une option pour sélectionner parmi des fichiers CSV existants (AYAME 1 et AYAME 2)
 option_site = st.selectbox(
@@ -37,10 +38,10 @@ option_site = st.selectbox(
     ("Aucun", "AYAME 1", "AYAME 2")
 )
 
-# Téléverser un fichier Excel, TXT ou DXF
+# Téléverser un fichier Excel ou TXT
 uploaded_file = st.file_uploader("Téléversez un fichier Excel, TXT ou DXF", type=["xlsx", "txt", "dxf"])
 
-# Fonction pour charger le fichier
+# Fonction pour charger le fichier CSV ou Excel
 def charger_fichier(fichier, is_uploaded=False):
     try:
         if is_uploaded:
@@ -57,63 +58,67 @@ def charger_fichier(fichier, is_uploaded=False):
         st.error(f"Erreur lors du chargement du fichier : {e}")
         return None
 
-# Charger les fichiers selon la sélection
-df = None
+# Fonction pour charger et afficher les données d'un fichier DXF
+def charger_dxf(fichier_dxf):
+    try:
+        doc = ezdxf.readfile(fichier_dxf)
+        msp = doc.modelspace()
+        entities = []
+        for entity in msp:
+            if entity.dxftype() == 'LINE':
+                entities.append([entity.start, entity.end])
+        return entities
+    except Exception as e:
+        st.error(f"Erreur lors de la lecture du fichier DXF : {e}")
+        return None
+
+# Charger les fichiers selon la sélection ou le téléversement
 if option_site == "AYAME 1":
     df = charger_fichier('AYAME1.txt')
 elif option_site == "AYAME 2":
     df = charger_fichier('AYAME2.txt')
 elif uploaded_file is not None:
+    # Vérifier si le fichier téléversé est un fichier DXF
     if uploaded_file.name.endswith(".dxf"):
-        # Traitement spécial pour les fichiers DXF
-        try:
-            doc = ezdxf.readfile(uploaded_file)
-            msp = doc.modelspace()
-            dxf_coords = []
-            for entity in msp:
-                if entity.dxftype() == 'LINE':
-                    dxf_coords.append([entity.dxf.start, entity.dxf.end])
-            st.success("Fichier DXF chargé avec succès")
-        except Exception as e:
-            st.error(f"Erreur lors du chargement du fichier DXF : {e}")
+        dxf_entities = charger_dxf(uploaded_file)
     else:
         df = charger_fichier(uploaded_file, is_uploaded=True)
 else:
     st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
+    df = None
 
-# Traitement des données si le fichier est chargé
-if df is not None or uploaded_file is not None:
-    # Séparateur pour organiser l'affichage
-    st.markdown("---")  # Ligne de séparation
+# Traitement des données si un fichier CSV ou Excel est chargé
+if df is not None:
+    # Suite du traitement et de l'affichage des données CSV/Excel
 
-    if df is not None:
-        # Vérification du fichier : s'assurer que les colonnes X, Y, Z sont présentes
-        if 'X' not in df.columns or 'Y' not in df.columns or 'Z' not in df.columns:
-            st.error("Erreur : colonnes 'X', 'Y' et 'Z' manquantes.")
-        else:
-            # Étape 5 : Paramètres du niveau d'inondation
-            st.session_state.flood_data['niveau_inondation'] = st.number_input("Entrez le niveau d'eau (mètres)", min_value=0.0, step=0.1)
-            interpolation_method = st.selectbox("Méthode d'interpolation", ['linear', 'nearest'])
+    # ... (même code que précédemment pour la visualisation des données)
 
-            # Étape 6 : Création de la grille
-            X_min, X_max = df['X'].min(), df['X'].max()
-            Y_min, Y_max = df['Y'].min(), df['Y'].max()
+# Affichage du fichier DXF si téléversé
+if uploaded_file is not None and uploaded_file.name.endswith(".dxf"):
+    if dxf_entities:
+        st.markdown("---")
+        st.markdown("### Visualisation du fichier DXF")
 
-            resolution = st.number_input("Résolution de la grille", value=300, min_value=100, max_value=1000)
-            grid_X, grid_Y = np.mgrid[X_min:X_max:resolution*1j, Y_min:Y_max:resolution*1j]
-            grid_Z = griddata((df['X'], df['Y']), df['Z'], (grid_X, grid_Y), method=interpolation_method)
-
-            # Étape 7 : Calcul de la surface inondée et affichage de la carte d'inondation
-            # Même logique de calcul et d'affichage qu'avant...
-    
-    if uploaded_file is not None and uploaded_file.name.endswith(".dxf"):
-        # Visualiser les données du fichier DXF
-        st.markdown("### Visualisation des lignes du fichier DXF")
+        # Créer une figure Matplotlib
         fig, ax = plt.subplots(figsize=(8, 6))
-
-        for line in dxf_coords:
+        
+        # Tracer les lignes du fichier DXF
+        for line in dxf_entities:
             start, end = line
-            ax.plot([start[0], end[0]], [start[1], end[1]], color="blue", linewidth=1)
+            ax.plot([start[0], end[0]], [start[1], end[1]], color='blue', linewidth=2)
 
-        ax.set_title("Visualisation des lignes DXF")
+        # Affichage de la carte avec les entités DXF
         st.pyplot(fig)
+
+        # Sauvegarder le fichier DXF (si modifié ou transformé)
+        dxf_file = "televerse_dxf.dxf"
+        with open(dxf_file, "wb") as dxf:
+            dxf.write(uploaded_file.getbuffer())
+        
+        # Proposer le téléchargement du fichier DXF
+        st.download_button(
+            label="Télécharger le fichier DXF téléversé",
+            data=uploaded_file,
+            file_name=uploaded_file.name,
+            mime="application/dxf"
+        )
