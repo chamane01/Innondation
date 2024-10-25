@@ -13,5 +13,5 @@ osmnx
 contextily
 pyproj # Pour la conversion des coordonnées
 ezdxf
-opencv-python==4.5.3.20210927
+opencv-python
 
