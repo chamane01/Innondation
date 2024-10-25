@@ -6,7 +6,7 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
-import ezdxf  # Bibliothèque pour créer des fichiers DXF
+import ezdxf  # Bibliothèque pour créer et lire des fichiers DXF
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -168,20 +168,23 @@ if df is not None:
 # Affichage de la carte DXF téléversée
 if uploaded_dxf is not None:
     # Lire le fichier DXF
-    doc = ezdxf.readfile(uploaded_dxf)
-    msp = doc.modelspace()
+    try:
+        doc = ezdxf.read(uploaded_dxf.read())  # Utilisez read() pour lire l'objet de fichier
+        msp = doc.modelspace()
 
-    # Extraire les lignes et polygones du fichier DXF
-    lines = []
-    for entity in msp.query('LINE'):
-        lines.append([(entity.dxf.start.x, entity.dxf.start.y), (entity.dxf.end.x, entity.dxf.end.y)])
+        # Extraire les lignes et polygones du fichier DXF
+        lines = []
+        for entity in msp.query('LINE'):
+            lines.append([(entity.dxf.start.x, entity.dxf.start.y), (entity.dxf.end.x, entity.dxf.end.y)])
 
-    # Tracer le DXF
-    fig_dxf, ax_dxf = plt.subplots(figsize=(8, 6))
-    for line in lines:
-        ax_dxf.plot(*zip(*line), color='black')
+        # Tracer le DXF
+        fig_dxf, ax_dxf = plt.subplots(figsize=(8, 6))
+        for line in lines:
+            ax_dxf.plot(*zip(*line), color='black')
 
-    ax_dxf.set_title("Contours du fichier DXF")
-    ax_dxf.set_xlabel("X (m)")
-    ax_dxf.set_ylabel("Y (m)")
-    st.pyplot(fig_dxf)
+        ax_dxf.set_title("Contours du fichier DXF")
+        ax_dxf.set_xlabel("X (m)")
+        ax_dxf.set_ylabel("Y (m)")
+        st.pyplot(fig_dxf)
+    except Exception as e:
+        st.error(f"Erreur lors de la lecture du fichier DXF : {e}")
