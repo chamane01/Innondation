@@ -6,8 +6,7 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
-import ezdxf  # Bibliothèque pour lire et créer des fichiers DXF
-import io  # Ajoutez cette importation en haut du fichier
+import ezdxf  # Bibliothèque pour créer des fichiers DXF
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -139,7 +138,6 @@ if df is not None:
             st.pyplot(fig)
 
             # Création du fichier DXF avec contours
-            dxf_file = "contours_inondation.dxf"
             doc = ezdxf.new(dxfversion='R2010')
             msp = doc.modelspace()
 
@@ -151,6 +149,7 @@ if df is not None:
                         msp.add_line(points[i], points[i+1])
 
             # Sauvegarder le fichier DXF
+            dxf_file = "contours_inondation.dxf"
             doc.saveas(dxf_file)
 
             # Proposer le téléchargement du fichier DXF
@@ -162,33 +161,3 @@ if df is not None:
             with col2:
                 st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
                 st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
-
-# Étape 10 : Téléversez un fichier DXF pour afficher les polygones
-st.markdown("## Téléversez un fichier DXF pour afficher les polygones")
-uploaded_dxf = st.file_uploader("Téléversez un fichier DXF", type=["dxf"])
-
-# Traitement du fichier DXF
-if uploaded_dxf is not None:
-    try:
-        doc = ezdxf.readfile(uploaded_dxf)
-        msp = doc.modelspace()
-
-        # Récupération des entités polygones dans le fichier DXF
-        polygones = []
-        for polyline in msp.query('LWPOLYLINE'):
-            points = [(p[0], p[1]) for p in polyline.points()]
-            polygones.append(points)
-
-        # Affichage des polygones
-        fig2, ax2 = plt.subplots(figsize=(8, 6))
-        for p in polygones:
-            poly = Polygon(p)
-            x, y = poly.exterior.xy
-            ax2.fill(x, y, alpha=0.5, fc='orange', ec='black')
-
-        ax2.set_title("Polygones du fichier DXF")
-        st.pyplot(fig2)
-
-    except Exception as e:
-        st.error(f"Erreur lors du traitement du fichier DXF : {e}")
-
