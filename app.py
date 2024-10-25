@@ -1,4 +1,3 @@
-# Importer les bibliothèques nécessaires
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -6,6 +5,8 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
+import cv2
+from PIL import Image
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -107,6 +108,21 @@ if df is not None:
             volume = surface_inondee * st.session_state.flood_data['niveau_inondation'] * 10000  # Conversion en m³ (1 hectare = 10,000 m²)
             return volume
 
+        # Fonction pour détecter et dessiner les contours d'une couleur spécifique
+        def detecter_contours(image, couleur_hex):
+            couleur_bgr = [int(couleur_hex[i:i+2], 16) for i in (1, 3, 5)][::-1]  # Convertir HEX en BGR
+            image_hsv = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+            couleur_hsv = cv2.cvtColor(np.uint8([[couleur_bgr]]), cv2.COLOR_BGR2HSV)[0][0]
+
+            # Définir les limites pour la détection de couleur
+            lower_bound = np.array([couleur_hsv[0] - 10, 100, 100])
+            upper_bound = np.array([couleur_hsv[0] + 10, 255, 255])
+
+            mask = cv2.inRange(image_hsv, lower_bound, upper_bound)
+            contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+            return contours
+
         if st.button("Afficher la carte d'inondation"):
             # Étape 9 : Calcul de la surface et volume
             polygon_inonde, surface_inondee = calculer_surface(st.session_state.flood_data['niveau_inondation'])
@@ -124,34 +140,39 @@ if df is not None:
             ax.set_ylim(Y_min, Y_max)
             ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
 
-            # Tracer la carte de profondeur
-           # contourf = ax.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='viridis', alpha=0.5)
-           # plt.colorbar(contourf, label='Profondeur (mètres)')
-
             # Tracer le contour du niveau d'inondation
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
+
             # Tracé des hachures pour la zone inondée
             contourf_filled = ax.contourf(grid_X, grid_Y, grid_Z, 
-                               levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
-                               colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
+                                           levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
+                                           colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
 
-
-            # Tracer la zone inondée
-          #  if polygon_inonde:
-                #x_poly, y_poly = polygon_inonde.exterior.xy
-                #ax.fill(x_poly, y_poly, alpha=0.5, fc='cyan', ec='black', lw=1, label='Zone inondée')  # Couleur cyan pour la zone inondée
-
-            #ax.set_title("Carte des zones inondées")
-           # ax.set_xlabel("Coordonnée X")
-            #ax.set_ylabel("Coordonnée Y")
-            #ax.legend()
-
-            # Affichage de la carte
+            # Afficher la carte d'inondation
             st.pyplot(fig)
 
-            # Affichage des résultats à droite de la carte
-            col1, col2 = st.columns([3, 1])  # Créer deux colonnes
-            with col2:
-                st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
-                st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
+            # Afficher la carte des contours pour la couleur spécifiée
+            image_orig = np.zeros((resolution, resolution, 3), dtype=np.uint8)
+            for x in range(grid_X.shape[0]):
+                for y in range(grid_Y.shape[1]):
+                    image_orig[int((grid_Y[y] - Y_min) / (Y_max - Y_min) * resolution), int((grid_X[x] - X_min) / (X_max - X_min) * resolution)] = [int(grid_Z[x, y] * 255), 0, 0]  # Juste un exemple pour générer une image
+
+            contours = detecter_contours(image_orig, "#007FFF")
+
+            fig_contours, ax_contours = plt.subplots(figsize=(8, 6))
+            ax_contours.set_xlim(X_min, X_max)
+            ax_contours.set_ylim(Y_min, Y_max)
+            ctx.add_basemap(ax_contours, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+
+            for cnt in contours:
+                ax_contours.plot(*zip(*cnt), color='green', linewidth=2)
+
+            # Afficher la carte des contours
+            st.pyplot(fig_contours)
+
+            # Résultats affichés
+            st.markdown(f"**Surface inondée :** {surface_inondee:.2f} hectares")
+            st.markdown(f"**Volume d'eau :** {volume_eau:.2f} m³")
+        else:
+            st.warning("Veuillez appuyer sur le bouton pour afficher la carte d'inondation.")
