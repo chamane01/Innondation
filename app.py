@@ -40,6 +40,9 @@ option_site = st.selectbox(
 # Téléverser un fichier Excel ou TXT
 uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
 
+# Téléverser un fichier DXF
+uploaded_dxf = st.file_uploader("Téléversez un fichier DXF", type=["dxf"])
+
 # Fonction pour charger le fichier (identique pour les fichiers prédéfinis et téléversés)
 def charger_fichier(fichier, is_uploaded=False):
     try:
@@ -161,3 +164,24 @@ if df is not None:
             with col2:
                 st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
                 st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
+
+# Affichage de la carte DXF téléversée
+if uploaded_dxf is not None:
+    # Lire le fichier DXF
+    doc = ezdxf.readfile(uploaded_dxf)
+    msp = doc.modelspace()
+
+    # Extraire les lignes et polygones du fichier DXF
+    lines = []
+    for entity in msp.query('LINE'):
+        lines.append([(entity.dxf.start.x, entity.dxf.start.y), (entity.dxf.end.x, entity.dxf.end.y)])
+
+    # Tracer le DXF
+    fig_dxf, ax_dxf = plt.subplots(figsize=(8, 6))
+    for line in lines:
+        ax_dxf.plot(*zip(*line), color='black')
+
+    ax_dxf.set_title("Contours du fichier DXF")
+    ax_dxf.set_xlabel("X (m)")
+    ax_dxf.set_ylabel("Y (m)")
+    st.pyplot(fig_dxf)
