@@ -5,7 +5,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from shapely.geometry import Polygon
-import shapely.ops as ops
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
 
@@ -26,8 +25,7 @@ if 'flood_data' not in st.session_state:
     st.session_state.flood_data = {
         'surface_inondee': None,
         'volume_eau': None,
-        'niveau_inondation': 0.0,
-        'polygons_inonde': []
+        'niveau_inondation': 0.0
     }
 
 # Étape 1 : Sélectionner un site ou téléverser un fichier
@@ -72,6 +70,7 @@ else:
 
 # Traitement des données si le fichier est chargé
 if df is not None:
+    # Séparateur pour organiser l'affichage
     st.markdown("---")  # Ligne de séparation
 
     # Vérification du fichier : s'assurer que les colonnes X, Y, Z sont présentes
@@ -90,81 +89,91 @@ if df is not None:
         grid_X, grid_Y = np.mgrid[X_min:X_max:resolution*1j, Y_min:Y_max:resolution*1j]
         grid_Z = griddata((df['X'], df['Y']), df['Z'], (grid_X, grid_Y), method=interpolation_method)
 
-        # Étape 7 : Calcul des polygones de surface inondée
-        def calculer_polygones_inonde(niveau_inondation):
-            contours = plt.contour(grid_X, grid_Y, grid_Z, levels=[niveau_inondation], colors='red')
-            polygons = []
-            for path in contours.collections[0].get_paths():
-                poly_coords = path.vertices
-                polygon = Polygon(poly_coords)
-                if polygon.is_valid:
-                    polygons.append(polygon)
-            return polygons
+        # Étape 7 : Calcul de la surface inondée
+        def calculer_surface(niveau_inondation):
+            contours = []
+            for x in range(grid_X.shape[0]):
+                for y in range(grid_Y.shape[1]):
+                    if grid_Z[x, y] <= niveau_inondation:
+                        contours.append((grid_X[x, y], grid_Y[x, y]))
 
-        # Calcul de la surface totale inondée
-        def calculer_surface_totale(polygons):
-            union_polygon = ops.unary_union(polygons)  # Créer un polygone unique
-            surface_totale = union_polygon.area / 10000  # Surface en hectares
-            return surface_totale
+            # Convertir les contours en un polygone
+            if contours:
+                polygon = Polygon(contours)
+                return polygon, polygon.area / 10000  # Retourne le polygone et la surface en hectares
+            return None, 0.0
 
-        # Afficher la carte d'inondation
+        # Étape 8 : Calcul du volume d'eau
+        def calculer_volume(surface_inondee):
+            volume = surface_inondee * st.session_state.flood_data['niveau_inondation'] * 10000  # Conversion en m³ (1 hectare = 10,000 m²)
+            return volume
+
         if st.button("Afficher la carte d'inondation"):
-            polygons_inonde = calculer_polygones_inonde(st.session_state.flood_data['niveau_inondation'])
-            surface_totale_inondee = calculer_surface_totale(polygons_inonde)
-            
-            # Stocker les polygones et surface totale dans session_state
-            st.session_state.flood_data['polygons_inonde'] = polygons_inonde
-            st.session_state.flood_data['surface_inondee'] = surface_totale_inondee
+            # Étape 9 : Calcul de la surface et volume
+            polygon_inonde, surface_inondee = calculer_surface(st.session_state.flood_data['niveau_inondation'])
+            volume_eau = calculer_volume(surface_inondee)
+
+            # Stocker les résultats dans session_state
+            st.session_state.flood_data['surface_inondee'] = surface_inondee
+            st.session_state.flood_data['volume_eau'] = volume_eau
 
             # Tracer la première carte avec OpenStreetMap et contours
             fig, ax = plt.subplots(figsize=(8, 6))
+
+            # Tracer le fond OpenStreetMap
             ax.set_xlim(X_min, X_max)
             ax.set_ylim(Y_min, Y_max)
             ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
 
-            # Tracer les contours de niveau d'inondation
-            ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
+            # Tracer le contour du niveau d'inondation
+            contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
+            ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
 
-            # Tracer les polygones d'inondation sur la carte
-            for polygon in polygons_inonde:
-                x, y = polygon.exterior.xy
-                ax.fill(x, y, color='blue', alpha=0.5)
-            
+            # Tracé des hachures pour la zone inondée
+            ax.contourf(grid_X, grid_Y, grid_Z, 
+                        levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
+                        colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
+
             # Affichage de la première carte
             st.pyplot(fig)
 
-            # Deuxième carte : visualisation des polygones sans basemap
+            # Affichage de la deuxième carte 2D avec masque bleu transparent uniquement
             fig2, ax2 = plt.subplots(figsize=(8, 6))
+
+            # Tracé du contour et du masque sans basemap
             ax2.set_xlim(X_min, X_max)
             ax2.set_ylim(Y_min, Y_max)
-            ax2.set_aspect('equal')
-
-            # Tracer les polygones d'inondation en bleu
-            for polygon in polygons_inonde:
-                x, y = polygon.exterior.xy
-                ax2.fill(x, y, color='blue', alpha=0.5)
+            ax2.contourf(grid_X, grid_Y, grid_Z, 
+                         levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
+                         colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
+            ax2.set_aspect('equal')  # Pour afficher en échelle égale
 
             # Affichage de la deuxième carte
             st.pyplot(fig2)
 
-            # Affichage de la surface totale en dessous de la deuxième carte
-            st.write(f"**Surface totale d'inondation calculée à partir des polygones :** {surface_totale_inondee:.2f} hectares")
-
-            # Sauvegarde du fichier DXF avec les contours
+            # Création du fichier DXF avec contours
             doc = ezdxf.new(dxfversion='R2010')
             msp = doc.modelspace()
-            for polygon in polygons_inonde:
-                x, y = polygon.exterior.xy
-                points = list(zip(x, y))
-                for i in range(len(points) - 1):
-                    msp.add_line(points[i], points[i + 1])
+
+            # Ajouter les contours au DXF
+            for collection in contours_inondation.collections:
+                for path in collection.get_paths():
+                    points = path.vertices
+                    for i in range(len(points)-1):
+                        msp.add_line(points[i], points[i+1])
 
             # Sauvegarder le fichier DXF
-            dxf_file = "polygones_inondation.dxf"
+            dxf_file = "contours_inondation.dxf"
             doc.saveas(dxf_file)
 
             # Proposer le téléchargement du fichier DXF
             with open(dxf_file, "rb") as dxf:
                 st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
+
+            # Affichage des résultats à droite de la carte
+            col1, col2 = st.columns([3, 1])  # Créer deux colonnes
+            with col2:
+                st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
+                st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
         else:
             st.warning("Cliquez sur 'Afficher la carte d'inondation' pour visualiser la carte.")
