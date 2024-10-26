@@ -118,7 +118,7 @@ if df is not None:
 
             # Tracer le contour du niveau d'inondation en rouge
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
-            #ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
+            ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
 
             # Tracé des hachures pour la zone inondée
             ax.contourf(grid_X, grid_Y, grid_Z, 
