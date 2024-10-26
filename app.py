@@ -117,7 +117,7 @@ if df is not None:
             st.session_state.flood_data['surface_inondee'] = surface_inondee
             st.session_state.flood_data['volume_eau'] = volume_eau
 
-            # Tracer la carte de profondeur
+            # Tracer la première carte avec OpenStreetMap et contours
             fig, ax = plt.subplots(figsize=(8, 6))
 
             # Tracer le fond OpenStreetMap
@@ -130,34 +130,11 @@ if df is not None:
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
 
             # Tracé des hachures pour la zone inondée
-            contourf_filled = ax.contourf(grid_X, grid_Y, grid_Z, 
-                               levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
-                               colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
+            ax.contourf(grid_X, grid_Y, grid_Z, 
+                        levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
+                        colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
 
-            # Affichage de la carte
+            # Affichage de la première carte
             st.pyplot(fig)
 
-            # Création du fichier DXF avec contours
-            doc = ezdxf.new(dxfversion='R2010')
-            msp = doc.modelspace()
-
-            # Ajouter les contours au DXF
-            for collection in contours_inondation.collections:
-                for path in collection.get_paths():
-                    points = path.vertices
-                    for i in range(len(points)-1):
-                        msp.add_line(points[i], points[i+1])
-
-            # Sauvegarder le fichier DXF
-            dxf_file = "contours_inondation.dxf"
-            doc.saveas(dxf_file)
-
-            # Proposer le téléchargement du fichier DXF
-            with open(dxf_file, "rb") as dxf:
-                st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
-
-            # Affichage des résultats à droite de la carte
-            col1, col2 = st.columns([3, 1])  # Créer deux colonnes
-            with col2:
-                st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
-                st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
+            # Affichage d
