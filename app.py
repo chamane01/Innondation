@@ -21,6 +21,9 @@ with col3:
 
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
 
+# Ajouter une barre latérale pour les paramètres
+st.sidebar.header("Paramètres de l'inondation")
+
 # Initialiser session_state pour stocker les données d'inondation
 if 'flood_data' not in st.session_state:
     st.session_state.flood_data = {
@@ -30,16 +33,16 @@ if 'flood_data' not in st.session_state:
     }
 
 # Étape 1 : Sélectionner un site ou téléverser un fichier
-st.markdown("## Sélectionner un site ou téléverser un fichier")
+st.sidebar.markdown("## Sélectionner un site ou téléverser un fichier")
 
 # Ajouter une option pour sélectionner parmi des fichiers CSV existants (AYAME 1 et AYAME 2)
-option_site = st.selectbox(
+option_site = st.sidebar.selectbox(
     "Sélectionnez un site",
     ("Aucun", "AYAME 1", "AYAME 2")
 )
 
 # Téléverser un fichier Excel ou TXT
-uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
+uploaded_file = st.sidebar.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
 
 # Fonction pour charger le fichier (identique pour les fichiers prédéfinis et téléversés)
 def charger_fichier(fichier, is_uploaded=False):
@@ -79,14 +82,14 @@ if df is not None:
         st.error("Erreur : colonnes 'X', 'Y' et 'Z' manquantes.")
     else:
         # Étape 5 : Paramètres du niveau d'inondation
-        st.session_state.flood_data['niveau_inondation'] = st.number_input("Entrez le niveau d'eau (mètres)", min_value=0.0, step=0.1)
-        interpolation_method = st.selectbox("Méthode d'interpolation", ['linear', 'nearest'])
+        st.session_state.flood_data['niveau_inondation'] = st.sidebar.number_input("Entrez le niveau d'eau (mètres)", min_value=0.0, step=0.1)
+        interpolation_method = st.sidebar.selectbox("Méthode d'interpolation", ['linear', 'nearest'])
 
         # Étape 6 : Création de la grille
         X_min, X_max = df['X'].min(), df['X'].max()
         Y_min, Y_max = df['Y'].min(), df['Y'].max()
 
-        resolution = st.number_input("Résolution de la grille", value=300, min_value=100, max_value=1000)
+        resolution = st.sidebar.number_input("Résolution de la grille", value=300, min_value=100, max_value=1000)
         grid_X, grid_Y = np.mgrid[X_min:X_max:resolution*1j, Y_min:Y_max:resolution*1j]
         grid_Z = griddata((df['X'], df['Y']), df['Z'], (grid_X, grid_Y), method=interpolation_method)
 
@@ -161,10 +164,7 @@ if df is not None:
             # Affichage des résultats sous la carte
             st.markdown("## Résultats")
             st.write(f"**Surface occupée par la couleur bleue :** {surface_bleue:.2f} hectares")  # Mise à jour
-            st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")  # Mise à jour
-            st.write(f"**Niveau d'eau :** {st.session_state.flood_data['niveau_inondation']} m")
-            st.write(f"**Date :** {now.strftime('%Y-%m-%d')}")
-            st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
+            st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")
             st.write(f"**Système de projection :** EPSG:32630")
-
-# Fin de l'application
+            st.write(f"**Date et heure :** {now.strftime('%Y-%m-%d %H:%M:%S')}")
+            st.write(f"**Localisation la plus proche :** {get_nearest_city(X_min, Y_min)}")  # Utiliser votre méthode pour obtenir la ville
