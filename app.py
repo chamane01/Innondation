@@ -7,6 +7,9 @@ from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
+from datetime import datetime
+import geopy
+from geopy.geocoders import Nominatim
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -127,23 +130,6 @@ if df is not None:
             # Affichage de la première carte
             st.pyplot(fig)
 
-            # Affichage de la deuxième carte 2D avec masque bleu transparent uniquement
-            fig2, ax2 = plt.subplots(figsize=(8, 6))
-
-            # Tracé du contour et du masque sans basemap
-            ax2.set_xlim(X_min, X_max)
-            ax2.set_ylim(Y_min, Y_max)
-            ax2.contourf(grid_X, grid_Y, grid_Z, 
-                         levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
-                         colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
-            ax2.set_aspect('equal')  # Pour afficher en échelle égale
-
-            # Affichage de la surface occupée par la couleur bleue
-            st.write(f"**Surface occupée par la couleur bleue :** {surface_bleue:.2f} hectares")
-
-            # Affichage de la deuxième carte
-            st.pyplot(fig2)
-
             # Création du fichier DXF avec contours
             doc = ezdxf.new(dxfversion='R2010')
             msp = doc.modelspace()
@@ -163,12 +149,22 @@ if df is not None:
             with open(dxf_file, "rb") as dxf:
                 st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
 
-            # Affichage des résultats à gauche de la carte
-            st.sidebar.markdown("## Résultats")
-            st.sidebar.write(f"**Surface occupée par la couleur bleue :** {surface_bleue:.2f} hectares")  # Mise à jour
-            st.sidebar.write(f"**Volume d'eau :** {volume_eau:.2f} m³")  # Mise à jour
-            st.sidebar.write(f"**Niveau d'eau :** {st.session_state.flood_data['niveau_inondation']} m")
-            st.sidebar.write("Données fournies :")
-            st.sidebar.dataframe(df)
+            # Informations supplémentaires
+            now = datetime.now()
+            geolocator = Nominatim(user_agent="geoapiExercises")
+            # Pour obtenir la ville la plus proche, on peut prendre un point central des coordonnées
+            coord_central = (df['Y'].mean(), df['X'].mean())
+            location = geolocator.reverse(coord_central)
+            ville_proche = location.raw['address'].get('city', 'Inconnu')  # Récupérer le nom de la ville
+
+            # Affichage des résultats sous la carte
+            st.markdown("## Résultats")
+            st.write(f"**Surface occupée par la couleur bleue :** {surface_bleue:.2f} hectares")  # Mise à jour
+            st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")  # Mise à jour
+            st.write(f"**Niveau d'eau :** {st.session_state.flood_data['niveau_inondation']} m")
+            st.write(f"**Date :** {now.strftime('%Y-%m-%d')}")
+            st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
+            st.write(f"**Système de projection :** EPSG:32630")
+            st.write(f"**Ville la plus proche :** {ville_proche}")
 
 # Fin de l'application
