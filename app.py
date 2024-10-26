@@ -4,7 +4,8 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, shape
+import geopandas as gpd  # Bibliothèque pour manipuler les données géospatiales
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
@@ -29,8 +30,8 @@ if 'flood_data' not in st.session_state:
         'niveau_inondation': 0.0
     }
 
-# Étape 1 : Sélectionner un site ou ouvrir un fichier
-st.markdown("## Sélectionner un site ou ouvrir un fichier")
+# Étape 1 : Sélectionner un site ou téléverser un fichier
+st.markdown("## Sélectionner un site ou téléverser un fichier")
 
 # Ajouter une option pour sélectionner parmi des fichiers CSV existants (AYAME 1 et AYAME 2)
 option_site = st.selectbox(
@@ -38,11 +39,24 @@ option_site = st.selectbox(
     ("Aucun", "AYAME 1", "AYAME 2")
 )
 
-# Fonction pour charger le fichier (identique pour les fichiers prédéfinis)
-def charger_fichier(fichier):
+# Téléverser un fichier Excel ou TXT
+uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
+
+# Champ pour le chemin du fichier shapefile
+shapefile_path = st.text_input("Chemin du fichier shapefile (ex : 'batiments.shp')")
+
+# Fonction pour charger le fichier (identique pour les fichiers prédéfinis et téléversés)
+def charger_fichier(fichier, is_uploaded=False):
     try:
-        # Chargement du fichier prédéfini (site)
-        df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
+        if is_uploaded:
+            # Si le fichier est téléversé, vérifier son type
+            if fichier.name.endswith('.xlsx'):
+                df = pd.read_excel(fichier)
+            elif fichier.name.endswith('.txt'):
+                df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
+        else:
+            # Si le fichier est prédéfini (site), il est déjà connu
+            df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
         return df
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier : {e}")
@@ -53,10 +67,11 @@ if option_site == "AYAME 1":
     df = charger_fichier('AYAME1.txt')
 elif option_site == "AYAME 2":
     df = charger_fichier('AYAME2.txt')
+elif uploaded_file is not None:
+    df = charger_fichier(uploaded_file, is_uploaded=True)
 else:
-    # Spécifiez le chemin du shapefile ici
-    shapefile_path = "chemin/vers/votre_fichier.shp"  # Remplacez par le chemin correct de votre shapefile
-    df = charger_fichier(shapefile_path)
+    st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
+    df = None
 
 # Traitement des données si le fichier est chargé
 if df is not None:
@@ -97,6 +112,30 @@ if df is not None:
             st.session_state.flood_data['surface_bleu'] = surface_bleue  # Met à jour la surface occupée par la couleur bleue
             st.session_state.flood_data['volume_eau'] = volume_eau
 
+            # Charger le shapefile si le chemin est spécifié
+            if shapefile_path:
+                try:
+                    batiments_gdf = gpd.read_file(shapefile_path)
+
+                    # Vérifier si les bâtiments sont bien des polygones
+                    if not batiments_gdf.geom_type.isin(['Polygon', 'MultiPolygon']).all():
+                        st.error("Erreur : Les géométries dans le shapefile doivent être des polygones.")
+                    else:
+                        # Créer une GeoDataFrame pour les polygones d'inondation
+                        inondation_polygone = Polygon([
+                            (X_min, Y_min),
+                            (X_min, Y_max),
+                            (X_max, Y_max),
+                            (X_max, Y_min)
+                        ])
+                        inondation_gdf = gpd.GeoDataFrame(geometry=[inondation_polygone], crs="EPSG:32630")
+
+                        # Analyse spatiale : déterminer quels bâtiments sont dans la zone inondée
+                        batiments_gdf['inondation'] = batiments_gdf.intersects(inondation_gdf.geometry[0])
+
+                except Exception as e:
+                    st.error(f"Erreur lors du chargement du shapefile : {e}")
+
             # Tracer la première carte avec OpenStreetMap et contours
             fig, ax = plt.subplots(figsize=(8, 6))
 
@@ -114,46 +153,26 @@ if df is not None:
                         levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
                         colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
 
+            # Afficher les bâtiments
+            if 'batiments_gdf' in locals():
+                # Bâtiments dans la zone inondée en rouge
+                ax = batiments_gdf[batiments_gdf['inondation']].plot(ax=ax, color='red', alpha=0.5, edgecolor='k', label='Bâtiments inondés')
+                # Bâtiments hors de la zone inondée en vert
+                batiments_gdf[~batiments_gdf['inondation']].plot(ax=ax, color='green', alpha=0.5, edgecolor='k', label='Bâtiments non inondés')
+
             # Affichage de la première carte
             st.pyplot(fig)
 
             # Création du fichier DXF avec contours
-            doc = ezdxf.new(dxfversion='R2010')
+            doc = ezdxf.new()
             msp = doc.modelspace()
+            msp.add_lwpolyline(vertices=list(zip(grid_X.flatten(), grid_Y.flatten())), close=True, color=1)
+            doc.saveas("contours_inondation.dxf")
+            st.success("Fichier DXF créé avec succès !")
 
-            # Ajouter les contours au DXF
-            for collection in contours_inondation.collections:
-                for path in collection.get_paths():
-                    points = path.vertices
-                    for i in range(len(points)-1):
-                        msp.add_line(points[i], points[i+1])
+            # Affichage des résultats
+            st.markdown(f"**Surface occupée par l'eau (ha) :** {st.session_state.flood_data['surface_bleu']:.2f} ha")
+            st.markdown(f"**Volume d'eau (m³) :** {st.session_state.flood_data['volume_eau']:.2f} m³")
 
-            # Sauvegarder le fichier DXF
-            dxf_file = "contours_inondation.dxf"
-            doc.saveas(dxf_file)
-
-            # Proposer le téléchargement de la carte
-            # Enregistrer la figure en tant qu'image PNG
-            carte_file = "carte_inondation.png"
-            fig.savefig(carte_file)
-
-            with open(carte_file, "rb") as carte:
-                st.download_button(label="Télécharger la carte", data=carte, file_name=carte_file, mime="image/png")
-
-            # Proposer le téléchargement du fichier DXF
-            with open(dxf_file, "rb") as dxf:
-                st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
-
-            # Informations supplémentaires
-            now = datetime.now()
-
-            # Affichage des résultats sous la carte
-            st.markdown("## Résultats")
-            st.write(f"**Surface innondée :** {surface_bleue:.2f} hectares")  # Mise à jour
-            st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")  # Mise à jour
-            st.write(f"**Niveau d'eau :** {st.session_state.flood_data['niveau_inondation']} m")
-            st.write(f"**Date :** {now.strftime('%Y-%m-%d')}")
-            st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
-            st.write(f"**Système de projection :** EPSG:32630")
-
-# Fin de l'application
+        else:
+            st.warning("Veuillez saisir les informations nécessaires pour générer la carte.")
