@@ -8,8 +8,6 @@ from shapely.geometry import Polygon
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
-import geopy
-from geopy.geocoders import Nominatim
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -151,11 +149,6 @@ if df is not None:
 
             # Informations supplémentaires
             now = datetime.now()
-            geolocator = Nominatim(user_agent="geoapiExercises")
-            # Pour obtenir la ville la plus proche, on peut prendre un point central des coordonnées
-            coord_central = (df['Y'].mean(), df['X'].mean())
-            location = geolocator.reverse(coord_central)
-            ville_proche = location.raw['address'].get('city', 'Inconnu')  # Récupérer le nom de la ville
 
             # Affichage des résultats sous la carte
             st.markdown("## Résultats")
@@ -165,6 +158,5 @@ if df is not None:
             st.write(f"**Date :** {now.strftime('%Y-%m-%d')}")
             st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
             st.write(f"**Système de projection :** EPSG:32630")
-            st.write(f"**Ville la plus proche :** {ville_proche}")
 
 # Fin de l'application
