@@ -99,20 +99,13 @@ if df is not None:
             volume = surface_bleue * st.session_state.flood_data['niveau_inondation'] * 10000  # Conversion en m³ (1 hectare = 10,000 m²)
             return volume
 
-        # Nouveau : Calculer le nombre de bâtiments inondés et non inondés
-        def compter_batiments(grid_Z, niveau_inondation):
-            batiments_inondes = np.sum(grid_Z <= niveau_inondation)
-            batiments_non_inondes = np.sum(grid_Z > niveau_inondation)
-            return batiments_inondes, batiments_non_inondes
-
         if st.button("Afficher la carte d'inondation"):
             # Étape 9 : Calcul de la surface bleue et volume
             surface_bleue = calculer_surface_bleue(st.session_state.flood_data['niveau_inondation'])
             volume_eau = calculer_volume(surface_bleue)
-            batiments_inondes, batiments_non_inondes = compter_batiments(grid_Z, st.session_state.flood_data['niveau_inondation'])
 
             # Stocker les résultats dans session_state
-            st.session_state.flood_data['surface_bleu'] = surface_bleue
+            st.session_state.flood_data['surface_bleu'] = surface_bleue  # Met à jour la surface occupée par la couleur bleue
             st.session_state.flood_data['volume_eau'] = volume_eau
 
             # Tracer la première carte avec OpenStreetMap et contours
@@ -131,11 +124,6 @@ if df is not None:
             ax.contourf(grid_X, grid_Y, grid_Z, 
                         levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
                         colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
-
-            # Tracer les bâtiments : rouge si inondé, blanc ou gris si non inondé
-            ax.contourf(grid_X, grid_Y, grid_Z, 
-                        levels=[-np.inf, st.session_state.flood_data['niveau_inondation'], np.inf], 
-                        colors=['red', 'grey'], alpha=0.3)
 
             # Affichage de la première carte
             st.pyplot(fig)
@@ -156,6 +144,7 @@ if df is not None:
             doc.saveas(dxf_file)
 
             # Proposer le téléchargement de la carte
+            # Enregistrer la figure en tant qu'image PNG
             carte_file = "carte_inondation.png"
             fig.savefig(carte_file)
 
@@ -169,47 +158,13 @@ if df is not None:
             # Informations supplémentaires
             now = datetime.now()
 
-                       # Affichage des résultats sous la carte
+            # Affichage des résultats sous la carte
             st.markdown("## Résultats")
-            st.write(f"**Surface occupée par la couleur bleue :** {surface_bleue:.2f} hectares")
-            st.write(f"**Volume d'eau (m³)** : {volume_eau:.2f} m³")
+            st.write(f"**Surface occupée par la couleur bleue :** {surface_bleue:.2f} hectares")  # Mise à jour
+            st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")  # Mise à jour
             st.write(f"**Niveau d'eau :** {st.session_state.flood_data['niveau_inondation']} m")
-                        # Afficher les résultats supplémentaires
-            st.write(f"**Volume d'eau (m³)** : {volume_eau:.2f} m³")
-            st.write(f"**Nombre de bâtiments inondés** : {batiments_inondes}")
-            st.write(f"**Nombre de bâtiments non inondés** : {batiments_non_inondes}")
-            
-            # Affichage des informations supplémentaires en bas de la carte
-            nearest_city = "À déterminer"  # Remplacez par l'implémentation de recherche de ville si disponible
-            st.write(f"**Système de projection** : EPSG 32630 (UTM Zone 30N)")
-            st.write(f"**Date et heure** : {now.strftime('%Y-%m-%d %H:%M:%S')}")
-            st.write(f"**Ville la plus proche** : {nearest_city}")
+            st.write(f"**Date :** {now.strftime('%Y-%m-%d')}")
+            st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
+            st.write(f"**Système de projection :** EPSG:32630")
 
-        # Enregistrement des données pour analyse future
-        if st.button("Enregistrer les données d'analyse"):
-            fichier_analyse = "analyse_inondation.csv"
-            df_analyse = pd.DataFrame({
-                "Surface inondée (ha)": [surface_bleue],
-                "Volume d'eau (m³)": [volume_eau],
-                "Bâtiments inondés": [batiments_inondes],
-                "Bâtiments non inondés": [batiments_non_inondes],
-                "Niveau d'eau (m)": [st.session_state.flood_data['niveau_inondation']],
-                "Date et heure": [now.strftime('%Y-%m-%d %H:%M:%S')],
-                "Ville la plus proche": [nearest_city]
-            })
-
-            df_analyse.to_csv(fichier_analyse, index=False)
-            with open(fichier_analyse, "rb") as fichier:
-                st.download_button(
-                    label="Télécharger les données d'analyse",
-                    data=fichier,
-                    file_name=fichier_analyse,
-                    mime="text/csv"
-                )
-
-# Si aucune donnée n'est disponible
-else:
-    st.warning("Veuillez d'abord sélectionner un site ou téléverser un fichier pour démarrer l'analyse.")
-
-
-        
+# Fin de l'application
