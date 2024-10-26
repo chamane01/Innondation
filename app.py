@@ -160,7 +160,7 @@ if df is not None:
 
             # Affichage des résultats sous la carte
             st.markdown("## Résultats")
-            st.write(f"**Surfaces innondées :** {surface_bleue:.2f} hectares")  # Mise à jour
+            st.write(f"**Surface innondée :** {surface_bleue:.2f} hectares")  # Mise à jour
             st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")  # Mise à jour
             st.write(f"**Niveau d'eau :** {st.session_state.flood_data['niveau_inondation']} m")
             st.write(f"**Date :** {now.strftime('%Y-%m-%d')}")
