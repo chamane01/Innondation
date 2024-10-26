@@ -111,9 +111,13 @@ if df is not None:
             st.session_state.flood_data['surface_bleu'] = surface_bleue
             st.session_state.flood_data['volume_eau'] = volume_eau
 
+            # Initialiser les variables pour le nombre de bâtiments
+            nombre_batiments_inondes = 0
+            nombre_batiments_non_inondes = 0
+
             # Charger le shapefile sans entrée utilisateur
             try:
-                batiments_gdf = gpd.read_file(BATSHP.shx)
+                batiments_gdf = gpd.read_file(shapefile_path)
 
                 # Vérifier si les bâtiments sont bien des polygones
                 if not batiments_gdf.geom_type.isin(['Polygon', 'MultiPolygon']).all():
@@ -151,16 +155,11 @@ if df is not None:
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
 
             # Tracé des hachures pour la zone inondée
-            ax.contourf(grid_X, grid_Y, grid_Z, 
-                        levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
-                        colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
+            ax.contourf(grid_X, grid_Y, grid_Z, levels=[0, st.session_state.flood_data['niveau_inondation']], colors='blue', alpha=0.5)
 
-            # Afficher les bâtiments
-            if 'batiments_gdf' in locals():
-                # Bâtiments dans la zone inondée en rouge
-                batiments_gdf[batiments_gdf['inondation']].plot(ax=ax, color='red', alpha=0.5, edgecolor='k', label='Bâtiments inondés')
-                # Bâtiments hors de la zone inondée en vert
-                batiments_gdf[~batiments_gdf['inondation']].plot(ax=ax, color='green', alpha=0.5, edgecolor='k', label='Bâtiments non inondés')
+            # Tracer les bâtiments inondés et non inondés
+            batiments_gdf[batiments_gdf['inondation']].plot(ax=ax, color='orange', edgecolor='k', label='Bâtiments inondés')
+            batiments_gdf[~batiments_gdf['inondation']].plot(ax=ax, color='lightgrey', edgecolor='k', label='Bâtiments non inondés')
 
             # Légendes et titres
             ax.set_title("Carte des zones inondées avec bâtiments")
