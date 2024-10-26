@@ -8,6 +8,8 @@ from shapely.geometry import Polygon
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
+import matplotlib.patches as mpatches
+import matplotlib.image as mpimg
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -125,6 +127,23 @@ if df is not None:
                         levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
                         colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
 
+            # Ajouter la légende
+            legend_elements = [mpatches.Patch(color='#007FFF', label='Zone inondée'),
+                               mpatches.Patch(color='red', label='Contour du niveau d\'inondation')]
+            ax.legend(handles=legend_elements, loc='lower left')
+
+            # Ajouter la flèche nord
+            ax.annotate('N', xy=(0.5, 1.05), xycoords='axes fraction', fontsize=14, ha='center')
+
+            # Ajouter l'échelle
+            scale_length = 0.1  # Longueur de l'échelle en unités d'axes
+            ax.plot([0.05, 0.05 + scale_length], [0.05, 0.05], color='black', lw=3)  # Échelle
+            ax.text(0.05 + scale_length / 2, 0.04, f'{scale_length:.1f} unités', ha='center')
+
+            # Ajouter le logo en haut à droite
+            logo = mpimg.imread("logo.png")
+            ax.imshow(logo, aspect='auto', extent=(X_max - 1, X_max, Y_max - 1, Y_max))  # Ajuste les coordonnées pour placer le logo
+
             # Affichage de la première carte
             st.pyplot(fig)
 
@@ -143,14 +162,6 @@ if df is not None:
             dxf_file = "contours_inondation.dxf"
             doc.saveas(dxf_file)
 
-            # Proposer le téléchargement de la carte
-            # Enregistrer la figure en tant qu'image PNG
-            carte_file = "carte_inondation.png"
-            fig.savefig(carte_file)
-
-            with open(carte_file, "rb") as carte:
-                st.download_button(label="Télécharger la carte", data=carte, file_name=carte_file, mime="image/png")
-
             # Proposer le téléchargement du fichier DXF
             with open(dxf_file, "rb") as dxf:
                 st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
@@ -158,13 +169,9 @@ if df is not None:
             # Informations supplémentaires
             now = datetime.now()
 
-            # Affichage des résultats sous la carte
-            st.markdown("## Résultats")
-            st.write(f"**Surface occupée par la couleur bleue :** {surface_bleue:.2f} hectares")  # Mise à jour
-            st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")  # Mise à jour
-            st.write(f"**Niveau d'eau :** {st.session_state.flood_data['niveau_inondation']} m")
-            st.write(f"**Date :** {now.strftime('%Y-%m-%d')}")
-            st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
-            st.write(f"**Système de projection :** EPSG:32630")
-
-# Fin de l'application
+            # Affichage des résultats
+            st.markdown(f"### Résultats")
+            st.write(f"Surface occupée par la zone inondée : {surface_bleue:.2f} hectares")
+            st.write(f"Volume d'eau dans la zone inondée : {volume_eau:.2f} m³")
+            st.write(f"Niveau d'inondation : {st.session_state.flood_data['niveau_inondation']:.2f} m")
+            st.write(f"Date et heure : {now.strftime('%Y-%m-%d %H:%M:%S')}")
