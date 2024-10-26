@@ -7,9 +7,17 @@ from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
-from datetime import datetime
 
-# Modifier le titre de l'application
+# Streamlit - Titre de l'application avec deux logos centrés
+col1, col2, col3 = st.columns([1, 1, 1])
+
+with col1:
+    st.image("POPOPO.jpg", width=150)
+with col2:
+    st.image("logo.png", width=150)
+with col3:
+    st.write("")  # Cette colonne est laissée vide pour centrer les logos
+
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
 
 # Initialiser session_state pour stocker les données d'inondation
@@ -81,18 +89,18 @@ if df is not None:
         grid_X, grid_Y = np.mgrid[X_min:X_max:resolution*1j, Y_min:Y_max:resolution*1j]
         grid_Z = griddata((df['X'], df['Y']), df['Z'], (grid_X, grid_Y), method=interpolation_method)
 
-        # Étape 7 : Calcul de la surface inondée par la couleur bleue
-        def calculer_surface_bleue(niveau_inondation):
-            contours_bleus = []
+        # Étape 7 : Calcul de la surface inondée
+        def calculer_surface(niveau_inondation):
+            contours = []
             for x in range(grid_X.shape[0]):
                 for y in range(grid_Y.shape[1]):
                     if grid_Z[x, y] <= niveau_inondation:
-                        contours_bleus.append((grid_X[x, y], grid_Y[x, y]))
+                        contours.append((grid_X[x, y], grid_Y[x, y]))
 
-            # Convertir les contours bleus en un polygone
-            if contours_bleus:
-                polygon_bleu = Polygon(contours_bleus)
-                return polygon_bleu, polygon_bleu.area / 10000  # Retourne le polygone et la surface en hectares
+            # Convertir les contours en un polygone
+            if contours:
+                polygon = Polygon(contours)
+                return polygon, polygon.area / 10000  # Retourne le polygone et la surface en hectares
             return None, 0.0
 
         # Étape 8 : Calcul du volume d'eau
@@ -102,7 +110,7 @@ if df is not None:
 
         if st.button("Afficher la carte d'inondation"):
             # Étape 9 : Calcul de la surface et volume
-            polygon_bleu, surface_inondee = calculer_surface_bleue(st.session_state.flood_data['niveau_inondation'])
+            polygon_inonde, surface_inondee = calculer_surface(st.session_state.flood_data['niveau_inondation'])
             volume_eau = calculer_volume(surface_inondee)
 
             # Stocker les résultats dans session_state
@@ -117,7 +125,7 @@ if df is not None:
             ax.set_ylim(Y_min, Y_max)
             ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
 
-            # Tracer le contour du niveau d'inondation
+            # Tracer le contour du niveau d'inondation en rouge
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
 
@@ -126,18 +134,28 @@ if df is not None:
                         levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
                         colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
 
-            # Affichage des informations supplémentaires à gauche
-            info_text = (f"Projection : EPSG:32630\n"
-                          f"Date : {datetime.now().strftime('%Y-%m-%d')}\n"
-                          f"Heure : {datetime.now().strftime('%H:%M:%S')}\n"
-                          f"Surface inondée : {surface_inondee:.2f} hectares\n"
-                          f"Volume d'eau : {volume_eau:.2f} m³")
-            ax.text(0.02, 0.02, info_text, 
-                    transform=ax.transAxes, fontsize=10, verticalalignment='bottom', 
-                    color='black', bbox=dict(facecolor='white', alpha=0.5))
-
             # Affichage de la première carte
             st.pyplot(fig)
+
+            # Affichage de la deuxième carte 2D avec masque bleu transparent uniquement
+            fig2, ax2 = plt.subplots(figsize=(8, 6))
+
+            # Tracé du contour et du masque sans basemap
+            ax2.set_xlim(X_min, X_max)
+            ax2.set_ylim(Y_min, Y_max)
+            ax2.contourf(grid_X, grid_Y, grid_Z, 
+                         levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
+                         colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
+            ax2.set_aspect('equal')  # Pour afficher en échelle égale
+
+            # Calculer la surface occupée par la couleur bleue
+            blue_area = np.sum((grid_Z <= st.session_state.flood_data['niveau_inondation'])) * (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000  # Conversion en hectares
+
+            # Affichage de la surface occupée par la couleur bleue
+            st.write(f"**Surface occupée par la couleur bleue :** {blue_area:.2f} hectares")
+
+            # Affichage de la deuxième carte
+            st.pyplot(fig2)
 
             # Création du fichier DXF avec contours
             doc = ezdxf.new(dxfversion='R2010')
@@ -157,3 +175,8 @@ if df is not None:
             # Proposer le téléchargement du fichier DXF
             with open(dxf_file, "rb") as dxf:
                 st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
+
+            # Affichage des résultats à droite de la carte
+            st.sidebar.markdown("## Résultats")
+            st.sidebar.write(f"**Surface inondée :** {surface_inondee:.2f} hectares")
+            st.sidebar.write(f"**Volume d'eau :** {volume_eau:.2f} m³")
