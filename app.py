@@ -43,7 +43,7 @@ option_site = st.selectbox(
 uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
 
 # Champ pour le chemin du fichier shapefile
-shapefile_path = st.text_input("Chemin du fichier shapefile (ex : 'batiments.shp')")
+shapefile_path = st.text_input("Chemin du fichier shapefile ('BATSHP.shx)")
 
 # Fonction pour charger le fichier (identique pour les fichiers prédéfinis et téléversés)
 def charger_fichier(fichier, is_uploaded=False):
