@@ -174,21 +174,19 @@ if df is not None:
             st.write(f"**Surface occupée par la couleur bleue :** {surface_bleue:.2f} hectares")
             st.write(f"**Volume d'eau (m³)** : {volume_eau:.2f} m³")
             st.write(f"**Niveau d'eau :** {st.session_state.flood_data['niveau_inondation']} m")
+                        # Afficher les résultats supplémentaires
+            st.write(f"**Volume d'eau (m³)** : {volume_eau:.2f} m³")
+            st.write(f"**Nombre de bâtiments inondés** : {batiments_inondes}")
+            st.write(f"**Nombre de bâtiments non inondés** : {batiments_non_inondes}")
+            
+            # Affichage des informations supplémentaires en bas de la carte
+            nearest_city = "À déterminer"  # Remplacez par l'implémentation de recherche de ville si disponible
+            st.write(f"**Système de projection** : EPSG 32630 (UTM Zone 30N)")
+            st.write(f"**Date et heure** : {now.strftime('%Y-%m-%d %H:%M:%S')}")
+            st.write(f"**Ville la plus proche** : {nearest_city}")
 
-            # Ajout de l'analyse d'occupation des bâtiments
-            batiments_inondes = np.sum(df['Z'] <= st.session_state.flood_data['niveau_inondation'])
-            batiments_non_inondes = np.sum(df['Z'] > st.session_state.flood_data['niveau_inondation'])
-
-            st.write(f"**Nombre de bâtiments inondés :** {batiments_inondes}")
-            st.write(f"**Nombre de bâtiments non inondés :** {batiments_non_inondes}")
-
-            # Informations supplémentaires (date, heure, etc.)
-            now = datetime.now()
-            st.write(f"**Date :** {now.strftime('%Y-%m-%d')}")
-            st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
-            st.write(f"**Système de projection :** EPSG:32630")
-
-            # Sauvegarde des données dans un fichier CSV pour l'analyse
+        # Enregistrement des données pour analyse future
+        if st.button("Enregistrer les données d'analyse"):
             fichier_analyse = "analyse_inondation.csv"
             df_analyse = pd.DataFrame({
                 "Surface inondée (ha)": [surface_bleue],
@@ -196,12 +194,11 @@ if df is not None:
                 "Bâtiments inondés": [batiments_inondes],
                 "Bâtiments non inondés": [batiments_non_inondes],
                 "Niveau d'eau (m)": [st.session_state.flood_data['niveau_inondation']],
-                "Date et heure": [now.strftime('%Y-%m-%d %H:%M:%S')]
+                "Date et heure": [now.strftime('%Y-%m-%d %H:%M:%S')],
+                "Ville la plus proche": [nearest_city]
             })
 
             df_analyse.to_csv(fichier_analyse, index=False)
-
-            # Téléchargement du fichier d'analyse
             with open(fichier_analyse, "rb") as fichier:
                 st.download_button(
                     label="Télécharger les données d'analyse",
@@ -210,3 +207,9 @@ if df is not None:
                     mime="text/csv"
                 )
 
+# Si aucune donnée n'est disponible
+else:
+    st.warning("Veuillez d'abord sélectionner un site ou téléverser un fichier pour démarrer l'analyse.")
+
+
+        
