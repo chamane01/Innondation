@@ -4,12 +4,10 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
-from shapely.geometry import Polygon, Point
+from shapely.geometry import Polygon
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
-import geopandas as gpd
-from shapely.geometry import box
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -127,18 +125,6 @@ if df is not None:
                         levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
                         colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
 
-            # Charger les bâtiments d'OpenStreetMap
-            batiments_gdf = gpd.read_file("batiments.shp")  # Remplacez par le chemin du fichier de bâtiments
-            inondation_polygon = Polygon(zip(grid_X.flatten(), grid_Y.flatten()))
-
-            # Filtrer les bâtiments en fonction de leur emplacement par rapport à la zone inondée
-            batiments_inonde = batiments_gdf[batiments_gdf.geometry.apply(lambda geom: geom.intersects(inondation_polygon))]
-            batiments_non_inonde = batiments_gdf[~batiments_gdf.geometry.apply(lambda geom: geom.intersects(inondation_polygon))]
-
-            # Affichage des bâtiments inondés en rouge et non inondés en blanc
-            batiments_inonde.plot(ax=ax, color="red", edgecolor="black")
-            batiments_non_inonde.plot(ax=ax, color="white", edgecolor="black")
-
             # Affichage de la première carte
             st.pyplot(fig)
 
@@ -169,13 +155,16 @@ if df is not None:
             with open(dxf_file, "rb") as dxf:
                 st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
 
-            # Afficher les informations de la carte
-            st.write(f"Surface occupée (bleu) : {surface_bleue:.2f} hectares")
-            st.write(f"Volume d'eau : {volume_eau:.2f} m³")
-            st.write("Système de projection : UTM 30N (EPSG 32630)")
-            st.write("Date et heure : ", datetime.now().strftime("%Y-%m-%d %H:%M:%S"))
+            # Informations supplémentaires
+            now = datetime.now()
 
-            # Localisation OSM du site (pour l'exemple, AYAME)
-            nearest_city = "AYAME"  # Ce serait mieux d'utiliser une fonction pour détecter automatiquement
-            st.write(f"Emplacement le plus proche : {nearest_city}")
+            # Affichage des résultats sous la carte
+            st.markdown("## Résultats")
+            st.write(f"**Surface occupée par la couleur bleue :** {surface_bleue:.2f} hectares")  # Mise à jour
+            st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")  # Mise à jour
+            st.write(f"**Niveau d'eau :** {st.session_state.flood_data['niveau_inondation']} m")
+            st.write(f"**Date :** {now.strftime('%Y-%m-%d')}")
+            st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
+            st.write(f"**Système de projection :** EPSG:32630")
 
+# Fin de l'application
