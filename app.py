@@ -134,6 +134,10 @@ if df is not None:
                         levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
                         colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
 
+            # Ajouter les contours des zones bleues
+            contours_zone_bleue = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='blue', linewidths=1)
+            ax.clabel(contours_zone_bleue, inline=True, fontsize=10, fmt='%1.1f m')
+
             # Affichage de la première carte
             st.pyplot(fig)
 
@@ -172,8 +176,18 @@ if df is not None:
 
             # Affichage des résultats à droite de la carte
             col1, col2 = st.columns([3, 1])  # Créer deux colonnes
-            with col2:
-                st.write(f"**Surface inondée :** {st.session_state.flood_data['surface_inondee']:.2f} hectares")
-                st.write(f"**Volume d'eau :** {st.session_state.flood_data['volume_eau']:.2f} m³")
-        else:
-            st.warning("Cliquez sur 'Afficher la carte d'inondation' pour visualiser la carte.")
+
+            with col1:
+                st.subheader("Résultats")
+                st.write(f"Surface inondée : {surface_inondee:.2f} hectares")
+                st.write(f"Volume d'eau : {volume_eau:.2f} m³")
+
+            # Réinitialiser les données si l'utilisateur le souhaite
+            if st.button("Réinitialiser"):
+                st.session_state.flood_data = {
+                    'surface_inondee': None,
+                    'volume_eau': None,
+                    'niveau_inondation': 0.0
+                }
+
+# Fin du script
