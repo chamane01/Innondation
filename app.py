@@ -9,16 +9,7 @@ import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
 
-# Streamlit - Titre de l'application avec deux logos centrés
-col1, col2, col3 = st.columns([1, 1, 1])
-
-with col1:
-    st.image("POPOPO.jpg", width=150)
-with col2:
-    st.image("logo.png", width=150)
-with col3:
-    st.write("")  # Cette colonne est laissée vide pour centrer les logos
-
+# Modifier le titre de l'application
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
 
 # Initialiser session_state pour stocker les données d'inondation
@@ -136,25 +127,17 @@ if df is not None:
                         colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
 
             # Affichage des informations supplémentaires
-            ax.text(0.02, 0.98, f"Projection : EPSG:32630\nDate : {datetime.now().strftime('%Y-%m-%d')}\nHeure : {datetime.now().strftime('%H:%M:%S')}\nSurface inondée : {surface_inondee:.2f} hectares\nVolume d'eau : {volume_eau:.2f} m³", 
-                    transform=ax.transAxes, fontsize=10, verticalalignment='top', color='black', bbox=dict(facecolor='white', alpha=0.5))
+            info_text = (f"Projection : EPSG:32630\n"
+                          f"Date : {datetime.now().strftime('%Y-%m-%d')}\n"
+                          f"Heure : {datetime.now().strftime('%H:%M:%S')}\n"
+                          f"Surface inondée : {surface_inondee:.2f} hectares\n"
+                          f"Volume d'eau : {volume_eau:.2f} m³")
+            ax.text(0.02, 0.02, info_text, 
+                    transform=ax.transAxes, fontsize=10, verticalalignment='bottom', 
+                    color='black', bbox=dict(facecolor='white', alpha=0.5))
 
             # Affichage de la première carte
             st.pyplot(fig)
-
-            # Affichage de la deuxième carte 2D avec masque bleu transparent uniquement
-            fig2, ax2 = plt.subplots(figsize=(8, 6))
-
-            # Tracé du contour et du masque sans basemap
-            ax2.set_xlim(X_min, X_max)
-            ax2.set_ylim(Y_min, Y_max)
-            ax2.contourf(grid_X, grid_Y, grid_Z, 
-                         levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
-                         colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
-            ax2.set_aspect('equal')  # Pour afficher en échelle égale
-
-            # Affichage de la deuxième carte
-            st.pyplot(fig2)
 
             # Création du fichier DXF avec contours
             doc = ezdxf.new(dxfversion='R2010')
@@ -174,5 +157,3 @@ if df is not None:
             # Proposer le téléchargement du fichier DXF
             with open(dxf_file, "rb") as dxf:
                 st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
-        else:
-            st.warning("Clique
