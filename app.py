@@ -81,18 +81,18 @@ if df is not None:
         grid_X, grid_Y = np.mgrid[X_min:X_max:resolution*1j, Y_min:Y_max:resolution*1j]
         grid_Z = griddata((df['X'], df['Y']), df['Z'], (grid_X, grid_Y), method=interpolation_method)
 
-        # Étape 7 : Calcul de la surface inondée
-        def calculer_surface(niveau_inondation):
-            contours = []
+        # Étape 7 : Calcul de la surface inondée par la couleur bleue
+        def calculer_surface_bleue(niveau_inondation):
+            contours_bleus = []
             for x in range(grid_X.shape[0]):
                 for y in range(grid_Y.shape[1]):
                     if grid_Z[x, y] <= niveau_inondation:
-                        contours.append((grid_X[x, y], grid_Y[x, y]))
+                        contours_bleus.append((grid_X[x, y], grid_Y[x, y]))
 
-            # Convertir les contours en un polygone
-            if contours:
-                polygon = Polygon(contours)
-                return polygon, polygon.area / 10000  # Retourne le polygone et la surface en hectares
+            # Convertir les contours bleus en un polygone
+            if contours_bleus:
+                polygon_bleu = Polygon(contours_bleus)
+                return polygon_bleu, polygon_bleu.area / 10000  # Retourne le polygone et la surface en hectares
             return None, 0.0
 
         # Étape 8 : Calcul du volume d'eau
@@ -102,7 +102,7 @@ if df is not None:
 
         if st.button("Afficher la carte d'inondation"):
             # Étape 9 : Calcul de la surface et volume
-            polygon_inonde, surface_inondee = calculer_surface(st.session_state.flood_data['niveau_inondation'])
+            polygon_bleu, surface_inondee = calculer_surface_bleue(st.session_state.flood_data['niveau_inondation'])
             volume_eau = calculer_volume(surface_inondee)
 
             # Stocker les résultats dans session_state
@@ -126,7 +126,7 @@ if df is not None:
                         levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
                         colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
 
-            # Affichage des informations supplémentaires
+            # Affichage des informations supplémentaires à gauche
             info_text = (f"Projection : EPSG:32630\n"
                           f"Date : {datetime.now().strftime('%Y-%m-%d')}\n"
                           f"Heure : {datetime.now().strftime('%H:%M:%S')}\n"
