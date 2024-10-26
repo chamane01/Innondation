@@ -23,7 +23,7 @@ st.title("Carte des zones inondées avec niveaux d'eau et surface")
 # Initialiser session_state pour stocker les données d'inondation
 if 'flood_data' not in st.session_state:
     st.session_state.flood_data = {
-        'surface_inondee': None,
+        'surface_bleu': None,  # Remplace 'surface_inondee' par 'surface_bleu'
         'volume_eau': None,
         'niveau_inondation': 0.0
     }
@@ -89,32 +89,22 @@ if df is not None:
         grid_X, grid_Y = np.mgrid[X_min:X_max:resolution*1j, Y_min:Y_max:resolution*1j]
         grid_Z = griddata((df['X'], df['Y']), df['Z'], (grid_X, grid_Y), method=interpolation_method)
 
-        # Étape 7 : Calcul de la surface inondée
-        def calculer_surface(niveau_inondation):
-            contours = []
-            for x in range(grid_X.shape[0]):
-                for y in range(grid_Y.shape[1]):
-                    if grid_Z[x, y] <= niveau_inondation:
-                        contours.append((grid_X[x, y], grid_Y[x, y]))
-
-            # Convertir les contours en un polygone
-            if contours:
-                polygon = Polygon(contours)
-                return polygon, polygon.area / 10000  # Retourne le polygone et la surface en hectares
-            return None, 0.0
+        # Étape 7 : Calcul de la surface occupée par la couleur bleue
+        def calculer_surface_bleue(niveau_inondation):
+            return np.sum((grid_Z <= niveau_inondation)) * (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000  # Conversion en hectares
 
         # Étape 8 : Calcul du volume d'eau
-        def calculer_volume(surface_inondee):
-            volume = surface_inondee * st.session_state.flood_data['niveau_inondation'] * 10000  # Conversion en m³ (1 hectare = 10,000 m²)
+        def calculer_volume(surface_bleue):
+            volume = surface_bleue * st.session_state.flood_data['niveau_inondation'] * 10000  # Conversion en m³ (1 hectare = 10,000 m²)
             return volume
 
         if st.button("Afficher la carte d'inondation"):
-            # Étape 9 : Calcul de la surface et volume
-            polygon_inonde, surface_inondee = calculer_surface(st.session_state.flood_data['niveau_inondation'])
-            volume_eau = calculer_volume(surface_inondee)
+            # Étape 9 : Calcul de la surface bleue et volume
+            surface_bleue = calculer_surface_bleue(st.session_state.flood_data['niveau_inondation'])
+            volume_eau = calculer_volume(surface_bleue)
 
             # Stocker les résultats dans session_state
-            st.session_state.flood_data['surface_inondee'] = surface_inondee
+            st.session_state.flood_data['surface_bleu'] = surface_bleue  # Met à jour la surface occupée par la couleur bleue
             st.session_state.flood_data['volume_eau'] = volume_eau
 
             # Tracer la première carte avec OpenStreetMap et contours
@@ -148,11 +138,8 @@ if df is not None:
                          colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
             ax2.set_aspect('equal')  # Pour afficher en échelle égale
 
-            # Calculer la surface occupée par la couleur bleue
-            blue_area = np.sum((grid_Z <= st.session_state.flood_data['niveau_inondation'])) * (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000  # Conversion en hectares
-
             # Affichage de la surface occupée par la couleur bleue
-            st.write(f"**Surface occupée par la couleur bleue :** {blue_area:.2f} hectares")
+            st.write(f"**Surface occupée par la couleur bleue :** {surface_bleue:.2f} hectares")
 
             # Affichage de la deuxième carte
             st.pyplot(fig2)
@@ -176,7 +163,12 @@ if df is not None:
             with open(dxf_file, "rb") as dxf:
                 st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
 
-            # Affichage des résultats à droite de la carte
+            # Affichage des résultats à gauche de la carte
             st.sidebar.markdown("## Résultats")
-            st.sidebar.write(f"**Surface inondée :** {surface_inondee:.2f} hectares")
-            st.sidebar.write(f"**Volume d'eau :** {volume_eau:.2f} m³")
+            st.sidebar.write(f"**Surface occupée par la couleur bleue :** {surface_bleue:.2f} hectares")  # Mise à jour
+            st.sidebar.write(f"**Volume d'eau :** {volume_eau:.2f} m³")  # Mise à jour
+            st.sidebar.write(f"**Niveau d'eau :** {st.session_state.flood_data['niveau_inondation']} m")
+            st.sidebar.write("Données fournies :")
+            st.sidebar.dataframe(df)
+
+# Fin de l'application
