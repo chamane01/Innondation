@@ -7,6 +7,7 @@ from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
+from datetime import datetime
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -125,7 +126,7 @@ if df is not None:
             ax.set_ylim(Y_min, Y_max)
             ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
 
-            # Tracer le contour du niveau d'inondation en rouge
+            # Tracer le contour du niveau d'inondation
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
 
@@ -133,6 +134,10 @@ if df is not None:
             ax.contourf(grid_X, grid_Y, grid_Z, 
                         levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
                         colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
+
+            # Affichage des informations supplémentaires
+            ax.text(0.02, 0.98, f"Projection : EPSG:32630\nDate : {datetime.now().strftime('%Y-%m-%d')}\nHeure : {datetime.now().strftime('%H:%M:%S')}\nSurface inondée : {surface_inondee:.2f} hectares\nVolume d'eau : {volume_eau:.2f} m³", 
+                    transform=ax.transAxes, fontsize=10, verticalalignment='top', color='black', bbox=dict(facecolor='white', alpha=0.5))
 
             # Affichage de la première carte
             st.pyplot(fig)
@@ -147,12 +152,6 @@ if df is not None:
                          levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
                          colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
             ax2.set_aspect('equal')  # Pour afficher en échelle égale
-
-            # Calculer la surface occupée par la couleur bleue
-            blue_area = np.sum((grid_Z <= st.session_state.flood_data['niveau_inondation'])) * (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000  # Conversion en hectares
-
-            # Affichage de la surface occupée par la couleur bleue
-            st.write(f"**Surface occupée par la couleur bleue :** {blue_area:.2f} hectares")
 
             # Affichage de la deuxième carte
             st.pyplot(fig2)
@@ -175,8 +174,5 @@ if df is not None:
             # Proposer le téléchargement du fichier DXF
             with open(dxf_file, "rb") as dxf:
                 st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
-
-            # Affichage des résultats à droite de la carte
-            st.sidebar.markdown("## Résultats")
-            st.sidebar.write(f"**Surface inondée :** {surface_inondee:.2f} hectares")
-            st.sidebar.write(f"**Volume d'eau :** {volume_eau:.2f} m³")
+        else:
+            st.warning("Clique
