@@ -19,7 +19,7 @@ with col2:
 with col3:
     st.write("")  # Cette colonne est laissée vide pour centrer les logos
 
-st.title("Carte des zones inondées avec niveaux d'eau et surface")
+st.title("Carte des Zones Inondées avec Niveaux d'Eau et Surface")
 
 # Initialiser session_state pour stocker les données d'inondation
 if 'flood_data' not in st.session_state:
@@ -30,7 +30,7 @@ if 'flood_data' not in st.session_state:
     }
 
 # Étape 1 : Sélectionner un site ou téléverser un fichier
-st.markdown("## Sélectionner un site ou téléverser un fichier")
+st.markdown("## Sélectionner un Site ou Téléverser un Fichier")
 
 # Ajouter une option pour sélectionner parmi des fichiers CSV existants (AYAME 1 et AYAME 2)
 option_site = st.selectbox(
@@ -99,7 +99,7 @@ if df is not None:
             volume = surface_bleue * st.session_state.flood_data['niveau_inondation'] * 10000  # Conversion en m³ (1 hectare = 10,000 m²)
             return volume
 
-        if st.button("Afficher la carte d'inondation"):
+        if st.button("Afficher la Carte d'Inondation"):
             # Étape 9 : Calcul de la surface bleue et volume
             surface_bleue = calculer_surface_bleue(st.session_state.flood_data['niveau_inondation'])
             volume_eau = calculer_volume(surface_bleue)
@@ -109,7 +109,7 @@ if df is not None:
             st.session_state.flood_data['volume_eau'] = volume_eau
 
             # Tracer la première carte avec OpenStreetMap et contours
-            fig, ax = plt.subplots(figsize=(8, 6))
+            fig, ax = plt.subplots(figsize=(10, 8))
 
             # Tracer le fond OpenStreetMap
             ax.set_xlim(X_min, X_max)
@@ -117,13 +117,19 @@ if df is not None:
             ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
 
             # Tracer le contour du niveau d'inondation en rouge
-            contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
-            ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
+            contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=2)
+            ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m', color='black')
 
             # Tracé des hachures pour la zone inondée
             ax.contourf(grid_X, grid_Y, grid_Z, 
                         levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
                         colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
+
+            # Annotation de la carte
+            ax.set_title("Carte d'Inondation", fontsize=16, fontweight='bold')
+            ax.set_xlabel("Coordonnée X (m)", fontsize=12)
+            ax.set_ylabel("Coordonnée Y (m)", fontsize=12)
+            ax.legend(["Niveau d'Inondation", "Zone Inondée"], loc='upper right')
 
             # Affichage de la première carte
             st.pyplot(fig)
@@ -149,22 +155,23 @@ if df is not None:
             fig.savefig(carte_file)
 
             with open(carte_file, "rb") as carte:
-                st.download_button(label="Télécharger la carte", data=carte, file_name=carte_file, mime="image/png")
+                st.download_button(label="Télécharger la Carte", data=carte, file_name=carte_file, mime="image/png")
 
             # Proposer le téléchargement du fichier DXF
             with open(dxf_file, "rb") as dxf:
-                st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
+                st.download_button(label="Télécharger le Fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
 
             # Informations supplémentaires
             now = datetime.now()
 
             # Affichage des résultats sous la carte
             st.markdown("## Résultats")
-            st.write(f"**Surface occupée par la couleur bleue :** {surface_bleue:.2f} hectares")  # Mise à jour
-            st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")  # Mise à jour
-            st.write(f"**Niveau d'eau :** {st.session_state.flood_data['niveau_inondation']} m")
-            st.write(f"**Date :** {now.strftime('%Y-%m-%d')}")
-            st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
-            st.write(f"**Système de projection :** EPSG:32630")
+            st.write(f"**Surface occupée par la Couleur Bleue :** {surface_bleue:.2f} hectares")  # Mise à jour
+            st.write(f"**Volume d'Eau :** {volume_eau:.2f} m³")  # Mise à jour
+            st.write(f"**Niveau d'Eau :** {st.session_state.flood_data['niveau_inondation']} mètres")  # Mise à jour
+            st.write(f"**Date et Heure de Traitement :** {now.strftime('%Y-%m-%d %H:%M:%S')}")  # Date et heure de traitement
+            # Supposons que vous ayez une fonction pour détecter la ville la plus proche
+            st.write(f"**Ville la Plus Proche :** Nom de la ville (à définir par fonction)")
 
-# Fin de l'application
+# Ajouter un espacement en bas de l'application
+st.markdown("<br><br>", unsafe_allow_html=True)
