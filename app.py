@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
+from shapely.geometry import Polygon
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
 
@@ -176,4 +177,6 @@ if df is not None:
                 st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
 
             # Affichage des résultats à droite de la carte
-            col1, col2 =
+            st.sidebar.markdown("## Résultats")
+            st.sidebar.write(f"**Surface inondée :** {surface_inondee:.2f} hectares")
+            st.sidebar.write(f"**Volume d'eau :** {volume_eau:.2f} m³")
