@@ -10,7 +10,7 @@ import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
 
 # Chemin du fichier shapefile
-shapefile_path = 'chemin/vers/votre/fichier_batiments.shp'  # Remplacez ceci par le chemin réel de votre fichier
+shapefile_path = 'BATSHP.shx'  # Remplacez ceci par le chemin réel de votre fichier
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
