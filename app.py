@@ -5,12 +5,9 @@ import numpy as np
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from shapely.geometry import Polygon
-import geopandas as gpd  # Bibliothèque pour manipuler les données géospatiales
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
-
-# Chemin du fichier shapefile
-shapefile_path = 'batiments1.shp'  # Remplacez ceci par le chemin réel de votre fichier
+from datetime import datetime
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -27,7 +24,7 @@ st.title("Carte des zones inondées avec niveaux d'eau et surface")
 # Initialiser session_state pour stocker les données d'inondation
 if 'flood_data' not in st.session_state:
     st.session_state.flood_data = {
-        'surface_bleu': None,
+        'surface_bleu': None,  # Remplace 'surface_inondee' par 'surface_bleu'
         'volume_eau': None,
         'niveau_inondation': 0.0
     }
@@ -108,39 +105,8 @@ if df is not None:
             volume_eau = calculer_volume(surface_bleue)
 
             # Stocker les résultats dans session_state
-            st.session_state.flood_data['surface_bleu'] = surface_bleue
+            st.session_state.flood_data['surface_bleu'] = surface_bleue  # Met à jour la surface occupée par la couleur bleue
             st.session_state.flood_data['volume_eau'] = volume_eau
-
-            # Initialiser les variables pour le nombre de bâtiments
-            nombre_batiments_inondes = 0
-            nombre_batiments_non_inondes = 0
-
-            # Charger le shapefile sans entrée utilisateur
-            try:
-                batiments_gdf = gpd.read_file(shapefile_path)
-
-                # Vérifier si les bâtiments sont bien des polygones
-                if not batiments_gdf.geom_type.isin(['Polygon', 'MultiPolygon']).all():
-                    st.error("Erreur : Les géométries dans le shapefile doivent être des polygones.")
-                else:
-                    # Créer une GeoDataFrame pour les polygones d'inondation
-                    inondation_polygone = Polygon([
-                        (X_min, Y_min),
-                        (X_min, Y_max),
-                        (X_max, Y_max),
-                        (X_max, Y_min)
-                    ])
-                    inondation_gdf = gpd.GeoDataFrame(geometry=[inondation_polygone], crs="EPSG:32630")
-
-                    # Analyse spatiale : déterminer quels bâtiments sont dans la zone inondée
-                    batiments_gdf['inondation'] = batiments_gdf.intersects(inondation_gdf.geometry[0])
-
-                    # Compter le nombre de bâtiments touchés et non touchés
-                    nombre_batiments_inondes = batiments_gdf[batiments_gdf['inondation']].shape[0]
-                    nombre_batiments_non_inondes = batiments_gdf[~batiments_gdf['inondation']].shape[0]
-
-            except Exception as e:
-                st.error(f"Erreur lors du chargement du shapefile : {e}")
 
             # Tracer la première carte avec OpenStreetMap et contours
             fig, ax = plt.subplots(figsize=(8, 6))
@@ -155,31 +121,50 @@ if df is not None:
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
 
             # Tracé des hachures pour la zone inondée
-            ax.contourf(grid_X, grid_Y, grid_Z, levels=[0, st.session_state.flood_data['niveau_inondation']], colors='blue', alpha=0.5)
+            ax.contourf(grid_X, grid_Y, grid_Z, 
+                        levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
+                        colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
 
-            # Tracer les bâtiments inondés et non inondés
-            batiments_gdf[batiments_gdf['inondation']].plot(ax=ax, color='orange', edgecolor='k', label='Bâtiments inondés')
-            batiments_gdf[~batiments_gdf['inondation']].plot(ax=ax, color='lightgrey', edgecolor='k', label='Bâtiments non inondés')
-
-            # Légendes et titres
-            ax.set_title("Carte des zones inondées avec bâtiments")
-            ax.set_xlabel("Longitude")
-            ax.set_ylabel("Latitude")
-            ax.legend()
+            # Affichage de la première carte
             st.pyplot(fig)
 
-            # Afficher les résultats
-            st.markdown(f"**Surface occupée par l'eau (ha) :** {st.session_state.flood_data['surface_bleu']:.2f} ha")
-            st.markdown(f"**Volume d'eau (m³) :** {st.session_state.flood_data['volume_eau']:.2f} m³")
-            st.markdown(f"**Nombre de bâtiments inondés :** {nombre_batiments_inondes}")
-            st.markdown(f"**Nombre de bâtiments non inondés :** {nombre_batiments_non_inondes}")
-
-            # Création d'un fichier DXF pour les contours
-            doc = ezdxf.new()
+            # Création du fichier DXF avec contours
+            doc = ezdxf.new(dxfversion='R2010')
             msp = doc.modelspace()
-            msp.add_lwpolyline(vertices=list(zip(grid_X.flatten(), grid_Y.flatten())), close=True, color=1)
-            doc.saveas("contours_inondation.dxf")
-            st.success("Fichier DXF créé avec succès !")
 
-        else:
-            st.warning("Veuillez saisir les informations nécessaires pour générer la carte.")
+            # Ajouter les contours au DXF
+            for collection in contours_inondation.collections:
+                for path in collection.get_paths():
+                    points = path.vertices
+                    for i in range(len(points)-1):
+                        msp.add_line(points[i], points[i+1])
+
+            # Sauvegarder le fichier DXF
+            dxf_file = "contours_inondation.dxf"
+            doc.saveas(dxf_file)
+
+            # Proposer le téléchargement de la carte
+            # Enregistrer la figure en tant qu'image PNG
+            carte_file = "carte_inondation.png"
+            fig.savefig(carte_file)
+
+            with open(carte_file, "rb") as carte:
+                st.download_button(label="Télécharger la carte", data=carte, file_name=carte_file, mime="image/png")
+
+            # Proposer le téléchargement du fichier DXF
+            with open(dxf_file, "rb") as dxf:
+                st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
+
+            # Informations supplémentaires
+            now = datetime.now()
+
+            # Affichage des résultats sous la carte
+            st.markdown("## Résultats")
+            st.write(f"**Surface innondée :** {surface_bleue:.2f} hectares")  # Mise à jour
+            st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")  # Mise à jour
+            st.write(f"**Niveau d'eau :** {st.session_state.flood_data['niveau_inondation']} m")
+            st.write(f"**Date :** {now.strftime('%Y-%m-%d')}")
+            st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
+            st.write(f"**Système de projection :** EPSG:32630")
+
+# Fin de l'application
