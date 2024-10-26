@@ -11,16 +11,7 @@ from datetime import datetime
 import matplotlib.patches as mpatches
 import matplotlib.image as mpimg
 
-# Streamlit - Titre de l'application avec deux logos centrés
-col1, col2, col3 = st.columns([1, 1, 1])
-
-with col1:
-    st.image("POPOPO.jpg", width=150)
-with col2:
-    st.image("logo.png", width=150)
-with col3:
-    st.write("")  # Cette colonne est laissée vide pour centrer les logos
-
+# Streamlit - Titre de l'application
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
 
 # Initialiser session_state pour stocker les données d'inondation
@@ -139,10 +130,6 @@ if df is not None:
             scale_length = 0.1  # Longueur de l'échelle en unités d'axes
             ax.plot([0.05, 0.05 + scale_length], [0.05, 0.05], color='black', lw=3)  # Échelle
             ax.text(0.05 + scale_length / 2, 0.04, f'{scale_length:.1f} unités', ha='center')
-
-            # Ajouter le logo en haut à droite
-            logo = mpimg.imread("logo.png")
-            ax.imshow(logo, aspect='auto', extent=(X_max - 1, X_max, Y_max - 1, Y_max))  # Ajuste les coordonnées pour placer le logo
 
             # Affichage de la première carte
             st.pyplot(fig)
