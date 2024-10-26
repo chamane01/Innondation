@@ -125,21 +125,7 @@ if df is not None:
                         levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
                         colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
 
-            # Ajout du logo en haut à gauche
-            logo = plt.imread("logo.png")
-            ax.imshow(logo, aspect='auto', extent=[X_min + 0.02, X_min + 0.15, Y_max - 0.1, Y_max], zorder=10)
-
-            # Ajouter une flèche nord
-            ax.annotate('', xy=(X_min + 0.1, Y_max - 0.02), xytext=(X_min + 0.1, Y_max - 0.1),
-                        arrowprops=dict(arrowstyle='->', color='black'), fontsize=12)
-            ax.text(X_min + 0.1, Y_max - 0.11, 'N', fontsize=12, ha='center', va='bottom')
-
-            # Ajouter l'échelle
-            scale_length = 0.1  # Longueur de l'échelle en unités de carte
-            ax.hlines(y=Y_max - 0.15, xmin=X_min + 0.02, xmax=X_min + 0.02 + scale_length, colors='black')
-            ax.text(X_min + 0.02 + scale_length / 2, Y_max - 0.17, '100 m', fontsize=12, ha='center')
-
-            # Affichage de la carte
+            # Affichage de la première carte
             st.pyplot(fig)
 
             # Création du fichier DXF avec contours
@@ -157,24 +143,28 @@ if df is not None:
             dxf_file = "contours_inondation.dxf"
             doc.saveas(dxf_file)
 
+            # Proposer le téléchargement de la carte
+            # Enregistrer la figure en tant qu'image PNG
+            carte_file = "carte_inondation.png"
+            fig.savefig(carte_file)
+
+            with open(carte_file, "rb") as carte:
+                st.download_button(label="Télécharger la carte", data=carte, file_name=carte_file, mime="image/png")
+
             # Proposer le téléchargement du fichier DXF
             with open(dxf_file, "rb") as dxf:
                 st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
 
-            # Afficher les résultats
-            st.sidebar.header("Résultats")
-            st.sidebar.write(f"**Surface occupée par l'eau (en hectares)**: {st.session_state.flood_data['surface_bleu']:.2f} ha")
-            st.sidebar.write(f"**Volume d'eau (en m³)**: {st.session_state.flood_data['volume_eau']:.2f} m³")
+            # Informations supplémentaires
+            now = datetime.now()
 
-            # Afficher date et heure
-            current_time = datetime.now()
-            st.sidebar.write(f"**Date**: {current_time.strftime('%Y-%m-%d')}")
-            st.sidebar.write(f"**Heure**: {current_time.strftime('%H:%M:%S')}")
-            st.sidebar.write(f"**Système de projection**: EPSG:32630")  # Indiquer le système de projection
+            # Affichage des résultats sous la carte
+            st.markdown("## Résultats")
+            st.write(f"**Surface occupée par la couleur bleue :** {surface_bleue:.2f} hectares")  # Mise à jour
+            st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")  # Mise à jour
+            st.write(f"**Niveau d'eau :** {st.session_state.flood_data['niveau_inondation']} m")
+            st.write(f"**Date :** {now.strftime('%Y-%m-%d')}")
+            st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
+            st.write(f"**Système de projection :** EPSG:32630")
 
-            # Ajouter le bouton pour télécharger la carte
-            st.sidebar.download_button(label="Télécharger la carte", data=fig, file_name="carte_inondation.png", mime="image/png")
-
-# Exécuter l'application Streamlit
-if __name__ == "__main__":
-    st.set_page_config(layout="wide")  # Configurer la mise en page de Streamlit
+# Fin de l'application
