@@ -6,10 +6,8 @@ import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
 from shapely.geometry import Polygon
 import contextily as ctx
-import geopandas as gpd  # Importer geopandas pour manipuler les shapefiles
-
-# Spécifiez le chemin du shapefile
-shapefile_path = "chemin/vers/votre_fichier.shp"  # Remplacez ceci par le chemin de votre fichier shapefile
+import ezdxf  # Bibliothèque pour créer des fichiers DXF
+from datetime import datetime
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -26,13 +24,13 @@ st.title("Carte des zones inondées avec niveaux d'eau et surface")
 # Initialiser session_state pour stocker les données d'inondation
 if 'flood_data' not in st.session_state:
     st.session_state.flood_data = {
-        'surface_bleu': None,
+        'surface_bleu': None,  # Remplace 'surface_inondee' par 'surface_bleu'
         'volume_eau': None,
         'niveau_inondation': 0.0
     }
 
-# Étape 1 : Sélectionner un site ou téléverser un fichier
-st.markdown("## Sélectionner un site")
+# Étape 1 : Sélectionner un site ou ouvrir un fichier
+st.markdown("## Sélectionner un site ou ouvrir un fichier")
 
 # Ajouter une option pour sélectionner parmi des fichiers CSV existants (AYAME 1 et AYAME 2)
 option_site = st.selectbox(
@@ -40,13 +38,11 @@ option_site = st.selectbox(
     ("Aucun", "AYAME 1", "AYAME 2")
 )
 
-# Fonction pour charger le fichier CSV ou TXT
+# Fonction pour charger le fichier (identique pour les fichiers prédéfinis)
 def charger_fichier(fichier):
     try:
-        if fichier.name.endswith('.xlsx'):
-            df = pd.read_excel(fichier)
-        elif fichier.name.endswith('.txt'):
-            df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
+        # Chargement du fichier prédéfini (site)
+        df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
         return df
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier : {e}")
@@ -58,10 +54,9 @@ if option_site == "AYAME 1":
 elif option_site == "AYAME 2":
     df = charger_fichier('AYAME2.txt')
 else:
-    df = None
-
-# Chargement du shapefile
-gdf_batiments = gpd.read_file(shapefile_path)
+    # Spécifiez le chemin du shapefile ici
+    shapefile_path = "chemin/vers/votre_fichier.shp"  # Remplacez par le chemin correct de votre shapefile
+    df = charger_fichier(shapefile_path)
 
 # Traitement des données si le fichier est chargé
 if df is not None:
@@ -119,29 +114,46 @@ if df is not None:
                         levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
                         colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
 
-            # Étape 10 : Analyser les bâtiments à partir du shapefile
-            # Créer un GeoDataFrame à partir des points de données
-            points_gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df['X'], df['Y']), crs="EPSG:32630")
-            
-            # Effectuer une intersection pour voir quels bâtiments sont inondés
-            batiments_inondes = gdf_batiments[gdf_batiments.intersects(Polygon([(X_min, Y_min), (X_min, Y_max), (X_max, Y_max), (X_max, Y_min)]))]
-
-            # Compter les bâtiments inondés et non inondés
-            total_batiments = len(gdf_batiments)
-            batiments_inondes_count = len(batiments_inondes)
-            batiments_non_inondes_count = total_batiments - batiments_inondes_count
-
-            # Afficher les bâtiments sur la carte
-            for building in gdf_batiments.geometry:
-                if building.intersects(Polygon([(X_min, Y_min), (X_min, Y_max), (X_max, Y_max), (X_max, Y_min)])):
-                    # Bâtiment inondé
-                    ax.add_patch(plt.Polygon(list(building.exterior.coords), color='red', alpha=0.5))
-                else:
-                    # Bâtiment non inondé
-                    ax.add_patch(plt.Polygon(list(building.exterior.coords), color='white', alpha=0.5))
-
-            st.write(f"Bâtiments inondés : {batiments_inondes_count}")
-            st.write(f"Bâtiments non inondés : {batiments_non_inondes_count}")
-
-            # Afficher le graphique
+            # Affichage de la première carte
             st.pyplot(fig)
+
+            # Création du fichier DXF avec contours
+            doc = ezdxf.new(dxfversion='R2010')
+            msp = doc.modelspace()
+
+            # Ajouter les contours au DXF
+            for collection in contours_inondation.collections:
+                for path in collection.get_paths():
+                    points = path.vertices
+                    for i in range(len(points)-1):
+                        msp.add_line(points[i], points[i+1])
+
+            # Sauvegarder le fichier DXF
+            dxf_file = "contours_inondation.dxf"
+            doc.saveas(dxf_file)
+
+            # Proposer le téléchargement de la carte
+            # Enregistrer la figure en tant qu'image PNG
+            carte_file = "carte_inondation.png"
+            fig.savefig(carte_file)
+
+            with open(carte_file, "rb") as carte:
+                st.download_button(label="Télécharger la carte", data=carte, file_name=carte_file, mime="image/png")
+
+            # Proposer le téléchargement du fichier DXF
+            with open(dxf_file, "rb") as dxf:
+                st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
+
+            # Informations supplémentaires
+            now = datetime.now()
+
+            # Affichage des résultats sous la carte
+            st.markdown("## Résultats")
+            st.write(f"**Surface innondée :** {surface_bleue:.2f} hectares")  # Mise à jour
+            st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")  # Mise à jour
+            st.write(f"**Niveau d'eau :** {st.session_state.flood_data['niveau_inondation']} m")
+            st.write(f"**Date :** {now.strftime('%Y-%m-%d')}")
+            st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
+            st.write(f"**Système de projection :** EPSG:32630")
+
+# Fin de l'application
