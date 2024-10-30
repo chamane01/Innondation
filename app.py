@@ -69,6 +69,22 @@ else:
     st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
     df = None
 
+# Charger et afficher les bâtiments à partir de batiment.dxf
+def charger_batiments_dxf():
+    batiments = []
+    try:
+        doc = ezdxf.readfile("batiment.dxf")
+        for entity in doc.modelspace():
+            if entity.dxftype() == "LWPOLYLINE" or entity.dxftype() == "POLYLINE":
+                points = [(p[0], p[1]) for p in entity.get_points()]
+                batiments.append(Polygon(points))
+        return MultiPolygon(batiments)
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier DXF de bâtiments : {e}")
+        return MultiPolygon()
+
+batiments = charger_batiments_dxf()
+
 # Traitement des données si le fichier est chargé
 if df is not None:
     # Séparateur pour organiser l'affichage
@@ -124,6 +140,13 @@ if df is not None:
             ax.contourf(grid_X, grid_Y, grid_Z, 
                         levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
                         colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
+             # Afficher les bâtiments
+            for poly in batiments:
+                x, y = poly.exterior.xy
+                ax.fill(x, y, color='black', alpha=0.7)
+
+            st.pyplot(fig)
+            
 
             # Affichage de la première carte
             st.pyplot(fig)
