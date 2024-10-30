@@ -163,3 +163,4 @@ if df is not None:
             st.write(f"**Nombre de bâtiments inondés :** {nombre_batiments_inondes}")
             st.write(f"**Date :** {now.strftime('%Y-%m-%d')}")
             st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
+            st.write(f"**Système de projection :** EPSG:32630")
