@@ -103,9 +103,10 @@ if df is not None:
             # Charger les polygones du fichier GeoJSON
             batiments_path = "batiments2.geojson"# Chemin du fichier GeoJSON
             batiments_gdf = gpd.read_file(batiments_path)
-            except Exception as e:
-                st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
-            batiments_gdf = None  # Définir à None si le chargement échoue
+            
+            
+            
+            
             
 
         if st.button("Afficher la carte d'inondation avec les batiments")and batiments_gdf is not None:
