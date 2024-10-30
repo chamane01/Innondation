@@ -76,10 +76,10 @@ def charger_batiments_dxf():
     try:
         doc = ezdxf.readfile("batiment1.dxf")
         for entity in doc.modelspace():
-            if entity.dxftype() == "LWPOLYLINE" or entity.dxftype() == "POLYLINE":
+            if entity.dxftype() in ["LWPOLYLINE", "POLYLINE"]:
                 points = [(p[0], p[1]) for p in entity.get_points()]
                 batiments.append(Polygon(points))
-        return MultiPolygon(batiments)
+        return MultiPolygon(batiments) if batiments else MultiPolygon()  # Return an empty MultiPolygon if no buildings found
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier DXF de bâtiments : {e}")
         return MultiPolygon()
