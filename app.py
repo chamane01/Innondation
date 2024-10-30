@@ -105,10 +105,6 @@ if df is not None:
             batiments_gdf = gpd.read_file(batiments_path)
             
             
-            
-            
-            
-
         if st.button("Afficher la carte d'inondation avec les batiments")and batiments_gdf is not None:
             # Étape 9 : Calcul de la surface bleue et volume
             surface_bleue = calculer_surface_bleue(st.session_state.flood_data['niveau_inondation'])
@@ -136,7 +132,7 @@ if df is not None:
                         colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
             
              # Tracer les polygones du fichier GeoJSON
-            batiments_gdf.to_crs(epsg=32630).plot(ax=ax, facecolor='none', edgecolor='black', linewidth=1)
+            batiments_gdf.to_crs(epsg=32630).plot(ax=ax, facecolor='red', edgecolor='black', linewidth=1)
 
             # Affichage de la première carte
             st.pyplot(fig)
