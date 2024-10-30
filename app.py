@@ -8,6 +8,7 @@ from shapely.geometry import Polygon
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
+import geopandas as gpd 
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -98,8 +99,12 @@ if df is not None:
         def calculer_volume(surface_bleue):
             volume = surface_bleue * st.session_state.flood_data['niveau_inondation'] * 10000  # Conversion en m³ (1 hectare = 10,000 m²)
             return volume
+            
+            # Charger les polygones du fichier GeoJSON
+            batiments_path = "batiments2.geojson"# Chemin du fichier GeoJSON
+            batiments_gdf = gpd.read_file(batiments_path)
 
-        if st.button("Afficher la carte d'inondation"):
+        if st.button("Afficher la carte d'inondation avec les batiments"):
             # Étape 9 : Calcul de la surface bleue et volume
             surface_bleue = calculer_surface_bleue(st.session_state.flood_data['niveau_inondation'])
             volume_eau = calculer_volume(surface_bleue)
@@ -124,6 +129,9 @@ if df is not None:
             ax.contourf(grid_X, grid_Y, grid_Z, 
                         levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
                         colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
+            
+             # Tracer les polygones du fichier GeoJSON
+            batiments_gdf.to_crs(epsg=32630).plot(ax=ax, facecolor='none', edgecolor='black', linewidth=1)
 
             # Affichage de la première carte
             st.pyplot(fig)
