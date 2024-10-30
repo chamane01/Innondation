@@ -5,8 +5,7 @@ import numpy as np
 import geopandas as gpd
 import matplotlib.pyplot as plt
 from scipy.interpolate import griddata
-from shapely.geometry import Polygon, box
-from shapely.geometry import MultiPolygon
+from shapely.geometry import Polygon, box, MultiPolygon
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
@@ -114,26 +113,30 @@ if df is not None:
 
             # Créer une zone polygonale bleue (surface d'inondation)
             inondation_mask = grid_Z <= st.session_state.flood_data['niveau_inondation']
-            zone_inondee_poly = MultiPolygon([Polygon([(grid_X[i, j], grid_Y[i, j]) 
-                                                      for i, j in zip(*np.where(inondation_mask))])])
+            points_inondation = np.column_stack((grid_X[inondation_mask], grid_Y[inondation_mask]))
+            zone_inondee_poly = Polygon(points_inondation).buffer(0)
 
-            zone_inondee_gdf = gpd.GeoDataFrame(geometry=[zone_inondee_poly], crs="EPSG:32630")
+            # Vérifier si la zone inondée est valide et créer un GeoDataFrame
+            if zone_inondee_poly.is_valid:
+                zone_inondee_gdf = gpd.GeoDataFrame(geometry=[zone_inondee_poly], crs="EPSG:32630")
 
-            # Afficher tous les bâtiments et colorer en rouge ceux dans la zone inondée
-            if batiments_dans_emprise is not None:
-                batiments_dans_emprise.plot(ax=ax, facecolor='grey', edgecolor='black', linewidth=0.5, alpha=0.6, label="Bâtiments non inondés")
-                
-                # Séparer les bâtiments inondés (intersections avec zone bleue)
-                batiments_inondes = batiments_dans_emprise[batiments_dans_emprise.intersects(zone_inondee_gdf.unary_union)]
-                nombre_batiments_inondes = len(batiments_inondes)
+                # Afficher tous les bâtiments et colorer en rouge ceux dans la zone inondée
+                if batiments_dans_emprise is not None:
+                    batiments_dans_emprise.plot(ax=ax, facecolor='grey', edgecolor='black', linewidth=0.5, alpha=0.6, label="Bâtiments non inondés")
+                    
+                    # Séparer les bâtiments inondés (intersections avec zone bleue)
+                    batiments_inondes = batiments_dans_emprise[batiments_dans_emprise.intersects(zone_inondee_gdf.unary_union)]
+                    nombre_batiments_inondes = len(batiments_inondes)
 
-                # Afficher les bâtiments inondés en rouge
-                batiments_inondes.plot(ax=ax, facecolor='red', edgecolor='red', linewidth=1, alpha=0.8, label="Bâtiments inondés")
+                    # Afficher les bâtiments inondés en rouge
+                    batiments_inondes.plot(ax=ax, facecolor='red', edgecolor='red', linewidth=1, alpha=0.8, label="Bâtiments inondés")
 
-                st.write(f"Nombre de bâtiments dans la zone inondée : {nombre_batiments_inondes}")
-                ax.legend()
+                    st.write(f"Nombre de bâtiments dans la zone inondée : {nombre_batiments_inondes}")
+                    ax.legend()
+                else:
+                    st.write("Aucun bâtiment à analyser dans cette zone.")
             else:
-                st.write("Aucun bâtiment à analyser dans cette zone.")
+                st.error("Erreur : La zone inondée calculée est invalide.")
 
             st.pyplot(fig)
 
@@ -152,7 +155,7 @@ if df is not None:
             fig.savefig(carte_file)
 
             with open(carte_file, "rb") as carte:
-                st.download_button(label="Télécharger la carte", data=carte, file_name=carte_file, mime="image/png")
+                st.download_button(label="Télécharger la carte (PNG)", data=carte, file_name=carte_file, mime="image/png")
             with open(dxf_file, "rb") as dxf:
                 st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
 
