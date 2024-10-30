@@ -104,7 +104,7 @@ if df is not None:
             batiments_path = "batiments2.geojson"# Chemin du fichier GeoJSON
             batiments_gdf = gpd.read_file(batiments_path)
 
-        if st.button("Afficher la carte d'inondation avec les batiments"):
+        if st.button("Afficher la carte d'inondation avec les batiments")and batiments_gdf is not None:
             # Étape 9 : Calcul de la surface bleue et volume
             surface_bleue = calculer_surface_bleue(st.session_state.flood_data['niveau_inondation'])
             volume_eau = calculer_volume(surface_bleue)
