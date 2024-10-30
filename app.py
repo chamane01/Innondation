@@ -112,19 +112,16 @@ if df is not None:
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
             ax.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], colors='#007FFF', alpha=0.5)
 
-            # Créer une zone polygonale bleue (surface d'inondation)
-            inondation_mask = grid_Z <= st.session_state.flood_data['niveau_inondation']
-            zone_inondee_poly = MultiPolygon([Polygon([(grid_X[i, j], grid_Y[i, j]) 
-                                                      for i, j in zip(*np.where(inondation_mask))])])
+            # Transformer les contours en polygones pour analyser les bâtiments
+            contour_paths = [Polygon(path.vertices) for collection in contours_inondation.collections for path in collection.get_paths()]
+            zone_inondee = gpd.GeoDataFrame(geometry=[MultiPolygon(contour_paths)], crs="EPSG:32630")
 
-            zone_inondee_gdf = gpd.GeoDataFrame(geometry=[zone_inondee_poly], crs="EPSG:32630")
-
-            # Afficher tous les bâtiments et colorer en rouge ceux dans la zone inondée
+            # Filtrer et afficher tous les bâtiments
             if batiments_dans_emprise is not None:
                 batiments_dans_emprise.plot(ax=ax, facecolor='grey', edgecolor='black', linewidth=0.5, alpha=0.6, label="Bâtiments non inondés")
                 
-                # Séparer les bâtiments inondés (intersections avec zone bleue)
-                batiments_inondes = batiments_dans_emprise[batiments_dans_emprise.intersects(zone_inondee_gdf.unary_union)]
+                # Séparer les bâtiments inondés
+                batiments_inondes = batiments_dans_emprise[batiments_dans_emprise.intersects(zone_inondee.unary_union)]
                 nombre_batiments_inondes = len(batiments_inondes)
 
                 # Afficher les bâtiments inondés en rouge
@@ -153,11 +150,17 @@ if df is not None:
 
             with open(carte_file, "rb") as carte:
                 st.download_button(label="Télécharger la carte", data=carte, file_name=carte_file, mime="image/png")
+
             with open(dxf_file, "rb") as dxf:
                 st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
 
+            # Afficher les résultats
             now = datetime.now()
+            st.markdown("## Résultats")
             st.write(f"**Surface inondée :** {surface_bleue:.2f} hectares")
-            st.write(f"**Volume d'eau :** {volume_eau:.2f} mètres cubes")
+            st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")
+            st.write(f"**Niveau d'eau :** {st.session_state.flood_data['niveau_inondation']} m")
+            st.write(f"**Nombre de bâtiments inondés :** {nombre_batiments_inondes}")
             st.write(f"**Date :** {now.strftime('%Y-%m-%d')}")
             st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
+            st.write(f"**Système de projection :** EPSG:32630")
