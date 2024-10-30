@@ -8,8 +8,7 @@ from shapely.geometry import Polygon
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
-from shapely.geometry import MultiPolygon, Polygon
-
+import geopandas as gpd 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
 
@@ -70,30 +69,6 @@ else:
     st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
     df = None
 
-def charger_batiments_dxf():
-    batiments = []
-    try:
-        doc = ezdxf.readfile("batiment1.dxf")
-        
-        # Itération sur les entités du modèle
-        for entity in doc.modelspace():
-            if entity.dxftype() == "LWPOLYLINE":  # On se concentre sur les polylignes
-                points = [(p[0], p[1]) for p in entity.get_points()]
-                # Créer un polygone pour chaque polyligne et l'ajouter à la liste
-                if len(points) > 2:  # Assurez-vous qu'il y a suffisamment de points pour former un polygone
-                    batiments.append(Polygon(points))
-
-        # Vérifiez si la liste de bâtiments est vide
-        if batiments:
-            return MultiPolygon(batiments)  # Retourner un MultiPolygon si des bâtiments sont trouvés
-        else:
-            return MultiPolygon()  # Retourner un MultiPolygon vide si aucun bâtiment n'est trouvé
-
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier DXF de bâtiments : {e}")
-        return MultiPolygon()  # Retourner un MultiPolygon vide en cas d'erreur
-
-
 # Traitement des données si le fichier est chargé
 if df is not None:
     # Séparateur pour organiser l'affichage
@@ -105,7 +80,18 @@ if df is not None:
     else:
         # Étape 5 : Paramètres du niveau d'inondation
         st.session_state.flood_data['niveau_inondation'] = st.number_input("Entrez le niveau d'eau (mètres)", min_value=0.0, step=0.1)
-        interpolation_method = st.selectbox("Méthode d'interpolation", ['linear', 'nearest'])
+        interpolation_method = st.selectbox("Méthode d'interpolation", ['linear', 'nearest']) 
+
+        # Étape 5.1 : Charger le fichier GeoJSON
+geojson_file = st.file_uploader("Téléversez un fichier GeoJSON", type=["geojson"])  # Ligne à ajouter
+
+# Vérifiez si un fichier GeoJSON est chargé
+if geojson_file is not None:
+    gdf = gpd.read_file(geojson_file)  # Charge le fichier GeoJSON dans un GeoDataFrame
+else:
+    gdf = None  # Si aucun fichier n'est chargé, gdf reste None
+
+# ... (votre code existant)
 
         # Étape 6 : Création de la grille
         X_min, X_max = df['X'].min(), df['X'].max()
@@ -129,6 +115,11 @@ if df is not None:
             surface_bleue = calculer_surface_bleue(st.session_state.flood_data['niveau_inondation'])
             volume_eau = calculer_volume(surface_bleue)
 
+            # Étape 9.1 : Afficher les polygones du GeoDataFrame sur la carte
+    if gdf is not None:
+        gdf.boundary.plot(ax=ax, color='black', linewidth=1)  # Trace les frontières des polygones
+
+
             # Stocker les résultats dans session_state
             st.session_state.flood_data['surface_bleu'] = surface_bleue  # Met à jour la surface occupée par la couleur bleue
             st.session_state.flood_data['volume_eau'] = volume_eau
@@ -149,13 +140,6 @@ if df is not None:
             ax.contourf(grid_X, grid_Y, grid_Z, 
                         levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], 
                         colors='#007FFF', alpha=0.5)  # Couleur bleue semi-transparente
-             # Afficher les bâtiments
-            for poly in batiments:
-                x, y = poly.exterior.xy
-                ax.fill(x, y, color='black', alpha=0.7)
-
-            st.pyplot(fig)
-            
 
             # Affichage de la première carte
             st.pyplot(fig)
