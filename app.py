@@ -110,11 +110,6 @@ if df is not None:
             if batiments_dans_emprise is not None:
                 batiments_dans_emprise.plot(ax=ax, facecolor='none', edgecolor='black', linewidth=1)
 
-                # Calculer les bâtiments touchés
-                zone_inondee = gpd.GeoDataFrame(geometry=[Polygon(contour.get_paths()[0].vertices) for contour in contours_inondation.collections[0].get_paths() if len(contour.get_paths()[0].vertices) > 0], crs="EPSG:32630")
-                batiments_touches = batiments_dans_emprise[batiments_dans_emprise.intersects(zone_inondee.unary_union)]
-                nb_batiments_touches = len(batiments_touches)
-
             st.pyplot(fig)
 
             doc = ezdxf.new(dxfversion='R2010')
@@ -144,4 +139,3 @@ if df is not None:
             st.write(f"**Date :** {now.strftime('%Y-%m-%d')}")
             st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
             st.write(f"**Système de projection :** EPSG:32630")
-            st.write(f"**Nombre de bâtiments touchés :** {nb_batiments_touches}")
