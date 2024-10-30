@@ -8,7 +8,6 @@ from shapely.geometry import Polygon
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
-import geopandas as gpd 
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -81,18 +80,7 @@ if df is not None:
     else:
         # Étape 5 : Paramètres du niveau d'inondation
         st.session_state.flood_data['niveau_inondation'] = st.number_input("Entrez le niveau d'eau (mètres)", min_value=0.0, step=0.1)
-        interpolation_method = st.selectbox("Méthode d'interpolation", ['linear', 'nearest']) 
-
-        # Étape 5.1 : Charger le fichier GeoJSON
-        geojson_file = st.file_uploader("Téléversez un fichier GeoJSON", type=["geojson"])  # Ligne à ajouter
-
-        # Vérifiez si un fichier GeoJSON est chargé
-        if geojson_file is not None:
-            gdf = gpd.read_file(geojson_file)  # Charge le fichier GeoJSON dans un GeoDataFrame
-        else:
-            gdf = None  # Si aucun fichier n'est chargé, gdf reste None
-
-        # ... (votre code existant)
+        interpolation_method = st.selectbox("Méthode d'interpolation", ['linear', 'nearest'])
 
         # Étape 6 : Création de la grille
         X_min, X_max = df['X'].min(), df['X'].max()
@@ -115,10 +103,6 @@ if df is not None:
             # Étape 9 : Calcul de la surface bleue et volume
             surface_bleue = calculer_surface_bleue(st.session_state.flood_data['niveau_inondation'])
             volume_eau = calculer_volume(surface_bleue)
-
-            # Étape 9.1 : Afficher les polygones du GeoDataFrame sur la carte
-            if gdf is not None:
-                gdf.boundary.plot(ax=ax, color='black', linewidth=1)  # Trace les frontières des polygones
 
             # Stocker les résultats dans session_state
             st.session_state.flood_data['surface_bleu'] = surface_bleue  # Met à jour la surface occupée par la couleur bleue
@@ -176,12 +160,11 @@ if df is not None:
 
             # Affichage des résultats sous la carte
             st.markdown("## Résultats")
-            st.write(f"**Surface innondée :** {surface_bleue:.2f} hectares")  # Mise à jour du texte pour inclure 'hectares'
-            st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")
-            st.write(f"**Date de génération :** {now.strftime('%Y-%m-%d %H:%M:%S')}")
+            st.write(f"**Surface innondée :** {surface_bleue:.2f} hectares")  # Mise à jour
+            st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")  # Mise à jour
+            st.write(f"**Niveau d'eau :** {st.session_state.flood_data['niveau_inondation']} m")
+            st.write(f"**Date :** {now.strftime('%Y-%m-%d')}")
+            st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
+            st.write(f"**Système de projection :** EPSG:32630")
 
-            # Mise à jour de session_state
-            st.session_state.flood_data['surface_bleu'] = surface_bleue
-            st.session_state.flood_data['volume_eau'] = volume_eau
-else:
-    st.warning("Veuillez d'abord charger les données pour voir la carte et les résultats.")
+# Fin de l'application
