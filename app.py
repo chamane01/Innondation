@@ -107,6 +107,7 @@ if df is not None:
             ax.set_ylim(Y_min, Y_max)
             ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
 
+            # Tracer la zone inondée avec les contours
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
             ax.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], colors='#007FFF', alpha=0.5)
@@ -115,17 +116,25 @@ if df is not None:
             contour_paths = [Polygon(path.vertices) for collection in contours_inondation.collections for path in collection.get_paths()]
             zone_inondee = gpd.GeoDataFrame(geometry=[MultiPolygon(contour_paths)], crs="EPSG:32630")
 
-            # Filtrer les bâtiments dans la zone inondée
+            # Filtrer et afficher tous les bâtiments
             if batiments_dans_emprise is not None:
+                batiments_dans_emprise.plot(ax=ax, facecolor='grey', edgecolor='black', linewidth=0.5, alpha=0.6, label="Bâtiments non inondés")
+                
+                # Séparer les bâtiments inondés
                 batiments_inondes = batiments_dans_emprise[batiments_dans_emprise.intersects(zone_inondee.unary_union)]
                 nombre_batiments_inondes = len(batiments_inondes)
-                batiments_inondes.plot(ax=ax, facecolor='none', edgecolor='red', linewidth=1, linestyle='--')
+
+                # Afficher les bâtiments inondés en rouge
+                batiments_inondes.plot(ax=ax, facecolor='red', edgecolor='red', linewidth=1, alpha=0.8, label="Bâtiments inondés")
+
                 st.write(f"Nombre de bâtiments dans la zone inondée : {nombre_batiments_inondes}")
+                ax.legend()
             else:
                 st.write("Aucun bâtiment à analyser dans cette zone.")
 
             st.pyplot(fig)
 
+            # Enregistrer les contours en fichier DXF
             doc = ezdxf.new(dxfversion='R2010')
             msp = doc.modelspace()
             for collection in contours_inondation.collections:
@@ -145,6 +154,7 @@ if df is not None:
             with open(dxf_file, "rb") as dxf:
                 st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
 
+            # Afficher les résultats
             now = datetime.now()
             st.markdown("## Résultats")
             st.write(f"**Surface inondée :** {surface_bleue:.2f} hectares")
