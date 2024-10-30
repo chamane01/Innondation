@@ -74,7 +74,7 @@ else:
 def charger_batiments_dxf():
     batiments = []
     try:
-        doc = ezdxf.readfile("batiments.dxf")
+        doc = ezdxf.readfile("batiment1.dxf")
         for entity in doc.modelspace():
             if entity.dxftype() == "LWPOLYLINE" or entity.dxftype() == "POLYLINE":
                 points = [(p[0], p[1]) for p in entity.get_points()]
