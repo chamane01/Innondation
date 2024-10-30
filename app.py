@@ -83,7 +83,7 @@ if df is not None:
         interpolation_method = st.selectbox("Méthode d'interpolation", ['linear', 'nearest']) 
 
         # Étape 5.1 : Charger le fichier GeoJSON
-geojson_file = st.file_uploader("Téléversez un fichier GeoJSON", type=["geojson"])  # Ligne à ajouter
+geojson_file = st.file_uploader("batiments2.geojson", type=["geojson"])  # Ligne à ajouter
 
 # Vérifiez si un fichier GeoJSON est chargé
 if geojson_file is not None:
