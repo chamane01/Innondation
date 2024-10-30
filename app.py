@@ -49,6 +49,8 @@ def charger_fichier(fichier, is_uploaded=False):
         st.error(f"Erreur lors du chargement du fichier : {e}")
         return None
 
+# Charger les données du fichier sélectionné ou téléversé
+df = None
 if option_site == "AYAME 1":
     df = charger_fichier('AYAME1.txt')
 elif option_site == "AYAME 2":
@@ -57,17 +59,17 @@ elif uploaded_file is not None:
     df = charger_fichier(uploaded_file, is_uploaded=True)
 else:
     st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
-    df = None
 
-# Charger et filtrer les bâtiments dans l'emprise de la carte
-try:
-    batiments_gdf = gpd.read_file("batiments2.geojson")
-    emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
-    batiments_gdf = batiments_gdf.to_crs(epsg=32630)
-    batiments_dans_emprise = batiments_gdf[batiments_gdf.intersects(emprise)]
-except Exception as e:
-    st.error(f"Erreur lors du chargement des bâtiments : {e}")
-    batiments_dans_emprise = None
+# Charger et filtrer les bâtiments si les données du site sont disponibles
+batiments_dans_emprise = None
+if df is not None:
+    try:
+        batiments_gdf = gpd.read_file("batiments2.geojson")
+        emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
+        batiments_gdf = batiments_gdf.to_crs(epsg=32630)
+        batiments_dans_emprise = batiments_gdf[batiments_gdf.intersects(emprise)]
+    except Exception as e:
+        st.error(f"Erreur lors du chargement des bâtiments : {e}")
 
 # Traitement des données si le fichier est chargé
 if df is not None:
