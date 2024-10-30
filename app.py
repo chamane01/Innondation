@@ -70,21 +70,29 @@ else:
     st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
     df = None
 
-# Charger et afficher les bâtiments à partir de batiment.dxf
 def charger_batiments_dxf():
     batiments = []
     try:
         doc = ezdxf.readfile("batiment1.dxf")
+        
+        # Itération sur les entités du modèle
         for entity in doc.modelspace():
-            if entity.dxftype() in ["LWPOLYLINE", "POLYLINE"]:
+            if entity.dxftype() == "LWPOLYLINE":  # On se concentre sur les polylignes
                 points = [(p[0], p[1]) for p in entity.get_points()]
-                batiments.append(Polygon(points))
-        return MultiPolygon(batiments) if batiments else MultiPolygon()  # Return an empty MultiPolygon if no buildings found
+                # Créer un polygone pour chaque polyligne et l'ajouter à la liste
+                if len(points) > 2:  # Assurez-vous qu'il y a suffisamment de points pour former un polygone
+                    batiments.append(Polygon(points))
+
+        # Vérifiez si la liste de bâtiments est vide
+        if batiments:
+            return MultiPolygon(batiments)  # Retourner un MultiPolygon si des bâtiments sont trouvés
+        else:
+            return MultiPolygon()  # Retourner un MultiPolygon vide si aucun bâtiment n'est trouvé
+
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier DXF de bâtiments : {e}")
-        return MultiPolygon()
+        return MultiPolygon()  # Retourner un MultiPolygon vide en cas d'erreur
 
-batiments = charger_batiments_dxf()
 
 # Traitement des données si le fichier est chargé
 if df is not None:
