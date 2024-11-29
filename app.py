@@ -106,11 +106,22 @@ if df is not None:
             ax.set_xlim(X_min, X_max)
             ax.set_ylim(Y_min, Y_max)
             ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
-            ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
-            ax.set_xticks(np.linspace(X_min, X_max, num=5))
-            ax.set_yticks(np.linspace(Y_min, Y_max, num=5))
+            x_margin = (X_max - X_min) * 0.05
+            y_margin = (Y_max - Y_min) * 0.05
+            x_ticks = np.linspace(X_min + x_margin, X_max - x_margin, num=5)
+            y_ticks = np.linspace(Y_min + y_margin, Y_max - y_margin, num=5)
+
+            ax.set_xticks(x_ticks)
+            ax.set_yticks(y_ticks)
+
             ax.xaxis.set_tick_params(labeltop=True)
             ax.yaxis.set_tick_params(labelright=True)
+            # Ajouter des coordonnées sur les quatre côtés
+            ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
+            ax.set_xticks(np.linspace(X_min, X_max, num=5))# Coordonnées sur l'axe X
+            ax.set_yticks(np.linspace(Y_min, Y_max, num=5))# Coordonnées sur l'axe Y
+            ax.xaxis.set_tick_params(labeltop=True)# Affiche les labels sur le haut
+            ax.yaxis.set_tick_params(labelright=True)# Affiche les labels à droite
 
             # Tracer la zone inondée avec les contours
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
