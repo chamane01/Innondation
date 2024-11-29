@@ -112,13 +112,16 @@ if df is not None:
             ax.set_yticks(np.linspace(Y_min, Y_max, num=5))# Coordonnées sur l'axe Y
             ax.xaxis.set_tick_params(labeltop=True)# Affiche les labels sur le haut
             ax.yaxis.set_tick_params(labelright=True)# Affiche les labels à droite
+            vertical_lines = np.linspace(X_min, X_max, num=5)
+            horizontal_lines = np.linspace(Y_min, Y_max, num=5)
+            for x in vertical_lines:
+                for x in vertical_lines:
+                    intersections.append((x, y))
 
-            for x in np.linspace(X_min, X_max, num=5):
-                ax.axvline(x, color='black', linewidth=0.5, linestyle='--')
+            for intersection in intersections:
+                ax.plot(intersection[0], intersection[1], 'ro', markersize=5)  # 'ro' pour points rouges
 
-            for y in np.linspace(Y_min, Y_max, num=5):
-                ax.axhline(y, color='black', linewidth=0.5, linestyle='--')
-
+                 
             # Tracer la zone inondée avec les contours
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
