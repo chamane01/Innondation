@@ -112,17 +112,6 @@ if df is not None:
             ax.set_yticks(np.linspace(Y_min, Y_max, num=5))# Coordonnées sur l'axe Y
             ax.xaxis.set_tick_params(labeltop=True)# Affiche les labels sur le haut
             ax.yaxis.set_tick_params(labelright=True)# Affiche les labels à droite
-            for x_value in df['X'].unique():
-                points_with_same_x = df[df['X'] == x_value]
-                if len(points_with_same_x) > 1:
-                    ax.plot(points_with_same_x['X'], points_with_same_x['Y'], linestyle='-', color='blue', alpha=0.7)
-
-            for y_value in df['Y'].unique():
-                points_with_same_y = df[df['Y'] == y_value]
-                 if len(points_with_same_y) > 1:
-                     ax.plot(points_with_same_y['X'], points_with_same_y['Y'], linestyle='-', color='green', alpha=0.7)
-                
-
 
             # Tracer la zone inondée avec les contours
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
