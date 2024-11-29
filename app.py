@@ -166,4 +166,5 @@ if df is not None:
             st.write(f"**Niveau d'eau :** {st.session_state.flood_data['niveau_inondation']} m")
             st.write(f"**Nombre de bâtiments inondés :** {nombre_batiments_inondes}")
             st.write(f"**Date :** {now.strftime('%Y-%m-%d %H:%M:%S')}")
-            st.write(f"**Ville la plus proche :** {get_nearest_city(st.session_state.flood_data['niveau_inondation'])}")
+
+
