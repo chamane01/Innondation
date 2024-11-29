@@ -113,21 +113,16 @@ if df is not None:
             ax.xaxis.set_tick_params(labeltop=True)# Affiche les labels sur le haut
             ax.yaxis.set_tick_params(labelright=True)# Affiche les labels à droite
 
+            for x in np.linspace(X_min, X_max, num=5):
+                ax.axvline(x, color='black', linewidth=0.5, linestyle='--')
+
+            for y in np.linspace(Y_min, Y_max, num=5):
+                ax.axhline(y, color='black', linewidth=0.5, linestyle='--')
+
             # Tracer la zone inondée avec les contours
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
             ax.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], colors='#007FFF', alpha=0.5)
-
-            haut = df[df['Y'] == Y_max]
-            bas = df[df['Y'] == Y_min]
-            gauche = df[df['X'] == X_min]
-            droite = df[df['X'] == X_max]
-            for x_haut, x_bas in zip(haut['X'], bas['X']):
-                ax.plot([x_haut, x_bas], [Y_max, Y_min], color='green', linestyle='--', linewidth=1, alpha=0.8)
-
-            for y_gauche, y_droite in zip(gauche['Y'], droite['Y']):
-                ax.plot([X_min, X_max], [y_gauche, y_droite], color='purple', linestyle='--', linewidth=1, alpha=0.8)
-
 
             # Transformer les contours en polygones pour analyser les bâtiments
             contour_paths = [Polygon(path.vertices) for collection in contours_inondation.collections for path in collection.get_paths()]
