@@ -111,10 +111,18 @@ if df is not None:
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
             ax.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], colors='#007FFF', alpha=0.5)
+            # Ajouter des croisillons à chaque intersection de la grille
+# Échelle des croisillons proportionnelle à la carte
 
-            # Ajouter des croisillons aux intersections des coordonnées
-            for x, y in zip(grid_X.flatten(), grid_Y.flatten()):
-                ax.plot(x, y, marker='+', color='black', markersize=5, alpha=0.6)
+            taille_croisillon = (X_max - X_min) * 0.005 # Taille relative (ajuster si nécessaire)
+            # Créer une grille régulière pour les croisillons
+            intervalles_x = np.linspace(X_min, X_max, num=10)
+            intervalles_y = np.linspace(Y_min, Y_max, num=10)
+            # Ajouter les croisillons sur chaque point d'intersection
+            for x in intervalles_x:
+                for y in intervalles_y:
+                    ax.plot([x - taille_croisillon, x + taille_croisillon], [y, y], color='black', lw=0.5)  # Ligne horizontale
+                    ax.plot([x, x], [y - taille_croisillon, y + taille_croisillon], color='black', lw=0.5)  # Ligne verticale
 
             # Transformer les contours en polygones pour analyser les bâtiments
             contour_paths = [Polygon(path.vertices) for collection in contours_inondation.collections for path in collection.get_paths()]
@@ -165,6 +173,6 @@ if df is not None:
             st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")
             st.write(f"**Niveau d'eau :** {st.session_state.flood_data['niveau_inondation']} m")
             st.write(f"**Nombre de bâtiments inondés :** {nombre_batiments_inondes}")
-            st.write(f"**Date :** {now.strftime('%Y-%m-%d %H:%M:%S')}")
-
-
+            st.write(f"**Date :** {now.strftime('%Y-%m-%d')}")
+            st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
+            st.write(f"**Système de projection :** EPSG:32630")
