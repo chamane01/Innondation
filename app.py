@@ -106,6 +106,11 @@ if df is not None:
             ax.set_xlim(X_min, X_max)
             ax.set_ylim(Y_min, Y_max)
             ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+            ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
+            ax.set_xticks(np.linspace(X_min, X_max, num=5))
+            ax.set_yticks(np.linspace(Y_min, Y_max, num=5))
+            ax.xaxis.set_tick_params(labeltop=True)
+            ax.yaxis.set_tick_params(labelright=True)
 
             # Tracer la zone inondée avec les contours
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
