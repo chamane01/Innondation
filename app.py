@@ -91,7 +91,7 @@ if df is not None:
         grid_Z = griddata((df['X'], df['Y']), df['Z'], (grid_X, grid_Y), method=interpolation_method)
 
         def calculer_surface_bleue(niveau_inondation):
-            return np.sum((grid_Z <= niveau_inondation)) * (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000
+            return np.sum((grid_Z <= niveau_inondation)) * (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 1]) / 10000
 
         def calculer_volume(surface_bleue):
             return surface_bleue * st.session_state.flood_data['niveau_inondation'] * 10000
@@ -112,6 +112,17 @@ if df is not None:
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
             ax.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], colors='#007FFF', alpha=0.5)
 
+            # Ajouter des croisillons (lignes de grille)
+            grid_spacing = 0.05  # Espacement des croisillons
+            x_ticks = np.arange(X_min, X_max, grid_spacing)
+            y_ticks = np.arange(Y_min, Y_max, grid_spacing)
+
+            # Tracer les lignes de croisillons
+            for x in x_ticks:
+                ax.axvline(x, color='gray', linestyle='--', linewidth=0.5)
+            for y in y_ticks:
+                ax.axhline(y, color='gray', linestyle='--', linewidth=0.5)
+
             # Transformer les contours en polygones pour analyser les bâtiments
             contour_paths = [Polygon(path.vertices) for collection in contours_inondation.collections for path in collection.get_paths()]
             zone_inondee = gpd.GeoDataFrame(geometry=[MultiPolygon(contour_paths)], crs="EPSG:32630")
@@ -122,45 +133,10 @@ if df is not None:
                 
                 # Séparer les bâtiments inondés
                 batiments_inondes = batiments_dans_emprise[batiments_dans_emprise.intersects(zone_inondee.unary_union)]
-                nombre_batiments_inondes = len(batiments_inondes)
+                batiments_inondes.plot(ax=ax, facecolor='red', edgecolor='black', linewidth=0.5, label="Bâtiments inondés")
 
-                # Afficher les bâtiments inondés en rouge
-                batiments_inondes.plot(ax=ax, facecolor='red', edgecolor='red', linewidth=1, alpha=0.8, label="Bâtiments inondés")
-
-                st.write(f"Nombre de bâtiments dans la zone inondée : {nombre_batiments_inondes}")
-                ax.legend()
-            else:
-                st.write("Aucun bâtiment à analyser dans cette zone.")
-
+            ax.legend()
             st.pyplot(fig)
 
-            # Enregistrer les contours en fichier DXF
-            doc = ezdxf.new(dxfversion='R2010')
-            msp = doc.modelspace()
-            for collection in contours_inondation.collections:
-                for path in collection.get_paths():
-                    points = path.vertices
-                    for i in range(len(points)-1):
-                        msp.add_line(points[i], points[i+1])
-
-            dxf_file = "contours_inondation.dxf"
-            doc.saveas(dxf_file)
-            carte_file = "carte_inondation.png"
-            fig.savefig(carte_file)
-
-            with open(carte_file, "rb") as carte:
-                st.download_button(label="Télécharger la carte", data=carte, file_name=carte_file, mime="image/png")
-
-            with open(dxf_file, "rb") as dxf:
-                st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
-
-            # Afficher les résultats
-            now = datetime.now()
-            st.markdown("## Résultats")
-            st.write(f"**Surface inondée :** {surface_bleue:.2f} hectares")
-            st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")
-            st.write(f"**Niveau d'eau :** {st.session_state.flood_data['niveau_inondation']} m")
-            st.write(f"**Nombre de bâtiments inondés :** {nombre_batiments_inondes}")
-            st.write(f"**Date :** {now.strftime('%Y-%m-%d')}")
-            st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
-            st.write(f"**Système de projection :** EPSG:32630")
+            st.write(f"Surface inondée : {surface_bleue:.2f} ha")
+            st.write(f"Volume d'eau estimé : {volume_eau:.2f} m³")
