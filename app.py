@@ -111,18 +111,6 @@ if df is not None:
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
             ax.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], colors='#007FFF', alpha=0.5)
-            # Ajouter des croisillons à chaque intersection de la grille
-# Échelle des croisillons proportionnelle à la carte
-
-            taille_croisillon = (X_max - X_min) * 0.005 # Taille relative (ajuster si nécessaire)
-            # Créer une grille régulière pour les croisillons
-            coord_x = np.linspace(X_min, X_max, num=10)
-            coord_y = np.linspace(Y_min, Y_max, num=10)
-            # Ajouter les croisillons sur chaque point d'intersection
-            for x in coord_x:
-                for y in coord_y:
-                    ax.plot([x - taille_croisillon, x + taille_croisillon], [y, y], color='black', lw=0.5)  # Ligne horizontale
-                    ax.plot([x, x], [y - taille_croisillon, y + taille_croisillon], color='black', lw=0.5)  # Ligne verticale
 
             # Transformer les contours en polygones pour analyser les bâtiments
             contour_paths = [Polygon(path.vertices) for collection in contours_inondation.collections for path in collection.get_paths()]
