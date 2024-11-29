@@ -116,11 +116,11 @@ if df is not None:
 
             taille_croisillon = (X_max - X_min) * 0.005 # Taille relative (ajuster si nécessaire)
             # Créer une grille régulière pour les croisillons
-            intervalles_x = np.linspace(X_min, X_max, num=10)
-            intervalles_y = np.linspace(Y_min, Y_max, num=10)
+            coord_x = np.linspace(X_min, X_max, num=10)
+            coord_y = np.linspace(Y_min, Y_max, num=10)
             # Ajouter les croisillons sur chaque point d'intersection
-            for x in intervalles_x:
-                for y in intervalles_y:
+            for x in coord_x:
+                for y in coord_y:
                     ax.plot([x - taille_croisillon, x + taille_croisillon], [y, y], color='black', lw=0.5)  # Ligne horizontale
                     ax.plot([x, x], [y - taille_croisillon, y + taille_croisillon], color='black', lw=0.5)  # Ligne verticale
 
