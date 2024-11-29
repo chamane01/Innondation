@@ -165,8 +165,5 @@ if df is not None:
             st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")
             st.write(f"**Niveau d'eau :** {st.session_state.flood_data['niveau_inondation']} m")
             st.write(f"**Nombre de bâtiments inondés :** {nombre_batiments_inondes}")
-            st.write(f"**Date et heure de l'analyse :** {now.strftime('%Y-%m-%d %H:%M:%S')}")
-            st.write("Les données ont été extraites avec succès.")
-
-else:
-    st.write("Veuillez charger un fichier et sélectionner un site pour commencer.")
+            st.write(f"**Date :** {now.strftime('%Y-%m-%d %H:%M:%S')}")
+            st.write(f"**Ville la plus proche :** {get_nearest_city(st.session_state.flood_data['niveau_inondation'])}")
