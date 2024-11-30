@@ -198,6 +198,7 @@ intersections_y = np.linspace(Y_min, Y_max, num=5)
 # Fonction pour générer la carte de profondeur avec dégradé de couleurs
 def generate_depth_map():
     # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
+    smoothed_Z = gaussian_filter(grid_Z, sigma=2)
     fig, ax = plt.subplots(figsize=(8, 6))
     ax.set_xlim(X_min, X_max)
     ax.set_ylim(Y_min, Y_max)
