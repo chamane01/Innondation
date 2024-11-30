@@ -203,7 +203,7 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
         ecart_type_Z = np.std(grid_Z)
         seuil_bas_fond = moyenne_Z - seuil_rel_bas_fond * ecart_type_Z
         bas_fonds = grid_Z < seuil_bas_fond
-        return bas_fonds
+        return bas_fonds, seuil_bas_fond
 
     # Calcul des surfaces des bas-fonds
     def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
@@ -214,7 +214,7 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
         surface_bas_fond = np.sum(bas_fonds) * resolution
         return surface_bas_fond
 
-    bas_fonds = detecter_bas_fonds(grid_Z)
+    bas_fonds, seuil_bas_fond = detecter_bas_fonds(grid_Z)
     surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
 
     
@@ -265,7 +265,8 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
         grid_X, grid_Y, grid_Z,
         levels=[seuil_bas_fond],  # Niveau correspondant au seuil des bas-fonds
         colors='blue',  # Couleur des contours
-        linewidths=2  # Épaisseur de la ligne
+        linewidths=2,
+        linestyles='solid',# Épaisseur de la ligne
     )
     # Ajouter des labels pour les contours
     ax.clabel(contour_lines,
