@@ -307,133 +307,69 @@ if st.button("Générer la carte de profondeur avec bas-fonds"):
 
 # Fonction pour générer la carte de profondeur avec dégradé de couleurs
 def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
-
-    # Détection des bas-fonds
-    def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
-        """
-        Détermine les bas-fonds en fonction de la profondeur Z relative.
-        Bas-fond = Z < moyenne(Z) - seuil_rel_bas_fond * std(Z)
-        """
-        moyenne_Z = np.mean(grid_Z)
-        ecart_type_Z = np.std(grid_Z)
-        seuil_bas_fond = moyenne_Z - seuil_rel_bas_fond * ecart_type_Z
-        bas_fonds = grid_Z < seuil_bas_fond
-        return bas_fonds, seuil_bas_fond
-
-    # Calcul des surfaces des bas-fonds
-    def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
-        """
-        Calcule la surface des bas-fonds en hectares.
-        """
-        resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000  # Résolution en hectares
-        surface_bas_fond = np.sum(bas_fonds) * resolution
-        return surface_bas_fond
-
-    # Simuler les grilles de données
-    X_min, X_max, Y_min, Y_max = 0, 10, 0, 10
+    # Exemples de données pour la carte de profondeur (remplacez par vos vraies données)
+    X_min, X_max, Y_min, Y_max = 0, 100, 0, 100
     grid_X, grid_Y = np.meshgrid(np.linspace(X_min, X_max, 100), np.linspace(Y_min, Y_max, 100))
-    grid_Z = np.random.uniform(0, 10, size=grid_X.shape)  # Valeurs de profondeur aléatoires
+    grid_Z = np.random.random((100, 100)) * 10  # Carte de profondeur aléatoire pour l'exemple
 
-    bas_fonds, seuil_bas_fond = detecter_bas_fonds(grid_Z)
-    surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
-
-    # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
     fig, ax = plt.subplots(figsize=(8, 6))
     ax.set_xlim(X_min, X_max)
     ax.set_ylim(Y_min, Y_max)
-    ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
-    ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
-    ax.set_xticks(np.linspace(X_min, X_max, num=5))
-    ax.set_yticks(np.linspace(Y_min, Y_max, num=5))
-    ax.xaxis.set_tick_params(labeltop=True)
-    ax.yaxis.set_tick_params(labelright=True)
+    ax.set_title('Carte de Profondeur')
 
-    # Masquer les coordonnées aux extrémités
-    xticks = ax.get_xticks()
-    yticks = ax.get_yticks()
-    ax.set_xticklabels(
-        ["" if x == X_min or x == X_max else f"{int(x)}" for x in xticks],
-        rotation=label_rotation_x,
-    )
-    ax.set_yticklabels(
-        ["" if y == Y_min or y == Y_max else f"{int(y)}" for y in yticks],
-        rotation=label_rotation_y,
-        va="center"  # Alignement vertical des étiquettes Y
-    )
-
-    # Appliquer rotation des labels
-    for label in ax.get_xticklabels():
-        label.set_rotation(label_rotation_x)
-    for label in ax.get_yticklabels():
-        label.set_rotation(label_rotation_y)
-
-    # Ajouter les contours pour la profondeur
+    # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
     depth_levels = np.linspace(grid_Z.min(), grid_Z.max(), 100)
     cmap = plt.cm.plasma  # Couleurs allant de bleu à jaune
     cont = ax.contourf(grid_X, grid_Y, grid_Z, levels=depth_levels, cmap=cmap)
     cbar = plt.colorbar(cont, ax=ax)
     cbar.set_label('Profondeur (m)', rotation=270)
 
-    # Ajouter les bas-fonds en cyan
-    ax.contourf(grid_X, grid_Y, bas_fonds, levels=[0.5, 1], colors='cyan', alpha=0.4, label='Bas-fonds')
+    return fig, ax, grid_X, grid_Y, grid_Z
 
-    # Ajouter une ligne de contour autour des bas-fonds
-    contour_lines = ax.contour(
-        grid_X, grid_Y, grid_Z,
-        levels=[seuil_bas_fond],  # Niveau correspondant au seuil des bas-fonds
-        colors='black',  # Couleur des contours
-        linewidths=1.5,
-        linestyles='solid',# Épaisseur de la ligne
-    )
-
-    # Ajouter des labels pour les contours
-    ax.clabel(contour_lines,
-        inline=True,
-        fmt={seuil_bas_fond: f"{seuil_bas_fond:.2f} m"},  # Format du label
-        fontsize=12
-    )
-
-    # Ajouter des lignes pour relier les tirets
-    for x in np.linspace(X_min, X_max, num=5):
-        ax.axvline(x, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
-    for y in np.linspace(Y_min, Y_max, num=5):
-        ax.axhline(y, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
-
-    # Ajouter des points d'intersection
-    intersections_x = np.linspace(X_min, X_max, num=5)
-    intersections_y = np.linspace(Y_min, Y_max, num=5)
-    for x in intersections_x:
-        for y in intersections_y:
-            ax.plot(x, y, 'k+', markersize=7, alpha=1.0)
-
-    # Ajouter la polygonale manuelle
-    # Coordonnées de la polygonale (manuellement définies)
-    polygon_coords = [
-        (2, 2),
-        (3, 6),
-        (6, 6),
-        (7, 3),
-        (5, 2),
-        (2, 2),  # Retour à la première coordonnée pour fermer le polygone
-    ]
+# Fonction pour afficher les points et polygone
+def plot_polygon(ax, points):
+    # Convertir les coordonnées en format Polygon
+    polygon = Polygon(points)
     
-    # Extraire les coordonnées X et Y
-    poly_x, poly_y = zip(*polygon_coords)
+    # Ajouter les points sur la carte
+    for point in points:
+        ax.plot(point[0], point[1], 'ro', alpha=0.5)  # Points transparents en rouge
 
-    # Dessiner le polygone sur la carte
-    ax.plot(poly_x, poly_y, color='red', linewidth=2, label='Polygonale')
+    # Relier les points pour former un polygone
+    ax.plot([p[0] for p in points] + [points[0][0]], [p[1] for p in points] + [points[0][1]], 'b-', linewidth=2)  # Lignes bleues pour le polygone
 
-    # Ajouter un label pour la polygonale
-    ax.fill(poly_x, poly_y, color='red', alpha=0.3)
+# Interface utilisateur
+st.title('Générer la carte de profondeur avec polygone')
 
-    # Affichage de la carte de profondeur
+# Bouton pour générer la carte
+if st.button("Générer la carte de profondeur avec bas-fonds"):
+    fig, ax, grid_X, grid_Y, grid_Z = generate_depth_map()
+
+    # Demander à l'utilisateur de saisir les coordonnées (X, Y)
+    st.write("Veuillez entrer les coordonnées X et Y pour les points du polygone :")
+    
+    coords = []  # Liste pour stocker les coordonnées (X, Y)
+    adding_points = True
+
+    while adding_points:
+        # Saisie des coordonnées X et Y
+        x_coord = st.number_input("Coordonnée X (m)", value=0.0)
+        y_coord = st.number_input("Coordonnée Y (m)", value=0.0)
+
+        # Ajouter les coordonnées à la liste
+        coords.append((x_coord, y_coord))
+        
+        # Demander à l'utilisateur s'il veut ajouter un autre point
+        add_more = st.radio("Voulez-vous ajouter un autre point ?", ("Oui", "Non"))
+        if add_more == "Non":
+            adding_points = False
+
+    # Afficher les coordonnées saisies sur la carte
+    plot_polygon(ax, coords)
+
+    # Afficher la carte avec les points et le polygone
     st.pyplot(fig)
-
-    # Afficher les surfaces calculées
-    st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
-
-
-# Ajouter un bouton pour générer la carte de profondeur
-if st.button("Générer la carte de profondeur avec bas-fonds et polygonale"):
-    generate_depth_map(label_rotation_x=0, label_rotation_y=-90)
+    
+    # Afficher les coordonnées du polygone
+    st.write(f"Coordonnées du polygone : {coords}")
 
