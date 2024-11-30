@@ -241,5 +241,5 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
 
 # Ajouter un bouton pour générer la carte de profondeur
 if st.button("Générer la carte de profondeur"):
-    generate_depth_map(label_rotation_x=0, label_rotation_y=0)
+    generate_depth_map(label_rotation_x=0, label_rotation_y=-90)
 
