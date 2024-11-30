@@ -190,16 +190,15 @@ if df is not None:
             st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
             st.write(f"**Système de projection :** EPSG:32630")
 
-import streamlit as st
-import numpy as np
-import matplotlib.pyplot as plt
-import geopandas as gpd
-from shapely.geometry import Polygon
-
 # Fonction pour générer la carte de profondeur avec dégradé de couleurs
 def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
+
     # Détection des bas-fonds
     def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
+        """
+        Détermine les bas-fonds en fonction de la profondeur Z relative.
+        Bas-fond = Z < moyenne(Z) - seuil_rel_bas_fond * std(Z)
+        """
         moyenne_Z = np.mean(grid_Z)
         ecart_type_Z = np.std(grid_Z)
         seuil_bas_fond = moyenne_Z - seuil_rel_bas_fond * ecart_type_Z
@@ -208,35 +207,18 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
 
     # Calcul des surfaces des bas-fonds
     def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
+        """
+        Calcule la surface des bas-fonds en hectares.
+        """
         resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000  # Résolution en hectares
         surface_bas_fond = np.sum(bas_fonds) * resolution
         return surface_bas_fond
 
-    # Demander à l'utilisateur d'entrer les points de la polygonale
-    polygon_points_input = st.text_input("Entrez les coordonnées de la polygonale (format: x1,y1, x2,y2, ..., xn,yn)", "")
-
-    # Convertir les points de la polygonale en liste de tuples (x, y)
-    polygon_points = []
-    if polygon_points_input:
-        points = polygon_points_input.split(',')
-        for i in range(0, len(points), 2):
-            try:
-                x = float(points[i].strip())
-                y = float(points[i + 1].strip())
-                polygon_points.append((x, y))
-            except ValueError:
-                st.warning("Veuillez entrer les coordonnées sous le bon format.")
-
-    # Si la polygonale est définie, tracer la polygonale
-    if polygon_points:
-        polygon = Polygon(polygon_points)
-        x_polygon, y_polygon = polygon.exterior.xy
-
-    # Calcul de la profondeur et des bas-fonds
     bas_fonds, seuil_bas_fond = detecter_bas_fonds(grid_Z)
     surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
 
-    # Appliquer un dégradé de couleurs sur la profondeur
+    
+    # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
     fig, ax = plt.subplots(figsize=(8, 6))
     ax.set_xlim(X_min, X_max)
     ax.set_ylim(Y_min, Y_max)
@@ -247,7 +229,7 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     ax.xaxis.set_tick_params(labeltop=True)
     ax.yaxis.set_tick_params(labelright=True)
 
-    # Masquer les coordonnées aux extrémités
+     # Masquer les coordonnées aux extrémités
     xticks = ax.get_xticks()
     yticks = ax.get_yticks()
     ax.set_xticklabels(
@@ -259,29 +241,55 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
         rotation=label_rotation_y,
         va="center"  # Alignement vertical des étiquettes Y
     )
+    #modifier rotation
+    for label in ax.get_xticklabels():
+        label.set_rotation(label_rotation_x)
+
+    for label in ax.get_yticklabels():
+        label.set_rotation(label_rotation_y)
+
+    
 
     # Ajouter les contours pour la profondeur
     depth_levels = np.linspace(grid_Z.min(), grid_Z.max(), 100)
-    cmap = plt.cm.plasma
+    cmap = plt.cm.plasma  # Couleurs allant de bleu à jaune
     cont = ax.contourf(grid_X, grid_Y, grid_Z, levels=depth_levels, cmap=cmap)
     cbar = plt.colorbar(cont, ax=ax)
     cbar.set_label('Profondeur (m)', rotation=270)
 
     # Ajouter les bas-fonds en cyan
     ax.contourf(grid_X, grid_Y, bas_fonds, levels=[0.5, 1], colors='cyan', alpha=0.4, label='Bas-fonds')
-
+    
     # Ajouter une ligne de contour autour des bas-fonds
     contour_lines = ax.contour(
         grid_X, grid_Y, grid_Z,
-        levels=[seuil_bas_fond],
-        colors='black',
+        levels=[seuil_bas_fond],  # Niveau correspondant au seuil des bas-fonds
+        colors='black',  # Couleur des contours
         linewidths=1.5,
-        linestyles='solid',
+        linestyles='solid',# Épaisseur de la ligne
+    )
+    # Ajouter des labels pour les contours
+    ax.clabel(contour_lines,
+        inline=True,
+        fmt={seuil_bas_fond: f"{seuil_bas_fond:.2f} m"},  # Format du label
+        fontsize=12
     )
 
-    # Tracer la polygonale si elle existe
-    if polygon_points:
-        ax.plot(x_polygon, y_polygon, color='red', linewidth=2, label='Polygonale')
+
+    # Ajouter des lignes pour relier les tirets
+    for x in np.linspace(X_min, X_max, num=5):
+        ax.axvline(x, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
+    for y in np.linspace(Y_min, Y_max, num=5):
+        ax.axhline(y, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
+
+    intersections_x = np.linspace(X_min, X_max, num=5)
+    intersections_y = np.linspace(Y_min, Y_max, num=5)
+    for x in intersections_x:
+        for y in intersections_y:
+            ax.plot(x, y, 'k+', markersize=7, alpha=1.0)
+
+    
+
 
     # Ajouter les bâtiments
     if batiments_dans_emprise is not None:
@@ -289,6 +297,7 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
 
     # Affichage de la carte de profondeur
     st.pyplot(fig)
+    # Afficher les surfaces calculées
     st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
 
 # Ajouter un bouton pour générer la carte de profondeur
