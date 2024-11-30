@@ -261,7 +261,7 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     ax.contourf(grid_X, grid_Y, bas_fonds, levels=[0.5, 1], colors='cyan', alpha=0.4, label='Bas-fonds')
     
     # Ajouter une ligne de contour autour des bas-fonds
-    contour_lines = ax.contour(
+    contour = ax.contour(
         grid_X, grid_Y, grid_Z,
         levels=[seuil_bas_fond],  # Niveau correspondant au seuil des bas-fonds
         colors='black',  # Couleur des contours
@@ -269,7 +269,8 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
         linestyles='solid',# Épaisseur de la ligne
     )
     # Ajouter des labels pour les contours
-    ax.clabel(contour_lines,
+    ax.clabel(
+        contour,
     fmt=lambda val: f"Cote: {val:.2f} m",  # Format du label
     fontsize=8,
     inline=True,
