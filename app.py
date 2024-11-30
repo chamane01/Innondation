@@ -203,6 +203,18 @@ def generate_depth_map():
     ax.xaxis.set_tick_params(labeltop=True)
     ax.yaxis.set_tick_params(labelright=True)
 
+    for y in np.linspace(Y_min, Y_max, num=5):
+        ax.text(
+            X_min - (X_max - X_min) * 0.05,  # Décalage horizontal pour positionner à gauche du graphique
+            y,                               # Position verticale correspondant au tick
+            f"{y:.2f}",                      # Texte (coordonnée Y)
+            rotation=0,                      # Orientation horizontale
+            ha='right',                      # Alignement horizontal (à droite du texte)
+            va='center',                     # Alignement vertical (centré par rapport à la coordonnée Y)
+            fontsize=10,                     # Taille de police
+            color='black'                    # Couleur du texte
+        )
+
     # Ajouter les contours pour la profondeur
     depth_levels = np.linspace(grid_Z.min(), grid_Z.max(), 100)
     cmap = plt.cm.plasma  # Couleurs allant de bleu à jaune
