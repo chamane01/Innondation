@@ -277,7 +277,7 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     )
     # Ajouter un fond blanc aux labels
     for label in labels:
-        label.set_bbox(dict(facecolor='white', edgecolor='none', alpha=0.7))
+        label.set_bbox(dict(facecolor='white', edgecolor='none', alpha=0.3))
 
 
     # Ajouter des lignes pour relier les tirets
