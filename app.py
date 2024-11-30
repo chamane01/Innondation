@@ -192,11 +192,6 @@ if df is not None:
             st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
             st.write(f"**Système de projection :** EPSG:32630")
 
-X_min, X_max = 0, 100
-Y_min, Y_max = 0, 100
-
-grid_X, grid_Y = np.meshgrid(np.linspace(X_min, X_max, 100), np.linspace(Y_min, Y_max, 100))
-grid_Z = np.random.random((100, 100)) 
 intersections_x = np.linspace(X_min, X_max, num=5)
 intersections_y = np.linspace(Y_min, Y_max, num=5)
 
