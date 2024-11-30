@@ -212,13 +212,6 @@ def generate_depth_map():
     ax.yaxis.set_tick_params(labelright=True)
 
     ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
-    for label in ax.get_xticklabels():
-        label.set_rotation(label_rotation_x)
-
-    for label in ax.get_yticklabels():
-        label.set_rotation(label_rotation_y)
-
-    
 
     # Ajouter les contours pour la profondeur
     depth_levels = np.linspace(grid_Z.min(), grid_Z.max(), 100)
