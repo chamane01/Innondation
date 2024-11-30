@@ -222,6 +222,16 @@ def generate_depth_map():
         for y in intersections_y:
             ax.plot(x, y, 'k+', markersize=7, alpha=1.0)
 
+    ax.set_xticks(np.linspace(X_min, X_max, 6))
+    ax.set_xticklabels([f"{x:.1f}" for x in np.linspace(X_min, X_max, 6)])
+    ax.set_yticks(np.linspace(Y_min, Y_max, 6))
+    ax.set_yticklabels([f"{y:.1f}" for y in np.linspace(Y_min, Y_max, 6)])
+
+    ax.set_xlabel('Coordonnée X (m)')
+    ax.set_ylabel('Coordonnée Y (m)')
+
+    
+
     # Ajouter les bâtiments
     if batiments_dans_emprise is not None:
         batiments_dans_emprise.plot(ax=ax, facecolor='grey', edgecolor='black', linewidth=0.5, alpha=0.6)
