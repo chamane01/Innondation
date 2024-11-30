@@ -259,10 +259,6 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
 
     # Ajouter les bas-fonds en cyan
     ax.contourf(grid_X, grid_Y, bas_fonds, levels=[0.5, 1], colors='cyan', alpha=0.4, label='Bas-fonds')
-    contour_levels = np.linspace(grid_Z.min(), grid_Z.max(), 10)
-    contours = ax.contour(grid_X, grid_Y, grid_Z, levels=contour_levels, colors='blue', linewidths=2)
-    ax.clabel(contours, inline=True, fontsize=10)
-    
 
 
     # Ajouter des lignes pour relier les tirets
