@@ -10,7 +10,6 @@ from shapely.geometry import MultiPolygon
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
-from scipy.ndimage import gaussian_filter
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -107,8 +106,6 @@ if df is not None:
             ax.set_xlim(X_min, X_max)
             ax.set_ylim(Y_min, Y_max)
             ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
-
-      
             # Ajouter des coordonnées sur les quatre côtés
             ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
             ax.set_xticks(np.linspace(X_min, X_max, num=5))# Coordonnées sur l'axe X
@@ -192,55 +189,3 @@ if df is not None:
             st.write(f"**Date :** {now.strftime('%Y-%m-%d')}")
             st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
             st.write(f"**Système de projection :** EPSG:32630")
-
-X_min, X_max = 0, 10
-Y_min, Y_max = 0, 10
-
-intersections_x = np.linspace(X_min, X_max, num=5)
-intersections_y = np.linspace(Y_min, Y_max, num=5)
-
-# Fonction pour générer la carte de profondeur avec dégradé de couleurs
-def generate_depth_map():
-    # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
-    smoothed_Z = gaussian_filter(grid_Z, sigma=2)
-    fig, ax = plt.subplots(figsize=(8, 6))
-    ax.set_xlim(X_min, X_max)
-    ax.set_ylim(Y_min, Y_max)
-    ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
-
-    # Ajouter les contours pour la profondeur
-    depth_levels = np.linspace(grid_Z.min(), grid_Z.max(), 100)
-    cmap = plt.cm.plasma  # Couleurs allant de bleu à jaune
-    cont = ax.contourf(grid_X, grid_Y, grid_Z, levels=depth_levels, cmap=cmap)
-    cbar = plt.colorbar(cont, ax=ax)
-    cbar.set_label('Profondeur (m)', rotation=270)
-
-    ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
-    ax.set_xticks(np.linspace(X_min, X_max, num=5))
-    ax.set_yticks(np.linspace(Y_min, Y_max, num=5))
-    ax.xaxis.set_tick_params(labeltop=True)
-    ax.yaxis.set_tick_params(labelright=True)
-
-    # Ajouter des lignes pour relier les tirets
-    for x in np.linspace(X_min, X_max, num=5):
-        ax.axvline(x, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
-    for y in np.linspace(Y_min, Y_max, num=5):
-        ax.axhline(y, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
-
-    # Ajouter les croisillons
-    for x in intersections_x:
-        for y in intersections_y:
-            ax.plot(x, y, 'k+', markersize=7, alpha=1.0)
-
-    
-
-    # Ajouter les bâtiments
-    if batiments_dans_emprise is not None:
-        batiments_dans_emprise.plot(ax=ax, facecolor='grey', edgecolor='black', linewidth=0.5, alpha=0.6)
-
-    # Affichage de la carte de profondeur
-    st.pyplot(fig)
-
-# Ajouter un bouton pour générer la carte de profondeur
-if st.button("Générer la carte de profondeur"):
-    generate_depth_map()
