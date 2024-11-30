@@ -195,6 +195,13 @@ Y_min, Y_max = 0, 100
 
 # Fonction pour générer la carte de profondeur avec dégradé de couleurs
 def generate_depth_map():
+     """
+    Génère une carte de profondeur avec la possibilité de définir la rotation des étiquettes des axes.
+
+    Paramètres :
+    - label_rotation_x : angle de rotation des étiquettes de l'axe X (0 par défaut).
+    - label_rotation_y : angle de rotation des étiquettes de l'axe Y (0 par défaut).
+    """
     
     # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
     fig, ax = plt.subplots(figsize=(8, 6))
