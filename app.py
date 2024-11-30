@@ -121,11 +121,16 @@ if df is not None:
             for y in np.linspace(Y_min, Y_max, num=5):
                 ax.axhline(y, color='black', linewidth=0.5, linestyle='--',alpha=0.2)
 
-            intersections_x = np.linspace(X_min, X_max, num=5)
-            intersections_y = np.linspace(Y_min, Y_max, num=5)
-            for x in intersections_x:
-                for y in intersections_y:
+            for x in np.linspace(X_min, X_max, num=5):
+                for y in np.linspace(Y_min, Y_max, num=5):
                     ax.plot(x, y, 'kx', markersize=7, alpha=1.0)
+
+            ax.set_xlim(X_min, X_max)
+            ax.set_ylim(Y_min, Y_max)
+
+            
+
+          
 
 
             # Tracer la zone inondée avec les contours
