@@ -190,6 +190,34 @@ if df is not None:
             st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
             st.write(f"**Système de projection :** EPSG:32630")
 
+def load_polygon(file):
+    """
+    Charge un fichier CSV ou GeoJSON contenant des points pour créer une polygonale.
+    Le fichier doit contenir des colonnes 'x' et 'y'.
+    """
+    try:
+        # Charger les données en fonction du format
+        if file.name.endswith('.csv'):
+            data = pd.read_csv(file)
+        elif file.name.endswith('.geojson'):
+            data = gpd.read_file(file)
+        else:
+            st.error("Format de fichier non supporté. Utilisez un fichier CSV ou GeoJSON.")
+            return None
+
+        # Vérifier si les colonnes 'x' et 'y' existent
+        if 'x' in data.columns and 'y' in data.columns:
+            points = list(zip(data['x'], data['y']))
+            return points
+        else:
+            st.error("Le fichier doit contenir les colonnes 'x' et 'y'.")
+            return None
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier: {e}")
+        return None
+
+
+
 # Fonction pour générer la carte de profondeur avec dégradé de couleurs
 def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
 
