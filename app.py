@@ -201,6 +201,10 @@ orientation_y = st.radio(
 )
 labeltop = orientation_x == "En haut"
 labelright = orientation_y == "À droite"
+
+rotation_x = st.slider("Rotation des étiquettes pour l'axe X :", 0, 90, 0)
+rotation_y = st.slider("Rotation des étiquettes pour l'axe Y :", 0, 90, 90)
+
 # Fonction pour générer la carte de profondeur avec dégradé de couleurs
 def generate_depth_map():
     # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
@@ -229,6 +233,9 @@ def generate_depth_map():
     # Appliquer les orientations sélectionnées
     ax.xaxis.set_tick_params(labeltop=labeltop, labelbottom=not labeltop)
     ax.yaxis.set_tick_params(labelright=labelright, labelleft=not labelright)
+
+    ax.set_xticklabels(ax.get_xticks(), rotation=rotation_x)
+    ax.set_yticklabels(ax.get_yticks(), rotation=rotation_y)
 
     # Ajouter des lignes pour relier les tirets
     for x in np.linspace(X_min, X_max, num=5):
