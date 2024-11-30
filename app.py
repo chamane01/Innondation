@@ -202,6 +202,16 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     ax.set_yticks(np.linspace(Y_min, Y_max, num=5))
     ax.xaxis.set_tick_params(labeltop=True)
     ax.yaxis.set_tick_params(labelright=True)
+    xticks = ax.get_xticks()
+    yticks = ax.get_yticks()
+    ax.set_xticklabels(
+        ["" if x == X_min or x == X_max else f"{x:.2f}" for x in xticks],
+        rotation=label_rotation_x
+    )
+    ax.set_yticklabels(
+        ["" if y == Y_min or y == Y_max else f"{y:.2f}" for y in yticks],
+        rotation=label_rotation_y
+    )
     for label in ax.get_xticklabels():
         label.set_rotation(label_rotation_x)
 
