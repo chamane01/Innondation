@@ -192,6 +192,7 @@ if df is not None:
 
 # Fonction pour générer la carte de profondeur avec dégradé de couleurs
 def generate_depth_map():
+    
     # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
     fig, ax = plt.subplots(figsize=(8, 6))
     ax.set_xlim(X_min, X_max)
@@ -202,6 +203,15 @@ def generate_depth_map():
     ax.set_yticks(np.linspace(Y_min, Y_max, num=5))
     ax.xaxis.set_tick_params(labeltop=True)
     ax.yaxis.set_tick_params(labelright=True)
+
+    ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
+    for label in ax.get_xticklabels():
+        label.set_rotation(label_rotation_x)
+
+    for label in ax.get_yticklabels():
+        label.set_rotation(label_rotation_y)
+
+    
 
     # Ajouter les contours pour la profondeur
     depth_levels = np.linspace(grid_Z.min(), grid_Z.max(), 100)
@@ -234,5 +244,6 @@ def generate_depth_map():
 
 # Ajouter un bouton pour générer la carte de profondeur
 if st.button("Générer la carte de profondeur"):
-    generate_depth_map()
+    # Modifiez ici les angles si vous voulez tester une rotation différente
+    generate_depth_map(label_rotation_x=0, label_rotation_y=90)
 
