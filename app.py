@@ -106,6 +106,12 @@ if df is not None:
             ax.set_xlim(X_min, X_max)
             ax.set_ylim(Y_min, Y_max)
             ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+
+            if st.button("Afficher la carte de profondeur"):
+                c = ax.contourf(grid_X, grid_Y, grid_Z, levels=50, cmap='coolwarm')
+                fig.colorbar(c, ax=ax, label="Profondeur (m)")
+                st.pyplot(fig)
+                
             # Ajouter des coordonnées sur les quatre côtés
             ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
             ax.set_xticks(np.linspace(X_min, X_max, num=5))# Coordonnées sur l'axe X
