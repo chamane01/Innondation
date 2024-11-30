@@ -192,32 +192,6 @@ if df is not None:
 
 # Fonction pour générer la carte de profondeur avec dégradé de couleurs
 def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
-
-    # Détection des bas-fonds
-    def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
-        """
-        Détermine les bas-fonds en fonction de la profondeur Z relative.
-        Bas-fond = Z < moyenne(Z) - seuil_rel_bas_fond * std(Z)
-        """
-        moyenne_Z = np.mean(grid_Z)
-        ecart_type_Z = np.std(grid_Z)
-        seuil_bas_fond = moyenne_Z - seuil_rel_bas_fond * ecart_type_Z
-        bas_fonds = grid_Z < seuil_bas_fond
-        return bas_fonds
-
-    # Calcul des surfaces des bas-fonds
-    def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
-        """
-        Calcule la surface des bas-fonds en hectares.
-        """
-        resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000  # Résolution en hectares
-        surface_bas_fond = np.sum(bas_fonds) * resolution
-        return surface_bas_fond
-
-    bas_fonds = detecter_bas_fonds(grid_Z)
-    surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
-
-    
     # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
     fig, ax = plt.subplots(figsize=(8, 6))
     ax.set_xlim(X_min, X_max)
@@ -257,10 +231,6 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     cbar = plt.colorbar(cont, ax=ax)
     cbar.set_label('Profondeur (m)', rotation=270)
 
-    # Ajouter les bas-fonds en cyan
-    ax.contourf(grid_X, grid_Y, bas_fonds, levels=[0.5, 1], colors='cyan', alpha=0.4, label='Bas-fonds')
-
-
     # Ajouter des lignes pour relier les tirets
     for x in np.linspace(X_min, X_max, num=5):
         ax.axvline(x, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
@@ -282,9 +252,8 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
 
     # Affichage de la carte de profondeur
     st.pyplot(fig)
-    # Afficher les surfaces calculées
-    st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
 
 # Ajouter un bouton pour générer la carte de profondeur
-if st.button("Générer la carte de profondeur avec bas-fonds"):
+if st.button("Générer la carte de profondeur"):
     generate_depth_map(label_rotation_x=0, label_rotation_y=-90)
+
