@@ -272,7 +272,7 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     ax.clabel(contour_lines,
         inline=True,
         fmt={seuil_bas_fond: f"{seuil_bas_fond:.2f} m"},  # Format du label
-        fontsize=10
+        fontsize=12
     )
 
 
