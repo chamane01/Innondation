@@ -212,10 +212,6 @@ def generate_depth_map():
     for y in np.linspace(Y_min, Y_max, num=5):
         ax.axhline(y, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
 
-    # Ajouter les croisillons
-    for x in intersections_x:
-        for y in intersections_y:
-            ax.plot(x, y, 'k+', markersize=7, alpha=1.0)
 
     # Ajouter les bâtiments
     if batiments_dans_emprise is not None:
