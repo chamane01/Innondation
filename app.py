@@ -270,11 +270,12 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     )
     # Ajouter des labels pour les contours
     ax.clabel(contour_lines,
-        inline=True,
-        fmt={seuil_bas_fond: f" {seuil_bas_fond:.2f} m"},  # Format du label
-        fontsize=10,
-        path_effects=[pe.withStroke(linewidth=3, foreground='white')]
-    )
+    fmt=lambda val: f"Cote: {val:.2f} m",  # Format du label
+    fontsize=8,
+    inline=True,
+    colors='black',
+    path_effects=[pe.withStroke(linewidth=3, foreground='white')]  # Contour blanc
+)
 
 
     # Ajouter des lignes pour relier les tirets
