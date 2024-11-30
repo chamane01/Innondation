@@ -190,9 +190,15 @@ if df is not None:
             st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
             st.write(f"**Système de projection :** EPSG:32630")
 
-# Fonction pour générer la carte de profondeur avec dégradé de couleurs
-def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
+import streamlit as st
+import numpy as np
+import matplotlib.pyplot as plt
+import geopandas as gpd
+import contextily as ctx
+from shapely.geometry import Polygon
 
+# Fonction pour générer la carte de profondeur avec dégradé de couleurs
+def generate_depth_map(label_rotation_x=0, label_rotation_y=0, coords=[]):
     # Détection des bas-fonds
     def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
         """
@@ -214,10 +220,14 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
         surface_bas_fond = np.sum(bas_fonds) * resolution
         return surface_bas_fond
 
+    # Exemple de données pour la carte (à remplacer par des vraies données)
+    X_min, X_max, Y_min, Y_max = 0, 100, 0, 100
+    grid_X, grid_Y = np.meshgrid(np.linspace(X_min, X_max, 100), np.linspace(Y_min, Y_max, 100))
+    grid_Z = np.random.random((100, 100)) * 10  # Carte de profondeur aléatoire pour l'exemple
+
     bas_fonds, seuil_bas_fond = detecter_bas_fonds(grid_Z)
     surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
 
-    
     # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
     fig, ax = plt.subplots(figsize=(8, 6))
     ax.set_xlim(X_min, X_max)
@@ -229,7 +239,7 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     ax.xaxis.set_tick_params(labeltop=True)
     ax.yaxis.set_tick_params(labelright=True)
 
-     # Masquer les coordonnées aux extrémités
+    # Masquer les coordonnées aux extrémités
     xticks = ax.get_xticks()
     yticks = ax.get_yticks()
     ax.set_xticklabels(
@@ -241,14 +251,12 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
         rotation=label_rotation_y,
         va="center"  # Alignement vertical des étiquettes Y
     )
-    #modifier rotation
+    # Modifier rotation
     for label in ax.get_xticklabels():
         label.set_rotation(label_rotation_x)
 
     for label in ax.get_yticklabels():
         label.set_rotation(label_rotation_y)
-
-    
 
     # Ajouter les contours pour la profondeur
     depth_levels = np.linspace(grid_Z.min(), grid_Z.max(), 100)
@@ -268,6 +276,7 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
         linewidths=1.5,
         linestyles='solid',# Épaisseur de la ligne
     )
+
     # Ajouter des labels pour les contours
     ax.clabel(contour_lines,
         inline=True,
@@ -275,34 +284,36 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
         fontsize=12
     )
 
-
     # Ajouter des lignes pour relier les tirets
     for x in np.linspace(X_min, X_max, num=5):
         ax.axvline(x, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
     for y in np.linspace(Y_min, Y_max, num=5):
         ax.axhline(y, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
 
-    intersections_x = np.linspace(X_min, X_max, num=5)
-    intersections_y = np.linspace(Y_min, Y_max, num=5)
-    for x in intersections_x:
-        for y in intersections_y:
-            ax.plot(x, y, 'k+', markersize=7, alpha=1.0)
-
-    
-
-
-    # Ajouter les bâtiments
-    if batiments_dans_emprise is not None:
-        batiments_dans_emprise.plot(ax=ax, facecolor='grey', edgecolor='black', linewidth=0.5, alpha=0.6)
+    # Afficher les points et relier les coordonnées (si présentes)
+    if coords:
+        # Relier les 4 points pour former un polygone
+        x_coords, y_coords = zip(*coords)
+        ax.plot(x_coords + (x_coords[0],), y_coords + (y_coords[0],), 'r-', linewidth=2)  # Relier les points par des lignes rouges
+        for (x, y) in coords:
+            ax.plot(x, y, 'bo', alpha=0.5)  # Afficher les points en bleu
 
     # Affichage de la carte de profondeur
     st.pyplot(fig)
+
     # Afficher les surfaces calculées
     st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
 
 # Ajouter un bouton pour générer la carte de profondeur
 if st.button("Générer la carte de profondeur avec bas-fonds"):
-    generate_depth_map(label_rotation_x=0, label_rotation_y=-90)
-
-
-
+    # Demander à l'utilisateur d'entrer les coordonnées
+    st.write("Veuillez entrer les coordonnées des 4 points :")
+    
+    coords = []
+    for i in range(4):
+        x_coord = st.number_input(f"Coordonnée X du point {i+1} (m)", value=0.0)
+        y_coord = st.number_input(f"Coordonnée Y du point {i+1} (m)", value=0.0)
+        coords.append((x_coord, y_coord))
+    
+    # Appeler la fonction de génération avec les coordonnées saisies
+    generate_depth_map(label_rotation_x=0, label_rotation_y=-90, coords=coords)
