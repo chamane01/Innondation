@@ -203,33 +203,6 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     ax.xaxis.set_tick_params(labeltop=True)
     ax.yaxis.set_tick_params(labelright=True)
 
-    def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
-    """
-    Détermine les bas-fonds en fonction de la profondeur Z relative.
-    Bas-fond = Z < moyenne(Z) - seuil_rel_bas_fond * std(Z)
-    """
-    moyenne_Z = np.mean(grid_Z)
-    ecart_type_Z = np.std(grid_Z)
-    seuil_bas_fond = moyenne_Z - seuil_rel_bas_fond * ecart_type_Z
-    bas_fonds = grid_Z < seuil_bas_fond
-    return bas_fonds
-    
-    def calculer_surfaces_automatiques(grid_Z, bas_fonds):
-    resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000  # Résolution en hectares
-    surface_bleue = np.sum(grid_Z <= st.session_state.flood_data['niveau_inondation']) * resolution
-    surface_bas_fond = np.sum(bas_fonds) * resolution
-    return surface_bleue, surface_bas_fond
-    if st.button("Analyser les surfaces"):
-    # Analyse automatique des bas-fonds
-    bas_fonds = detecter_bas_fonds(grid_Z)
-    surface_bleue, surface_bas_fond = calculer_surfaces_automatiques(grid_Z, bas_fonds)
-
-    # Stockage des résultats dans la session
-    st.session_state.flood_data['surface_bleu'] = surface_bleue
-    st.session_state.flood_data['surface_bas_fond'] = surface_bas_fond
-
-    ax.contourf(grid_X, grid_Y, bas_fonds, levels=[0.5, 1], colors='cyan', alpha=0.3, label='Bas-fonds')
-
      # Masquer les coordonnées aux extrémités
     xticks = ax.get_xticks()
     yticks = ax.get_yticks()
@@ -279,8 +252,6 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
 
     # Affichage de la carte de profondeur
     st.pyplot(fig)
-    st.write(f"**Surface bleue**: {surface_bleue:.2f} hectares")
-    st.write(f"**Surface des bas-fonds**: {surface_bas_fond:.2f} hectares")
 
 # Ajouter un bouton pour générer la carte de profondeur
 if st.button("Générer la carte de profondeur"):
