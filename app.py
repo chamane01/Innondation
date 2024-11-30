@@ -304,86 +304,84 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
 if st.button("Générer la carte de profondeur avec bas-fonds"):
     generate_depth_map(label_rotation_x=0, label_rotation_y=-90)
 
-import geopandas as gpd
-import matplotlib.pyplot as plt
-import numpy as np
-import contextily as ctx
-import streamlit as st
-
-# Fonction pour générer la carte de profondeur avec dégradé de couleurs et la superposition de la polygonale
-def generate_depth_map_with_polygonale(label_rotation_x=0, label_rotation_y=0, polygon_file=None):
+# Fonction pour charger les fichiers de points
+def load_point_cloud(file_path):
     """
-    Génère une carte de profondeur avec les bas-fonds et une couche polygonale.
+    Charge un fichier CSV avec les colonnes ID, X, Y, Z
     """
+    df = pd.read_csv(file_path)
+    return df
 
-    # Détection des bas-fonds
-    def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
-        moyenne_Z = np.mean(grid_Z)
-        ecart_type_Z = np.std(grid_Z)
-        seuil_bas_fond = moyenne_Z - seuil_rel_bas_fond * ecart_type_Z
-        bas_fonds = grid_Z < seuil_bas_fond
-        return bas_fonds, seuil_bas_fond
+# Fonction pour générer la carte de profondeur avec la superposition de la polygonale
+def generate_depth_map_with_polygon(file_path_points, file_path_polygon, label_rotation_x=0, label_rotation_y=0):
+    # Charger les nuages de points
+    point_cloud = load_point_cloud(file_path_points)
 
-    # Calcul des surfaces des bas-fonds
-    def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
-        resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000  # Résolution en hectares
-        surface_bas_fond = np.sum(bas_fonds) * resolution
-        return surface_bas_fond
+    # Extraire les coordonnées X, Y et Z
+    X_points = point_cloud['X'].values
+    Y_points = point_cloud['Y'].values
+    Z_points = point_cloud['Z'].values
 
-    bas_fonds, seuil_bas_fond = detecter_bas_fonds(grid_Z)
-    surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
+    # Définir une grille pour l'interpolation
+    grid_X, grid_Y = np.meshgrid(np.linspace(min(X_points), max(X_points), 100),
+                                 np.linspace(min(Y_points), max(Y_points), 100))
 
-    # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
+    # Interpoler les données de profondeur Z sur la grille
+    grid_Z = griddata((X_points, Y_points), Z_points, (grid_X, grid_Y), method='cubic')
+
+    # Charger le fichier de la polygonale (en supposant qu'il soit un shapefile)
+    polygon_data = gpd.read_file(file_path_polygon)
+
+    # Appliquer un dégradé de couleurs pour la profondeur
     fig, ax = plt.subplots(figsize=(8, 6))
-    ax.set_xlim(X_min, X_max)
-    ax.set_ylim(Y_min, Y_max)
-    ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+    ax.set_xlim(min(X_points), max(X_points))
+    ax.set_ylim(min(Y_points), max(Y_points))
+
+    # Ajouter un fond de carte basique
     ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
-    ax.set_xticks(np.linspace(X_min, X_max, num=5))
-    ax.set_yticks(np.linspace(Y_min, Y_max, num=5))
+    ax.set_xticks(np.linspace(min(X_points), max(X_points), num=5))
+    ax.set_yticks(np.linspace(min(Y_points), max(Y_points), num=5))
     ax.xaxis.set_tick_params(labeltop=True)
     ax.yaxis.set_tick_params(labelright=True)
 
-    # Masquer les coordonnées aux extrémités
-    xticks = ax.get_xticks()
-    yticks = ax.get_yticks()
-    ax.set_xticklabels(["" if x == X_min or x == X_max else f"{int(x)}" for x in xticks], rotation=label_rotation_x)
-    ax.set_yticklabels(["" if y == Y_min or y == Y_max else f"{int(y)}" for y in yticks], rotation=label_rotation_y)
-
-    # Ajouter les contours pour la profondeur
+    # Ajouter un dégradé de couleurs pour les profondeurs
     depth_levels = np.linspace(grid_Z.min(), grid_Z.max(), 100)
-    cmap = plt.cm.plasma
+    cmap = plt.cm.plasma  # Choix du dégradé de couleur
     cont = ax.contourf(grid_X, grid_Y, grid_Z, levels=depth_levels, cmap=cmap)
     cbar = plt.colorbar(cont, ax=ax)
     cbar.set_label('Profondeur (m)', rotation=270)
 
-    # Ajouter les bas-fonds en cyan
-    ax.contourf(grid_X, grid_Y, bas_fonds, levels=[0.5, 1], colors='cyan', alpha=0.4, label='Bas-fonds')
+    # Ajouter la polygonale
+    polygon_data.plot(ax=ax, facecolor='none', edgecolor='red', linewidth=2)
 
-    # Ajouter une ligne de contour autour des bas-fonds
-    contour_lines = ax.contour(grid_X, grid_Y, grid_Z, levels=[seuil_bas_fond], colors='black', linewidths=1.5)
-    ax.clabel(contour_lines, inline=True, fmt={seuil_bas_fond: f"{seuil_bas_fond:.2f} m"}, fontsize=12)
+    # Ajouter des lignes de contour
+    ax.contour(grid_X, grid_Y, grid_Z, levels=[np.mean(grid_Z)], colors='black', linewidths=1.5, linestyles='solid')
 
-    # Superposer le fichier polygonal s'il est fourni
-    if polygon_file is not None:
-        # Charger le fichier polygonal
-        polygon_data = gpd.read_file(polygon_file)
-        polygon_data.to_crs(epsg=32630, inplace=True)
-        polygon_data.plot(ax=ax, facecolor='none', edgecolor='red', linewidth=2, label='Polygonale')
+    # Ajouter des lignes pour relier les tirets
+    for x in np.linspace(min(X_points), max(X_points), num=5):
+        ax.axvline(x, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
+    for y in np.linspace(min(Y_points), max(Y_points), num=5):
+        ax.axhline(y, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
 
     # Afficher la carte de profondeur
     st.pyplot(fig)
 
-    # Afficher les surfaces calculées
-    st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
-
 # Ajouter un bouton pour générer la carte de profondeur avec la polygonale
-if st.button("Générer la carte de profondeur avec bas-fonds et polygonale"):
-    # Demander à l'utilisateur de télécharger le fichier de la polygonale
-    polygon_file = st.file_uploader("Téléchargez votre fichier de polygonale (format shapefile ou geojson)", type=["shp", "geojson"])
-    
-    if polygon_file is not None:
-        # Si un fichier est sélectionné, générer la carte avec la polygonale
-        generate_depth_map_with_polygonale(label_rotation_x=0, label_rotation_y=-90, polygon_file=polygon_file)
-    else:
-        st.write("Veuillez télécharger un fichier de polygonale pour superposer sur la carte de profondeur.")
+if st.button("Générer la carte de profondeur avec polygonale"):
+    # Demander à l'utilisateur de télécharger les fichiers
+    file_points = st.file_uploader("Télécharger le fichier de points (CSV)", type=["csv"])
+    file_polygon = st.file_uploader("Télécharger le fichier de la polygonale (Shapefile)", type=["shp", "shx", "dbf"])
+
+    if file_points is not None and file_polygon is not None:
+        # Sauvegarder les fichiers téléchargés localement
+        file_points_path = './file_points.csv'
+        file_polygon_path = './file_polygon.shp'
+
+        with open(file_points_path, "wb") as f:
+            f.write(file_points.getbuffer())
+
+        with open(file_polygon_path, "wb") as f:
+            f.write(file_polygon.getbuffer())
+
+        # Générer la carte avec la fonction
+        generate_depth_map_with_polygon(file_points_path, file_polygon_path, label_rotation_x=0, label_rotation_y=-90)
