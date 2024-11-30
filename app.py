@@ -216,7 +216,24 @@ def load_polygon(file):
         st.error(f"Erreur lors du chargement du fichier: {e}")
         return None
 
-
+def load_polygon(file):
+    """
+    Charge un fichier CSV contenant des points pour créer une polygonale.
+    Le fichier doit contenir des colonnes 'ID', 'X', 'Y', 'Z'.
+    """
+    try:
+        data = pd.read_csv(file)
+        
+        # Vérifier si les colonnes nécessaires sont présentes
+        if all(col in data.columns for col in ['ID', 'X', 'Y', 'Z']):
+            points = list(zip(data['X'], data['Y']))
+            return points
+        else:
+            st.error("Le fichier doit contenir les colonnes 'ID', 'X', 'Y', 'Z'.")
+            return None
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier: {e}")
+        return None
 
 # Fonction pour générer la carte de profondeur avec dégradé de couleurs
 def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
@@ -316,7 +333,10 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
         for y in intersections_y:
             ax.plot(x, y, 'k+', markersize=7, alpha=1.0)
 
-    
+    if polygon_points is not None:
+        polygon = Polygon(polygon_points)
+        x, y = polygon.exterior.xy
+        ax.plot(x, y, color='white', linewidth=2, label='Polygonale')
 
 
     # Ajouter les bâtiments
@@ -328,6 +348,19 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     # Afficher les surfaces calculées
     st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
 
+st.title("Génération de carte de profondeur avec Polygonale")
+
+grid_X, grid_Y = np.meshgrid(np.linspace(0, 10, 100), np.linspace(0, 10, 100))
+grid_Z = np.random.random((100, 100)) * 10  # Exemple de carte de profondeur aléatoire
+
+
 # Ajouter un bouton pour générer la carte de profondeur
 if st.button("Générer la carte de profondeur avec bas-fonds"):
-    generate_depth_map(label_rotation_x=0, label_rotation_y=-90)
+    generate_depth_map(grid_X, grid_Y, grid_Z, label_rotation_x=0, label_rotation_y=-90)
+    uploaded_file = st.file_uploader("Téléchargez votre fichier CSV contenant les points de la polygonale", type=["csv"])
+    if uploaded_file is not None:
+        polygon_points = load_polygon(uploaded_file)
+        if polygon_points:
+            st.success("Fichier chargé avec succès. La polygonale sera dessinée sur la carte.")
+            generate_depth_map(grid_X, grid_Y, grid_Z, polygon_points=polygon_points)
+        
