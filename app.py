@@ -207,11 +207,11 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     xticks = ax.get_xticks()
     yticks = ax.get_yticks()
     ax.set_xticklabels(
-        ["" if x == X_min or x == X_max else f"{x:.2f}" for x in xticks],
-        rotation=label_rotation_x
+         ["" if x == X_min or x == X_max else f"{int(x)}" for x in xticks],
+        rotation=label_rotation_x,
     )
     ax.set_yticklabels(
-        ["" if y == Y_min or y == Y_max else f"{y:.2f}" for y in yticks],
+        ["" if y == Y_min or y == Y_max else f"{int(y)}" for y in yticks],
         rotation=label_rotation_y,
         va="center"  # Alignement vertical des étiquettes Y
     )
