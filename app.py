@@ -282,6 +282,8 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
 
     # Affichage de la carte de profondeur
     st.pyplot(fig)
+    legend_handles = [plt.Line2D([0], [0], marker='s', color='w', markerfacecolor='cyan', markersize=10)]
+    ax.legend(handles=legend_handles, labels=[f"Bas-fonds: {surface_bas_fond:.2f} ha"], loc='lower right', fontsize=10)
     # Afficher les surfaces calculées
     st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
 
