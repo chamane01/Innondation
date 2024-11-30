@@ -264,20 +264,16 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     contour_lines = ax.contour(
         grid_X, grid_Y, grid_Z,
         levels=[seuil_bas_fond],  # Niveau correspondant au seuil des bas-fonds
-        colors='black',  # Couleur des contours
-        linewidths=1.5,
+        colors='blue',  # Couleur des contours
+        linewidths=2,
         linestyles='solid',# Épaisseur de la ligne
     )
     # Ajouter des labels pour les contours
-    labels = ax.clabel(
-        contour_lines,
+    ax.clabel(contour_lines,
         inline=True,
-        fmt={seuil_bas_fond: f"{seuil_bas_fond:.2f} m"},  # Format du label
+        fmt={seuil_bas_fond: f"Cote : {seuil_bas_fond:.2f} m"},  # Format du label
         fontsize=10
     )
-    # Ajouter un fond blanc aux labels
-    for label in labels:
-        label.set_bbox(dict(facecolor='white', edgecolor='none', alpha=0.3))
 
 
     # Ajouter des lignes pour relier les tirets
