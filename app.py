@@ -202,7 +202,6 @@ def generate_depth_map():
     ax.set_xlim(X_min, X_max)
     ax.set_ylim(Y_min, Y_max)
     ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
-    ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
 
     # Ajouter les contours pour la profondeur
     depth_levels = np.linspace(grid_Z.min(), grid_Z.max(), 100)
@@ -210,6 +209,12 @@ def generate_depth_map():
     cont = ax.contourf(grid_X, grid_Y, grid_Z, levels=depth_levels, cmap=cmap)
     cbar = plt.colorbar(cont, ax=ax)
     cbar.set_label('Profondeur (m)', rotation=270)
+
+    ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
+    ax.set_xticks(np.linspace(X_min, X_max, num=5))
+    ax.set_yticks(np.linspace(Y_min, Y_max, num=5))
+    ax.xaxis.set_tick_params(labeltop=True)
+    ax.yaxis.set_tick_params(labelright=True)
 
     # Ajouter des lignes pour relier les tirets
     for x in np.linspace(X_min, X_max, num=5):
@@ -221,14 +226,6 @@ def generate_depth_map():
     for x in intersections_x:
         for y in intersections_y:
             ax.plot(x, y, 'k+', markersize=7, alpha=1.0)
-
-    ax.set_xticks(np.linspace(X_min, X_max, 6))
-    ax.set_xticklabels([f"{x:.1f}" for x in np.linspace(X_min, X_max, 6)])
-    ax.set_yticks(np.linspace(Y_min, Y_max, 6))
-    ax.set_yticklabels([f"{y:.1f}" for y in np.linspace(Y_min, Y_max, 6)])
-
-    ax.set_xlabel('Coordonnée X (m)')
-    ax.set_ylabel('Coordonnée Y (m)')
 
     
 
