@@ -190,6 +190,17 @@ if df is not None:
             st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
             st.write(f"**Système de projection :** EPSG:32630")
 
+# Options pour changer l'orientation des étiquettes
+orientation_x = st.radio(
+    "Orientation des étiquettes pour l'axe X :",
+    ("En bas", "En haut")
+)
+orientation_y = st.radio(
+    "Orientation des étiquettes pour l'axe Y :",
+    ("À gauche", "À droite")
+)
+labeltop = orientation_x == "En haut"
+labelright = orientation_y == "À droite"
 # Fonction pour générer la carte de profondeur avec dégradé de couleurs
 def generate_depth_map():
     # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
@@ -209,6 +220,15 @@ def generate_depth_map():
     cont = ax.contourf(grid_X, grid_Y, grid_Z, levels=depth_levels, cmap=cmap)
     cbar = plt.colorbar(cont, ax=ax)
     cbar.set_label('Profondeur (m)', rotation=270)
+
+    # Amélioration de l'affichage des axes
+    ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
+    ax.set_xticks(np.linspace(X_min, X_max, num=5))
+    ax.set_yticks(np.linspace(Y_min, Y_max, num=5))
+
+    # Appliquer les orientations sélectionnées
+    ax.xaxis.set_tick_params(labeltop=labeltop, labelbottom=not labeltop)
+    ax.yaxis.set_tick_params(labelright=labelright, labelleft=not labelright)
 
     # Ajouter des lignes pour relier les tirets
     for x in np.linspace(X_min, X_max, num=5):
