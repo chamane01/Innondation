@@ -273,7 +273,6 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
         inline=True,
         fmt={seuil_bas_fond: f"Cote : {seuil_bas_fond:.2f} m"},  # Format du label
         fontsize=10
-        path_effects=[pe.withStroke(linewidth=3, foreground='white')],
     )
 
 
