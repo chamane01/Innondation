@@ -190,9 +190,6 @@ if df is not None:
             st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
             st.write(f"**Système de projection :** EPSG:32630")
 
-X_min, X_max = 0, 100 
-Y_min, Y_max = 0, 100
-
 # Fonction pour générer la carte de profondeur avec dégradé de couleurs
 def generate_depth_map():
      """
