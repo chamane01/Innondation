@@ -123,7 +123,7 @@ if df is not None:
 
             for x in np.linspace(X_min, X_max, num=5):
                 for y in np.linspace(Y_min, Y_max, num=5):
-                    ax.plot(x, y, 'kx', markersize=7, alpha=1.0)
+                    ax.plot(x, y, 'k+', markersize=7, alpha=1.0)
 
             ax.set_xlim(X_min, X_max)
             ax.set_ylim(Y_min, Y_max)
