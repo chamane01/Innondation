@@ -305,12 +305,6 @@ if st.button("Générer la carte de profondeur avec bas-fonds"):
     generate_depth_map(label_rotation_x=0, label_rotation_y=-90)
 
 
-import numpy as np
-import matplotlib.pyplot as plt
-import geopandas as gpd
-import streamlit as st
-import contextily as ctx
-
 # Fonction pour générer la carte de profondeur avec dégradé de couleurs
 def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
 
