@@ -190,8 +190,30 @@ if df is not None:
             st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
             st.write(f"**Système de projection :** EPSG:32630")
 
+def load_polygon(file):
+    """
+    Charge un fichier CSV contenant des points pour créer une polygonale.
+    Le fichier doit contenir des colonnes 'ID', 'X', 'Y', 'Z'.
+    """
+    try:
+        data = pd.read_csv(file)
+        
+        # Vérifier si les colonnes nécessaires sont présentes
+        if all(col in data.columns for col in ['ID', 'X', 'Y', 'Z']):
+            points = list(zip(data['X'], data['Y']))
+            return points
+        else:
+            st.error("Le fichier doit contenir les colonnes 'ID', 'X', 'Y', 'Z'.")
+            return None
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier: {e}")
+        return None
+
 # Fonction pour générer la carte de profondeur avec dégradé de couleurs
-def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
+def generate_depth_map(grid_X, grid_Y, grid_Z, polygon_points=None, label_rotation_x=0, label_rotation_y=0, batiments_dans_emprise=None):
+    """
+    Génère une carte de profondeur avec les bas-fonds et la polygonale.
+    """
 
     # Détection des bas-fonds
     def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
@@ -295,6 +317,11 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     if batiments_dans_emprise is not None:
         batiments_dans_emprise.plot(ax=ax, facecolor='grey', edgecolor='black', linewidth=0.5, alpha=0.6)
 
+    if polygon_points is not None:
+        polygon = Polygon(polygon_points)
+        x, y = polygon.exterior.xy
+        ax.plot(x, y, color='white', linewidth=2, label='Polygonale')
+
     # Affichage de la carte de profondeur
     st.pyplot(fig)
     # Afficher les surfaces calculées
@@ -303,3 +330,11 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
 # Ajouter un bouton pour générer la carte de profondeur
 if st.button("Générer la carte de profondeur avec bas-fonds"):
     generate_depth_map(label_rotation_x=0, label_rotation_y=-90)
+
+if st.button("Générer la carte de profondeur avec bas-fonds et polygonale"):
+    uploaded_file = st.file_uploader("Téléchargez votre fichier CSV contenant les points de la polygonale", type=["csv"])
+    if uploaded_file is not None:
+        polygon_points = load_polygon(uploaded_file)
+        if polygon_points:
+            st.success("Fichier chargé avec succès. La polygonale sera dessinée sur la carte.")
+            generate_depth_map(grid_X, grid_Y, grid_Z, polygon_points=polygon_points)
