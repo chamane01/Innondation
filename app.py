@@ -110,7 +110,6 @@ if df is not None:
             if st.button("Afficher la carte de profondeur"):
                 c = ax.contourf(grid_X, grid_Y, grid_Z, levels=50, cmap='coolwarm')
                 fig.colorbar(c, ax=ax, label="Profondeur (m)")
-                st.pyplot(fig)
                 
             # Ajouter des coordonnées sur les quatre côtés
             ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
