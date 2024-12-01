@@ -370,26 +370,22 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         
    
         if polygones_gdf is not None:
-        # Créer un GeoDataFrame pour les cellules de bas-fond
-        bas_fond_cells = []
-        for i in range(grid_Z.shape[0]):
-            for j in range(grid_Z.shape[1]):
-                if bas_fonds[i, j]:
-                    # Créer une cellule polygonale
-                    x_min, x_max = grid_X[i, j], grid_X[i, j] + resolution
-                    y_min, y_max = grid_Y[i, j], grid_Y[i, j] + resolution
-                    cell = box(x_min, y_min, x_max, y_max)
-                    bas_fond_cells.append(cell)
+            bas_fond_cells = []
+            for i in range(grid_Z.shape[0]):
+                 for j in range(grid_Z.shape[1]):
+                     if bas_fonds[i, j]:
+                         x_min, x_max = grid_X[i, j], grid_X[i, j] + resolution
+                         y_min, y_max = grid_Y[i, j], grid_Y[i, j] + resolution
+                         cell = box(x_min, y_min, x_max, y_max)
+                         bas_fond_cells.append(cell)
+            bas_fond_gdf = gpd.GeoDataFrame(geometry=bas_fond_cells, crs="EPSG:32630")
+            intersections = gpd.overlay(bas_fond_gdf, polygones_gdf, how='intersection')
+            surface_emprise_bas_fond = intersections.area.sum() / 10000  # Convertir en hectares
 
-        bas_fond_gdf = gpd.GeoDataFrame(geometry=bas_fond_cells, crs="EPSG:32630")
-
-        # Intersection avec les polygones
-        intersections = gpd.overlay(bas_fond_gdf, polygones_gdf, how='intersection')
-        surface_emprise_bas_fond = intersections.area.sum() / 10000  # Convertir en hectares
         return surface_totale_bas_fond, surface_emprise_bas_fond
+                
 
     
-
 
     
 
