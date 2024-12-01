@@ -306,14 +306,6 @@ if st.button("Générer la carte de profondeur avec bas-fonds"):
 
 
 
-
-import numpy as np
-import geopandas as gpd
-import streamlit as st
-import matplotlib.pyplot as plt
-import contextily as ctx
-from shapely.geometry import box
-
 # Fonction pour générer la carte de profondeur avec dégradé de couleurs
 def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     # Détection des bas-fonds
