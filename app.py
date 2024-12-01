@@ -373,25 +373,6 @@ st.title("Affichage des Polygones et Profondeur")
 uploaded_file = st.file_uploader("Téléverser un fichier GeoJSON", type="geojson")
 
 # Fonction pour afficher les polygones
-def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
-    """
-    Affiche uniquement les contours des polygones sur une carte donnée.
-    
-    Args:
-        ax: L'objet Axes de Matplotlib.
-        gdf_polygones: GeoDataFrame contenant les polygones.
-        edgecolor: Couleur des contours (par défaut : blanc).
-        linewidth: Épaisseur des contours (par défaut : 1.0).
-    """
-    if gdf_polygones is not None and not gdf_polygones.empty:
-        gdf_polygones.plot(
-            ax=ax,
-            facecolor='none',  # Assure que le remplissage est complètement transparent
-            edgecolor=edgecolor,
-            linewidth=linewidth
-        )
-    else:
-        st.warning("Aucun polygone à afficher dans l'emprise.")
 
 def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0):
     def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
