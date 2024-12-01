@@ -452,7 +452,7 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
             ax.plot(x, y, 'k+', markersize=7, alpha=1.0)
 
     # Ajouter des labels pour les contours
-    ax.clabel(contour_lines, inline=True, fmt={seuil_bas_fond: f"{seuil_bas_fond:.2f} m"}, fontsize=12, colors='white')
+    ax.clabel(contour_lines, inline=True, fmt={seuil_bas_fond: f"{seuil_bas_fond:.2f} m"}, fontsize=12, colors='white',fontweight='bold',fontstyle='italic')
 
     # Ajouter des lignes pour relier les tirets
     for x in np.linspace(X_min, X_max, num=5):
