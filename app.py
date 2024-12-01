@@ -333,7 +333,12 @@ def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
         linewidth: Épaisseur des contours (par défaut : 1.0).
     """
     if gdf_polygones is not None and not gdf_polygones.empty:
-        gdf_polygones.plot(ax=ax, color=None, edgecolor=edgecolor, linewidth=linewidth)
+        gdf_polygones.plot(
+            ax=ax,
+            facecolor='none',  # Assure que le remplissage est complètement transparent
+            edgecolor=edgecolor,
+            linewidth=linewidth
+        )
     else:
         st.warning("Aucun polygone à afficher dans l'emprise.")
 
