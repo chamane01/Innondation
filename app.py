@@ -303,3 +303,23 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
 # Ajouter un bouton pour générer la carte de profondeur
 if st.button("Générer la carte de profondeur avec bas-fonds"):
     generate_depth_map(label_rotation_x=0, label_rotation_y=-90)
+
+
+
+def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
+
+uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
+
+ # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.set_xlim(X_min, X_max)
+    ax.set_ylim(Y_min, Y_max)
+    ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+    ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
+    ax.set_xticks(np.linspace(X_min, X_max, num=5))
+    ax.set_yticks(np.linspace(Y_min, Y_max, num=5))
+    ax.xaxis.set_tick_params(labeltop=True)
+    ax.yaxis.set_tick_params(labelright=True)
+
+if st.button("Générer la carte de profondeur avec bas-fonds et polygonale"):
+    generate_depth_map(label_rotation_x=0, label_rotation_y=-90)
