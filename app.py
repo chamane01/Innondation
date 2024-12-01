@@ -377,10 +377,7 @@ def calculer_surface_bas_fonds_polygones(polygones, bas_fonds, grid_X, grid_Y):
         return 0
 
 
-import numpy as np
-import matplotlib.pyplot as plt
-import contextily as ctx
-import streamlit as st
+
 
 # Définir la fonction detecter_bas_fonds en dehors de generate_depth_map
 def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
@@ -397,7 +394,7 @@ def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
     return surface_bas_fond
 
 # Fonction pour générer la carte de profondeur
-def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0):
+def generate_depth_map_with_legend(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0):
     # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
     ax.set_xlim(X_min, X_max)
     ax.set_ylim(Y_min, Y_max)
@@ -471,6 +468,9 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
     # Afficher la surface des bas-fonds dans les polygones
     st.write(f"**Surface des bas-fonds dans les polygones** : {surface_bas_fond_polygones:.2f} hectares")
 
+    # Ajouter la légende sous la carte
+    handles, labels = ax.get_legend_handles_labels()
+    ax.legend(handles, labels, bbox_to_anchor=(0.5, -0.1), loc='center', ncol=2, frameon=False, fontsize=10)
 
 # Ajouter les polygones sur la carte
 if st.button("Afficher les polygones"):
@@ -509,10 +509,9 @@ if st.button("Afficher les polygones"):
 
         # Affichage de la carte
         fig, ax = plt.subplots(figsize=(10, 14))
-        generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=-90)
+        generate_depth_map_with_legend(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=-90)
         afficher_polygones(ax, polygones_dans_emprise)
         st.pyplot(fig)
-
         
         
 
