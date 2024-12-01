@@ -344,6 +344,34 @@ st.title("Affichage des Polygones et Profondeur")
 # Téléchargement du fichier GeoJSON
 uploaded_file = st.file_uploader("Téléverser un fichier GeoJSON", type="geojson")
 
+if uploaded_file is not None:
+    # Charger les polygones depuis le fichier téléchargé
+    polygones_dans_emprise = charger_polygones(uploaded_file)
+
+    if polygones_dans_emprise is not None:
+        # Définir les limites de la carte basées sur les polygones
+        X_min, Y_min, X_max, Y_max = polygones_dans_emprise.total_bounds
+        marge = 0.1
+        X_range = X_max - X_min
+        Y_range = Y_max - Y_min
+        
+        # Calculer les nouvelles limites avec la marge
+        X_min -= X_range * marge
+        Y_min -= Y_range * marge
+        X_max += X_range * marge
+        Y_max += Y_range * marge
+        
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.set_xlim(X_min, X_max)
+        ax.set_ylim(Y_min, Y_max)
+
+
+# Exemple d'appel dans l'interface Streamlit
+st.title("Affichage des Polygones et Profondeur")
+
+# Téléchargement du fichier GeoJSON
+uploaded_file = st.file_uploader("Téléverser un fichier GeoJSON", type="geojson")
+
 # Fonction pour afficher les polygones
 def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
     """
