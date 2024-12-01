@@ -350,6 +350,12 @@ if st.button("Afficher les polygones"):
     # Charger les polygones
     polygones_dans_emprise = charger_polygones()
 
+    # Définir les limites de la carte basées sur les polygones
+    if polygones_dans_emprise is not None:
+        X_min, Y_min, X_max, Y_max = polygones_dans_emprise.total_bounds
+    else:
+        X_min, Y_min, X_max, Y_max = 0, 0, 1, 1  # Valeurs par défaut si aucun polygone n'est chargé
+
     fig, ax = plt.subplots(figsize=(8, 6))
     ax.set_xlim(X_min, X_max)
     ax.set_ylim(Y_min, Y_max)
