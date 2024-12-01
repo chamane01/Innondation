@@ -310,10 +310,9 @@ if st.button("Générer la carte de profondeur avec bas-fonds"):
 def charger_polygones():
     try:
         # Charger le fichier GeoJSON contenant les polygones
-        polygones_gdf = gpd.read_file("polygo200ha.geojson")  # Remplace par le nom de ton fichier
-        if df is not None:
-            # Créer une emprise basée sur les données existantes (X, Y)
-            emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
+        if uploaded_file is not None:
+            # Lire le fichier GeoJSON téléchargé
+            polygones_gdf = gpd.read_file(uploaded_file)
             polygones_gdf = polygones_gdf.to_crs(epsg=32630)  # Convertir en EPSG:32630
             polygones_dans_emprise = polygones_gdf[polygones_gdf.intersects(emprise)]  # Filtrer les polygones dans l'emprise
         else:
