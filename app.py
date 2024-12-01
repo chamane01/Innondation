@@ -305,26 +305,41 @@ if st.button("Générer la carte de profondeur avec bas-fonds"):
     generate_depth_map(label_rotation_x=0, label_rotation_y=-90)
 
 
+import geopandas as gpd
+import numpy as np
+import matplotlib.pyplot as plt
+import contextily as ctx
+import streamlit as st
+from shapely.geometry import box
+
 def generate_depth_map_and_polygons(label_rotation_x=0, label_rotation_y=0):
-    # Exemple de données pour la grille (il faut les remplacer par vos vraies données)
-    X_min, X_max, Y_min, Y_max = 0, 100, 0, 100  # Plage des coordonnées X et Y
+    # Charger le fichier GeoJSON contenant les polygones
+    try:
+        polygones_gdf = gpd.read_file("polygo200ha.geojson")  # Remplacer par le nom de ton fichier
+        if polygones_gdf is not None:
+            # Extraire l'étendue et le CRS du fichier
+            extent = polygones_gdf.total_bounds  # [minx, miny, maxx, maxy]
+            crs = polygones_gdf.crs  # Projection du fichier
+        else:
+            polygones_gdf = None
+            extent = [0, 0, 0, 0]  # Si le fichier n'est pas chargé
+            crs = None
+    except Exception as e:
+        st.error(f"Erreur lors du chargement des polygones : {e}")
+        polygones_gdf = None
+        extent = [0, 0, 0, 0]
+        crs = None
+    
+    # Définir les limites de la carte en fonction de l'étendue du fichier
+    if extent != [0, 0, 0, 0]:
+        X_min, Y_min, X_max, Y_max = extent
+    else:
+        X_min, X_max, Y_min, Y_max = 0, 100, 0, 100  # Valeurs par défaut si le fichier est vide ou non chargé
+
+    # Exemple de données pour la grille (remplacer par vos données réelles)
     grid_X, grid_Y = np.meshgrid(np.linspace(X_min, X_max, num=100), np.linspace(Y_min, Y_max, num=100))
     grid_Z = np.random.random((100, 100))  # Remplacer par vos propres données de profondeur
 
-    try:
-        # Charger le fichier GeoJSON contenant les polygones
-        polygones_gdf = gpd.read_file("polygo200ha.geojson")  # Remplacer par le nom de ton fichier
-        if polygones_gdf is not None:
-            # Créer une emprise basée sur les données existantes (X, Y)
-            emprise = box(X_min, Y_min, X_max, Y_max)
-            polygones_gdf = polygones_gdf.to_crs(epsg=32630)  # Convertir en EPSG:32630
-            polygones_dans_emprise = polygones_gdf[polygones_gdf.intersects(emprise)]  # Filtrer les polygones dans l'emprise
-        else:
-            polygones_dans_emprise = None
-    except Exception as e:
-        st.error(f"Erreur lors du chargement des polygones : {e}")
-        polygones_dans_emprise = None
-    
     # Détection des bas-fonds
     def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
         """
@@ -354,7 +369,9 @@ def generate_depth_map_and_polygons(label_rotation_x=0, label_rotation_y=0):
     fig, ax = plt.subplots(figsize=(8, 6))
     ax.set_xlim(X_min, X_max)
     ax.set_ylim(Y_min, Y_max)
-    ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+    
+    # Ajouter la carte de fond (context basemap) en respectant le CRS du fichier
+    ctx.add_basemap(ax, crs=crs.to_string(), source=ctx.providers.OpenStreetMap.Mapnik)
 
     ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
     ax.set_xticks(np.linspace(X_min, X_max, num=5))
@@ -401,8 +418,8 @@ def generate_depth_map_and_polygons(label_rotation_x=0, label_rotation_y=0):
     )
 
     # Ajouter les polygones sur la carte
-    if polygones_dans_emprise is not None:
-        polygones_dans_emprise.plot(ax=ax, facecolor='none', edgecolor='white', linewidth=1.5)
+    if polygones_gdf is not None:
+        polygones_gdf.to_crs(crs).plot(ax=ax, facecolor='none', edgecolor='white', linewidth=1.5)
 
     # Affichage de la carte de profondeur
     st.pyplot(fig)
