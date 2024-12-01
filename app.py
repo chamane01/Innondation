@@ -435,7 +435,7 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
 # Ajouter les polygones sur la carte
 if st.button("Afficher les polygones"):
     # Charger les polygones
-    polygones_dans_emprise = charger_polygones()
+    polygones_dans_emprise = charger_polygones(uploaded_file)
 
     # Définir les limites de la carte basées sur les polygones et ajouter 20% de marge
     if polygones_dans_emprise is not None:
