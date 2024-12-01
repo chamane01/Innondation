@@ -1,0 +1,8 @@
+{
+"type": "FeatureCollection",
+"name": "polygo200ha",
+"crs": { "type": "name", "properties": { "name": "urn:ogc:def:crs:EPSG::32630" } },
+"features": [
+{ "type": "Feature", "properties": { "id": null }, "geometry": { "type": "MultiPolygon", "coordinates": [ [ [ [ 448725.0, 694049.0 ], [ 448725.0, 695026.0 ], [ 450730.256221595685929, 695024.0 ], [ 450712.619495893304702, 694047.0 ], [ 448725.0, 694049.0 ] ] ] ] } }
+]
+}
