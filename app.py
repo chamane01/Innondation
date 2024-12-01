@@ -299,7 +299,9 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     st.pyplot(fig)
     # Afficher les surfaces calculées
     st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
-    def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0):
+
+    
+def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0)
     def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
         moyenne_Z = np.mean(grid_Z)
         ecart_type_Z = np.std(grid_Z)
