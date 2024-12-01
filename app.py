@@ -281,7 +281,7 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
         ax.axvline(x, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
     for y in np.linspace(Y_min, Y_max, num=5):
         ax.axhline(y, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
-
+#croisillon 
     intersections_x = np.linspace(X_min, X_max, num=5)
     intersections_y = np.linspace(Y_min, Y_max, num=5)
     for x in intersections_x:
