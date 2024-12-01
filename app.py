@@ -377,22 +377,27 @@ def calculer_surface_bas_fonds_polygones(polygones, bas_fonds, grid_X, grid_Y):
         return 0
 
 
+import numpy as np
+import matplotlib.pyplot as plt
+import contextily as ctx
+import streamlit as st
+
+# Définir la fonction detecter_bas_fonds en dehors de generate_depth_map
+def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
+    moyenne_Z = np.mean(grid_Z)
+    ecart_type_Z = np.std(grid_Z)
+    seuil_bas_fond = moyenne_Z - seuil_rel_bas_fond * ecart_type_Z
+    bas_fonds = grid_Z < seuil_bas_fond
+    return bas_fonds, seuil_bas_fond
+
+# Définir la fonction calculer_surface_bas_fond en dehors de generate_depth_map
+def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
+    resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000  # Résolution en hectares
+    surface_bas_fond = np.sum(bas_fonds) * resolution
+    return surface_bas_fond
+
+# Fonction pour générer la carte de profondeur
 def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0):
-    def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
-        moyenne_Z = np.mean(grid_Z)
-        ecart_type_Z = np.std(grid_Z)
-        seuil_bas_fond = moyenne_Z - seuil_rel_bas_fond * ecart_type_Z
-        bas_fonds = grid_Z < seuil_bas_fond
-        return bas_fonds, seuil_bas_fond
-
-    def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
-        resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000  # Résolution en hectares
-        surface_bas_fond = np.sum(bas_fonds) * resolution
-        return surface_bas_fond
-
-    bas_fonds, seuil_bas_fond = detecter_bas_fonds(grid_Z)
-    surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
-
     # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
     ax.set_xlim(X_min, X_max)
     ax.set_ylim(Y_min, Y_max)
@@ -434,6 +439,7 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
     cbar.set_label('Profondeur (m)', rotation=270)
 
     # Ajouter les bas-fonds en cyan
+    bas_fonds, seuil_bas_fond = detecter_bas_fonds(grid_Z)  # Appel à la fonction externe
     ax.contourf(grid_X, grid_Y, bas_fonds, levels=[0.5, 1], colors='cyan', alpha=0.4, label='Bas-fonds')
 
     # Ajouter une ligne de contour autour des bas-fonds
@@ -447,9 +453,8 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
     intersections_x = np.linspace(X_min, X_max, num=5)
     intersections_y = np.linspace(Y_min, Y_max, num=5)
     for x in intersections_x:
-       for y in intersections_y:
-           ax.plot(x, y, 'k+', markersize=7, alpha=1.0)
-           
+        for y in intersections_y:
+            ax.plot(x, y, 'k+', markersize=7, alpha=1.0)
 
     # Ajouter des labels pour les contours
     ax.clabel(contour_lines, inline=True, fmt={seuil_bas_fond: f"{seuil_bas_fond:.2f} m"}, fontsize=12)
@@ -461,9 +466,9 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         ax.axhline(y, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
 
     # Affichage de la carte de profondeur
+    surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
     st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
 
-# Ajouter les polygones sur la carte
 # Ajouter les polygones sur la carte
 if st.button("Afficher les polygones"):
     # Charger les polygones
@@ -507,4 +512,5 @@ if st.button("Afficher les polygones"):
 
         # Afficher la surface des bas-fonds dans les polygones
         st.write(f"**Surface des bas-fonds dans les polygones** : {surface_bas_fond_polygones:.2f} hectares")
+
 
