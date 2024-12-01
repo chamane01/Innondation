@@ -307,14 +307,22 @@ if st.button("Générer la carte de profondeur avec bas-fonds"):
 
 
 
-def charger_polygones():
+def charger_polygones(uploaded_file):
     try:
-        # Charger le fichier GeoJSON contenant les polygones
         if uploaded_file is not None:
             # Lire le fichier GeoJSON téléchargé
             polygones_gdf = gpd.read_file(uploaded_file)
-            polygones_gdf = polygones_gdf.to_crs(epsg=32630)  # Convertir en EPSG:32630
-            polygones_dans_emprise = polygones_gdf[polygones_gdf.intersects(emprise)]  # Filtrer les polygones dans l'emprise
+            
+            # Convertir le GeoDataFrame au CRS EPSG:32630
+            polygones_gdf = polygones_gdf.to_crs(epsg=32630)
+            
+            # Créer une emprise (bounding box) basée sur les données
+            # Ici, df fait référence à une structure de données que vous utilisez pour l'emprise
+            if 'X' in df.columns and 'Y' in df.columns:
+                emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
+                polygones_dans_emprise = polygones_gdf[polygones_gdf.intersects(emprise)]  # Filtrer les polygones dans l'emprise
+            else:
+                polygones_dans_emprise = polygones_gdf  # Si pas de colonne X/Y dans df, prendre tous les polygones
         else:
             polygones_dans_emprise = None
     except Exception as e:
@@ -322,6 +330,19 @@ def charger_polygones():
         polygones_dans_emprise = None
 
     return polygones_dans_emprise
+
+# Fonction pour afficher les polygones
+def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
+    if gdf_polygones is not None and not gdf_polygones.empty:
+        gdf_polygones.plot(ax=ax, facecolor='none', edgecolor=edgecolor, linewidth=linewidth)
+    else:
+        st.warning("Aucun polygone à afficher dans l'emprise.")
+
+# Exemple d'appel dans l'interface Streamlit
+st.title("Affichage des Polygones et Profondeur")
+
+# Téléchargement du fichier GeoJSON
+uploaded_file = st.file_uploader("Téléverser un fichier GeoJSON", type="geojson")
 
 # Fonction pour afficher les polygones
 def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
