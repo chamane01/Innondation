@@ -306,13 +306,17 @@ if st.button("Générer la carte de profondeur avec bas-fonds"):
 
 
 def generate_depth_map_and_polygons(label_rotation_x=0, label_rotation_y=0):
+    # Exemple de données pour la grille (il faut les remplacer par vos vraies données)
+    X_min, X_max, Y_min, Y_max = 0, 100, 0, 100  # Plage des coordonnées X et Y
+    grid_X, grid_Y = np.meshgrid(np.linspace(X_min, X_max, num=100), np.linspace(Y_min, Y_max, num=100))
+    grid_Z = np.random.random((100, 100))  # Remplacer par vos propres données de profondeur
 
     try:
         # Charger le fichier GeoJSON contenant les polygones
         polygones_gdf = gpd.read_file("polygo200ha.geojson")  # Remplacer par le nom de ton fichier
-        if df is not None:
+        if polygones_gdf is not None:
             # Créer une emprise basée sur les données existantes (X, Y)
-            emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
+            emprise = box(X_min, Y_min, X_max, Y_max)
             polygones_gdf = polygones_gdf.to_crs(epsg=32630)  # Convertir en EPSG:32630
             polygones_dans_emprise = polygones_gdf[polygones_gdf.intersects(emprise)]  # Filtrer les polygones dans l'emprise
         else:
@@ -342,6 +346,7 @@ def generate_depth_map_and_polygons(label_rotation_x=0, label_rotation_y=0):
         surface_bas_fond = np.sum(bas_fonds) * resolution
         return surface_bas_fond
 
+    # Détecter les bas-fonds
     bas_fonds, seuil_bas_fond = detecter_bas_fonds(grid_Z)
     surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
 
