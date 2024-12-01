@@ -307,10 +307,19 @@ if st.button("Générer la carte de profondeur avec bas-fonds"):
 
 
 
-import geopandas as gpd
-import matplotlib.pyplot as plt
-import streamlit as st
-from shapely.geometry import box
+try:
+    # Charger le fichier GeoJSON contenant les polygones
+    polygones_gdf = gpd.read_file("polygo200ha.geojson")  # Remplace par le nom de ton fichier
+    if df is not None:
+        # Créer une emprise basée sur les données existantes (X, Y)
+        emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
+        polygones_gdf = polygones_gdf.to_crs(epsg=32630)  # Convertir en EPSG:32630
+        polygones_dans_emprise = polygones_gdf[polygones_gdf.intersects(emprise)]  # Filtrer les polygones dans l'emprise
+    else:
+        polygones_dans_emprise = None
+except Exception as e:
+    st.error(f"Erreur lors du chargement des polygones : {e}")
+    polygones_dans_emprise = None
 
 # Fonction pour afficher les polygones
 def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
@@ -333,103 +342,17 @@ def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
     else:
         st.warning("Aucun polygone à afficher dans l'emprise.")
 
-# Charger le fichier GeoJSON contenant les polygones
-try:
-    polygones_gdf = gpd.read_file("polygo200ha.geojson")  # Remplace par le nom de ton fichier
-    if df is not None:
-        # Créer une emprise basée sur les données existantes (X, Y)
-        emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
-        polygones_gdf = polygones_gdf.to_crs(epsg=32630)  # Convertir en EPSG:32630
-        polygones_dans_emprise = polygones_gdf[polygones_gdf.intersects(emprise)]  # Filtrer les polygones dans l'emprise
-    else:
-        polygones_dans_emprise = None
-except Exception as e:
-    st.error(f"Erreur lors du chargement des polygones : {e}")
-    polygones_dans_emprise = None
-
-# Fonction pour générer la carte de profondeur
-def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
-
-    # Détection des bas-fonds
-    def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
-        moyenne_Z = np.mean(grid_Z)
-        ecart_type_Z = np.std(grid_Z)
-        seuil_bas_fond = moyenne_Z - seuil_rel_bas_fond * ecart_type_Z
-        bas_fonds = grid_Z < seuil_bas_fond
-        return bas_fonds, seuil_bas_fond
-
-    # Calcul des surfaces des bas-fonds
-    def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
-        resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000
-        surface_bas_fond = np.sum(bas_fonds) * resolution
-        return surface_bas_fond
-
-    bas_fonds, seuil_bas_fond = detecter_bas_fonds(grid_Z)
-    surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
-
-    # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
+# Ajouter les polygones sur la carte
+if st.button("Afficher les polygones"):
     fig, ax = plt.subplots(figsize=(8, 6))
     ax.set_xlim(X_min, X_max)
     ax.set_ylim(Y_min, Y_max)
     ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
-    ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
-    ax.set_xticks(np.linspace(X_min, X_max, num=5))
-    ax.set_yticks(np.linspace(Y_min, Y_max, num=5))
-    ax.xaxis.set_tick_params(labeltop=True)
-    ax.yaxis.set_tick_params(labelright=True)
 
-    # Masquer les coordonnées aux extrémités
-    xticks = ax.get_xticks()
-    yticks = ax.get_yticks()
-    ax.set_xticklabels(
-         ["" if x == X_min or x == X_max else f"{int(x)}" for x in xticks],
-        rotation=label_rotation_x,
-    )
-    ax.set_yticklabels(
-        ["" if y == Y_min or y == Y_max else f"{int(y)}" for y in yticks],
-        rotation=label_rotation_y,
-        va="center"  
-    )
-    #modifier rotation
-    for label in ax.get_xticklabels():
-        label.set_rotation(label_rotation_x)
+    # Appel de la fonction pour afficher uniquement les contours des polygones
+    afficher_polygones(ax, polygones_dans_emprise, edgecolor='white', linewidth=1.5)
 
-    for label in ax.get_yticklabels():
-        label.set_rotation(label_rotation_y)
-
-    # Ajouter les contours pour la profondeur
-    depth_levels = np.linspace(grid_Z.min(), grid_Z.max(), 100)
-    cmap = plt.cm.plasma
-    cont = ax.contourf(grid_X, grid_Y, grid_Z, levels=depth_levels, cmap=cmap)
-    cbar = plt.colorbar(cont, ax=ax)
-    cbar.set_label('Profondeur (m)', rotation=270)
-
-    # Ajouter les bas-fonds en cyan
-    ax.contourf(grid_X, grid_Y, bas_fonds, levels=[0.5, 1], colors='cyan', alpha=0.4, label='Bas-fonds')
-    
-    # Ajouter une ligne de contour autour des bas-fonds
-    contour_lines = ax.contour(
-        grid_X, grid_Y, grid_Z,
-        levels=[seuil_bas_fond],  
-        colors='black',  
-        linewidths=1.5,
-        linestyles='solid',
-    )
-    # Ajouter des labels pour les contours
-    ax.clabel(contour_lines,
-        inline=True,
-        fmt={seuil_bas_fond: f"{seuil_bas_fond:.2f} m"},  
-        fontsize=12
-    )
-
-    # Ajouter les polygones
-    if polygones_dans_emprise is not None:
-        afficher_polygones(ax, polygones_dans_emprise, edgecolor='white', linewidth=1.5)
-
-    # Affichage de la carte de profondeur
+    # Afficher la carte dans l'application Streamlit
     st.pyplot(fig)
-    st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
 
-# Ajouter un bouton pour générer la carte de profondeur avec les bas-fonds
-if st.button("Générer la carte de profondeur avec bas-fonds"):
-    generate_depth_map(label_rotation_x=0, label_rotation_y=-90)
+
