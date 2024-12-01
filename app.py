@@ -309,7 +309,7 @@ if st.button("Générer la carte de profondeur avec bas-fonds"):
 
 try:
     # Charger le fichier GeoJSON contenant les polygones
-    polygones_gdf = gpd.read_file("polygones.geojson")  # Remplace par le nom de ton fichier
+    polygones_gdf = gpd.read_file("polygo200ha.geojson")  # Remplace par le nom de ton fichier
     if df is not None:
         # Créer une emprise basée sur les données existantes (X, Y)
         emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
