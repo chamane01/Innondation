@@ -307,6 +307,15 @@ if st.button("Générer la carte de profondeur avec bas-fonds"):
 
 
 
+
+
+import geopandas as gpd
+import numpy as np
+import matplotlib.pyplot as plt
+import streamlit as st
+import contextily as ctx
+from shapely.geometry import box
+
 def charger_polygones(uploaded_file):
     try:
         if uploaded_file is not None:
@@ -317,7 +326,6 @@ def charger_polygones(uploaded_file):
             polygones_gdf = polygones_gdf.to_crs(epsg=32630)
             
             # Créer une emprise (bounding box) basée sur les données
-            # Ici, df fait référence à une structure de données que vous utilisez pour l'emprise
             if 'X' in df.columns and 'Y' in df.columns:
                 emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
                 polygones_dans_emprise = polygones_gdf[polygones_gdf.intersects(emprise)]  # Filtrer les polygones dans l'emprise
@@ -344,13 +352,6 @@ st.title("Affichage des Polygones et Profondeur")
 # Téléchargement du fichier GeoJSON
 uploaded_file = st.file_uploader("Téléverser un fichier GeoJSON", type="geojson")
 
-
-
-
-
-
-# Fonction pour afficher les polygones
-
 def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0):
     def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
         moyenne_Z = np.mean(grid_Z)
@@ -359,7 +360,6 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         bas_fonds = grid_Z < seuil_bas_fond
         return bas_fonds, seuil_bas_fond
 
-    # Calculer les surfaces des bas-fonds
     def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
         resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000  # Résolution en hectares
         surface_bas_fond = np.sum(bas_fonds) * resolution
@@ -372,16 +372,13 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
     ax.set_xlim(X_min, X_max)
     ax.set_ylim(Y_min, Y_max)
 
-    # Retirer l'ajout de la carte OpenStreetMap ici car il est déjà ajouté dans afficher_polygones
-    # ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
-
+    # Masquer les coordonnées aux extrémités
     ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
     ax.set_xticks(np.linspace(X_min, X_max, num=5))
     ax.set_yticks(np.linspace(Y_min, Y_max, num=5))
     ax.xaxis.set_tick_params(labeltop=True)
     ax.yaxis.set_tick_params(labelright=True)
 
-    # Masquer les coordonnées aux extrémités
     xticks = ax.get_xticks()
     yticks = ax.get_yticks()
     ax.set_xticklabels(
@@ -391,19 +388,12 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
     ax.set_yticklabels(
         ["" if y == Y_min or y == Y_max else f"{int(y)}" for y in yticks],
         rotation=label_rotation_y,
-        va="center"  # Alignement vertical des étiquettes Y
+        va="center"
     )
-
-    # Modifier rotation
-    for label in ax.get_xticklabels():
-        label.set_rotation(label_rotation_x)
-
-    for label in ax.get_yticklabels():
-        label.set_rotation(label_rotation_y)
 
     # Ajouter les contours pour la profondeur
     depth_levels = np.linspace(grid_Z.min(), grid_Z.max(), 100)
-    cmap = plt.cm.plasma  # Couleurs allant de bleu à jaune
+    cmap = plt.cm.plasma
     cont = ax.contourf(grid_X, grid_Y, grid_Z, levels=depth_levels, cmap=cmap)
     cbar = plt.colorbar(cont, ax=ax)
     cbar.set_label('Profondeur (m)', rotation=270)
@@ -437,7 +427,6 @@ if st.button("Afficher les polygones"):
     # Charger les polygones
     polygones_dans_emprise = charger_polygones(uploaded_file)
 
-    # Définir les limites de la carte basées sur les polygones et ajouter 20% de marge
     if polygones_dans_emprise is not None:
         X_min, Y_min, X_max, Y_max = polygones_dans_emprise.total_bounds
         
@@ -462,13 +451,11 @@ if st.button("Afficher les polygones"):
     ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
     
     # Afficher les polygones
+    afficher_polygones(ax, polygones_dans_emprise, edgecolor='white', linewidth=1.5)
 
     # Générer la carte de profondeur
     generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max)
 
-
-    # Appel de la fonction pour afficher uniquement les contours des polygones
-    afficher_polygones(ax, polygones_dans_emprise, edgecolor='white', linewidth=1.5)
-
     # Afficher la carte dans l'application Streamlit
     st.pyplot(fig)
+
