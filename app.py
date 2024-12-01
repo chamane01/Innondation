@@ -309,30 +309,6 @@ if st.button("Générer la carte de profondeur avec bas-fonds"):
 
 
 
-# Fonction pour charger les polygones
-def charger_polygones(uploaded_file):
-    try:
-        if uploaded_file is not None:
-            # Lire le fichier GeoJSON téléchargé
-            polygones_gdf = gpd.read_file(uploaded_file)
-            
-            # Convertir le GeoDataFrame au CRS EPSG:32630
-            polygones_gdf = polygones_gdf.to_crs(epsg=32630)
-            
-            # Créer une emprise (bounding box) basée sur les données
-            if 'X' in df.columns and 'Y' in df.columns:
-                emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
-                polygones_dans_emprise = polygones_gdf[polygones_gdf.intersects(emprise)]  # Filtrer les polygones dans l'emprise
-            else:
-                polygones_dans_emprise = polygones_gdf  # Si pas de colonne X/Y dans df, prendre tous les polygones
-        else:
-            polygones_dans_emprise = None
-    except Exception as e:
-        st.error(f"Erreur lors du chargement des polygones : {e}")
-        polygones_dans_emprise = None
-
-    return polygones_dans_emprise
-
 # Fonction pour afficher les polygones
 def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
     if gdf_polygones is not None and not gdf_polygones.empty:
@@ -340,12 +316,21 @@ def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
     else:
         st.warning("Aucun polygone à afficher dans l'emprise.")
 
-# Exemple d'appel dans l'interface Streamlit
-st.title("Affichage des Polygones et Profondeur")
+# Fonction pour ajouter les croissillons aux intersections
+def ajouter_croissillons(ax, grid_X, grid_Y, grid_Z, seuil_bas_fond):
+    # Détecter les intersections où les niveaux de profondeur atteignent le seuil de bas-fonds
+    contours = ax.contour(grid_X, grid_Y, grid_Z, levels=[seuil_bas_fond], colors='black', linewidths=1.5)
+    
+    # Extraire les coordonnées des intersections des contours
+    for collection in contours.collections:
+        for path in collection.get_paths():
+            # Obtenir les points des intersections des lignes de contour
+            for segment in path.iter_segments():
+                for point in segment:
+                    # Ajouter des croix ('x') aux points d'intersection
+                    ax.scatter(point[0], point[1], color='red', marker='x', s=30, label='Intersection')
 
-# Téléchargement du fichier GeoJSON pour les polygones
-uploaded_file = st.file_uploader("Téléverser un fichier GeoJSON", type="geojson")
-
+# Fonction pour afficher la carte de profondeur avec les croissillons aux intersections
 def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0):
     def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
         moyenne_Z = np.mean(grid_Z)
@@ -423,6 +408,9 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
     for y in np.linspace(Y_min, Y_max, num=5):
         ax.axhline(y, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
 
+    # Ajouter les croissillons aux intersections des lignes de contour
+    ajouter_croissillons(ax, grid_X, grid_Y, grid_Z, seuil_bas_fond)
+
     # Affichage de la carte de profondeur
     st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
 
@@ -460,4 +448,5 @@ if st.button("Afficher les polygones"):
         generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max)
         afficher_polygones(ax, polygones_dans_emprise)
         st.pyplot(fig)
+
 
