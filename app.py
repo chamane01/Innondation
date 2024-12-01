@@ -321,6 +321,40 @@ except Exception as e:
     st.error(f"Erreur lors du chargement des polygones : {e}")
     polygones_dans_emprise = None
 
+def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
+        """
+        Détermine les bas-fonds en fonction de la profondeur Z relative.
+        Bas-fond = Z < moyenne(Z) - seuil_rel_bas_fond * std(Z)
+        """
+        moyenne_Z = np.mean(grid_Z)
+        ecart_type_Z = np.std(grid_Z)
+        seuil_bas_fond = moyenne_Z - seuil_rel_bas_fond * ecart_type_Z
+        bas_fonds = grid_Z < seuil_bas_fond
+        return bas_fonds, seuil_bas_fond
+
+def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
+        """
+        Calcule la surface des bas-fonds en hectares.
+        """
+        resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000  # Résolution en hectares
+        surface_bas_fond = np.sum(bas_fonds) * resolution
+        return surface_bas_fond
+
+bas_fonds, seuil_bas_fond = detecter_bas_fonds(grid_Z)
+surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
+
+fig, ax = plt.subplots(figsize=(8, 6))
+    ax.set_xlim(X_min, X_max)
+    ax.set_ylim(Y_min, Y_max)
+    ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+    ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
+    ax.set_xticks(np.linspace(X_min, X_max, num=5))
+    ax.set_yticks(np.linspace(Y_min, Y_max, num=5))
+    ax.xaxis.set_tick_params(labeltop=True)
+    ax.yaxis.set_tick_params(labelright=True)
+
+    
+
 # Fonction pour afficher les polygones
 def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
     """
