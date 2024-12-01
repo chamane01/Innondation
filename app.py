@@ -468,6 +468,9 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
     # Affichage de la carte de profondeur
     surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
     st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
+    # Afficher la surface des bas-fonds dans les polygones
+    st.write(f"**Surface des bas-fonds dans les polygones** : {surface_bas_fond_polygones:.2f} hectares")
+
 
 # Ajouter les polygones sur la carte
 if st.button("Afficher les polygones"):
@@ -510,7 +513,6 @@ if st.button("Afficher les polygones"):
         afficher_polygones(ax, polygones_dans_emprise)
         st.pyplot(fig)
 
-        # Afficher la surface des bas-fonds dans les polygones
-        st.write(f"**Surface des bas-fonds dans les polygones** : {surface_bas_fond_polygones:.2f} hectares")
-
+        
+        
 
