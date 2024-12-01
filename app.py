@@ -193,21 +193,24 @@ if df is not None:
 # Fonction pour générer la carte de profondeur avec dégradé de couleurs
 def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
 
+    def charger_polygones():
     try:
-    # Charger le fichier GeoJSON contenant les polygones
-    polygones_gdf = gpd.read_file("polygo200ha.geojson")  # Remplace par le nom de ton fichier
-    if df is not None:
-        # Créer une emprise basée sur les données existantes (X, Y)
-        emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
-        polygones_gdf = polygones_gdf.to_crs(epsg=32630)  # Convertir en EPSG:32630
-        polygones_dans_emprise = polygones_gdf[polygones_gdf.intersects(emprise)]  # Filtrer les polygones dans l'emprise
-    else:
+        # Charger le fichier GeoJSON contenant les polygones
+        polygones_gdf = gpd.read_file("polygo200ha.geojson")  # Remplace par le nom de ton fichier
+        if df is not None:
+            # Créer une emprise basée sur les données existantes (X, Y)
+            emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
+            polygones_gdf = polygones_gdf.to_crs(epsg=32630)  # Convertir en EPSG:32630
+            polygones_dans_emprise = polygones_gdf[polygones_gdf.intersects(emprise)]  # Filtrer les polygones dans l'emprise
+        else:
+            polygones_dans_emprise = None
+    except Exception as e:
+        st.error(f"Erreur lors du chargement des polygones : {e}")
         polygones_dans_emprise = None
 
-    except Exception as e:
-    st.error(f"Erreur lors du chargement des polygones : {e}")
-    polygones_dans_emprise = None
-    # Fonction pour afficher les polygone
+    return polygones_dans_emprise
+
+    
     def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
     """
     Affiche uniquement les contours des polygones sur une carte donnée.
@@ -218,8 +221,6 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
         edgecolor: Couleur des contours (par défaut : blanc).
         linewidth: Épaisseur des contours (par défaut : 1.0).
     """
-
-
     if gdf_polygones is not None and not gdf_polygones.empty:
         gdf_polygones.plot(
             ax=ax,
@@ -229,7 +230,6 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
         )
     else:
         st.warning("Aucun polygone à afficher dans l'emprise.")
-
 
     
 
@@ -335,6 +335,8 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     # Ajouter les bâtiments
     if batiments_dans_emprise is not None:
         batiments_dans_emprise.plot(ax=ax, facecolor='grey', edgecolor='black', linewidth=0.5, alpha=0.6)
+
+    
 
     # Affichage de la carte de profondeur
     st.pyplot(fig)
