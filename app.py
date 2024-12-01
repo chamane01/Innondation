@@ -307,14 +307,14 @@ if st.button("Générer la carte de profondeur avec bas-fonds"):
 
 
 
-import streamlit as st
 import geopandas as gpd
 import matplotlib.pyplot as plt
-import contextily as ctx
 import numpy as np
+import streamlit as st
+import contextily as ctx
 from shapely.geometry import box
 
-# Fonction pour charger les polygones depuis un fichier téléversé
+# Fonction pour charger les polygones à partir d'un fichier GeoJSON
 def charger_polygones(uploaded_file):
     try:
         if uploaded_file is not None:
@@ -346,7 +346,82 @@ def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
     else:
         st.warning("Aucun polygone à afficher dans l'emprise.")
 
-# Exemple d'appel dans l'interface Streamlit
+# Fonction pour détecter les bas-fonds et calculer la surface
+def generate_depth_map(grid_X, grid_Y, grid_Z, label_rotation_x=0, label_rotation_y=0):
+    # Détection des bas-fonds
+    def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
+        moyenne_Z = np.mean(grid_Z)
+        ecart_type_Z = np.std(grid_Z)
+        seuil_bas_fond = moyenne_Z - seuil_rel_bas_fond * ecart_type_Z
+        bas_fonds = grid_Z < seuil_bas_fond
+        return bas_fonds, seuil_bas_fond
+
+    # Calcul des surfaces des bas-fonds
+    def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
+        resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000  # Résolution en hectares
+        surface_bas_fond = np.sum(bas_fonds) * resolution
+        return surface_bas_fond
+
+    bas_fonds, seuil_bas_fond = detecter_bas_fonds(grid_Z)
+    surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
+    
+    # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.set_xlim(np.min(grid_X), np.max(grid_X))
+    ax.set_ylim(np.min(grid_Y), np.max(grid_Y))
+    ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+
+    # Masquer les coordonnées aux extrémités
+    xticks = ax.get_xticks()
+    yticks = ax.get_yticks()
+    ax.set_xticklabels(
+         ["" if x == np.min(grid_X) or x == np.max(grid_X) else f"{int(x)}" for x in xticks],
+        rotation=label_rotation_x,
+    )
+    ax.set_yticklabels(
+        ["" if y == np.min(grid_Y) or y == np.max(grid_Y) else f"{int(y)}" for y in yticks],
+        rotation=label_rotation_y,
+        va="center"  # Alignement vertical des étiquettes Y
+    )
+
+    # Ajouter les contours pour la profondeur
+    depth_levels = np.linspace(grid_Z.min(), grid_Z.max(), 100)
+    cmap = plt.cm.plasma  # Couleurs allant de bleu à jaune
+    cont = ax.contourf(grid_X, grid_Y, grid_Z, levels=depth_levels, cmap=cmap)
+    cbar = plt.colorbar(cont, ax=ax)
+    cbar.set_label('Profondeur (m)', rotation=270)
+
+    # Ajouter les bas-fonds en cyan
+    ax.contourf(grid_X, grid_Y, bas_fonds, levels=[0.5, 1], colors='cyan', alpha=0.4, label='Bas-fonds')
+    
+    # Ajouter une ligne de contour autour des bas-fonds
+    contour_lines = ax.contour(
+        grid_X, grid_Y, grid_Z,
+        levels=[seuil_bas_fond],  # Niveau correspondant au seuil des bas-fonds
+        colors='black',  # Couleur des contours
+        linewidths=1.5,
+        linestyles='solid', # Épaisseur de la ligne
+    )
+    # Ajouter des labels pour les contours
+    ax.clabel(contour_lines,
+        inline=True,
+        fmt={seuil_bas_fond: f"{seuil_bas_fond:.2f} m"},  # Format du label
+        fontsize=12
+    )
+
+    # Ajouter des lignes pour relier les tirets
+    for x in np.linspace(np.min(grid_X), np.max(grid_X), num=5):
+        ax.axvline(x, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
+    for y in np.linspace(np.min(grid_Y), np.max(grid_Y), num=5):
+        ax.axhline(y, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
+
+    # Afficher les polygones
+    if polygones_dans_emprise is not None:
+        afficher_polygones(ax, polygones_dans_emprise, edgecolor='white', linewidth=1.5)
+    
+    st.pyplot(fig)
+
+# Interface Streamlit
 st.title("Affichage des Polygones et Profondeur")
 
 # Téléchargement du fichier GeoJSON
@@ -368,20 +443,16 @@ if uploaded_file is not None:
         Y_min -= Y_range * marge
         X_max += X_range * marge
         Y_max += Y_range * marge
-        
-        fig, ax = plt.subplots(figsize=(8, 6))
-        ax.set_xlim(X_min, X_max)
-        ax.set_ylim(Y_min, Y_max)
-        
-        # Ajouter la carte de fond OpenStreetMap
-        ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
-        
-        # Afficher les polygones
-        afficher_polygones(ax, polygones_dans_emprise, edgecolor='white', linewidth=1.5)
-        
-        # Afficher la carte dans l'application Streamlit
-        st.pyplot(fig)
+
+        # Charger les données de profondeur (exemples pour la démonstration)
+        # Remplacer ces matrices par vos vraies données de profondeur
+        grid_X, grid_Y = np.meshgrid(np.linspace(X_min, X_max, 100), np.linspace(Y_min, Y_max, 100))
+        grid_Z = np.random.uniform(low=0, high=10, size=grid_X.shape)
+
+        # Appeler la fonction pour générer et afficher la carte
+        generate_depth_map(grid_X, grid_Y, grid_Z)
     else:
         st.warning("Aucun polygone valide n'a été trouvé dans le fichier.")
 else:
     st.info("Veuillez télécharger un fichier GeoJSON pour afficher les polygones.")
+
