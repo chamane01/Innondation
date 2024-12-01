@@ -10,7 +10,6 @@ from shapely.geometry import MultiPolygon
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
-import matplotlib.patches as mpatches
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
