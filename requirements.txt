@@ -16,4 +16,4 @@ ezdxf
 opencv-python
 datetime
 IO
-BytesIO
+
