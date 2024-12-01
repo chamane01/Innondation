@@ -204,11 +204,11 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
             polygones_dans_emprise = polygones_gdf[polygones_gdf.intersects(emprise)]  # Filtrer les polygones dans l'emprise
         else:
             polygones_dans_emprise = None
-    except Exception as e:
+        except Exception as e:
         st.error(f"Erreur lors du chargement des polygones : {e}")
         polygones_dans_emprise = None
 
-    return polygones_dans_emprise
+        return polygones_dans_emprise
             
 
     
