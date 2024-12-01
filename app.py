@@ -307,19 +307,22 @@ if st.button("Générer la carte de profondeur avec bas-fonds"):
 
 
 
-try:
-    # Charger le fichier GeoJSON contenant les polygones
-    polygones_gdf = gpd.read_file("polygo200ha.geojson")  # Remplace par le nom de ton fichier
-    if df is not None:
-        # Créer une emprise basée sur les données existantes (X, Y)
-        emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
-        polygones_gdf = polygones_gdf.to_crs(epsg=32630)  # Convertir en EPSG:32630
-        polygones_dans_emprise = polygones_gdf[polygones_gdf.intersects(emprise)]  # Filtrer les polygones dans l'emprise
-    else:
+def charger_polygones():
+    try:
+        # Charger le fichier GeoJSON contenant les polygones
+        polygones_gdf = gpd.read_file("polygo200ha.geojson")  # Remplace par le nom de ton fichier
+        if df is not None:
+            # Créer une emprise basée sur les données existantes (X, Y)
+            emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
+            polygones_gdf = polygones_gdf.to_crs(epsg=32630)  # Convertir en EPSG:32630
+            polygones_dans_emprise = polygones_gdf[polygones_gdf.intersects(emprise)]  # Filtrer les polygones dans l'emprise
+        else:
+            polygones_dans_emprise = None
+    except Exception as e:
+        st.error(f"Erreur lors du chargement des polygones : {e}")
         polygones_dans_emprise = None
-except Exception as e:
-    st.error(f"Erreur lors du chargement des polygones : {e}")
-    polygones_dans_emprise = None
+
+    return polygones_dans_emprise
 
 # Fonction pour afficher les polygones
 def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
@@ -344,9 +347,14 @@ def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
 
 # Ajouter les polygones sur la carte
 if st.button("Afficher les polygones"):
+    # Charger les polygones
+    polygones_dans_emprise = charger_polygones()
+
     fig, ax = plt.subplots(figsize=(8, 6))
     ax.set_xlim(X_min, X_max)
     ax.set_ylim(Y_min, Y_max)
+    
+    # Ajouter la carte de fond OpenStreetMap en EPSG:32630
     ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
 
     # Appel de la fonction pour afficher uniquement les contours des polygones
@@ -354,5 +362,3 @@ if st.button("Afficher les polygones"):
 
     # Afficher la carte dans l'application Streamlit
     st.pyplot(fig)
-
-
