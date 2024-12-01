@@ -473,6 +473,8 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
     
     ax.text(0.1, 0.9, f"Surface des bas-fonds: {surface_bas_fond:.2f} ha", transform=ax.transAxes, fontsize=12, color='black', ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5'))
     ax.text(0.1, 0.85, f"Surface des bas-fonds (polygones): {surface_bas_fond_polygones:.2f} ha", transform=ax.transAxes, fontsize=12, color='black', ha='left', va='top', bbox=dict(facecolor='white', edgecolor='black', boxstyle='round,pad=0.5'))
+
+    # Ajouter des labels sous l'emprise de la carte de profondeur
     label_y_position = Y_min - (Y_max - Y_min) * 0.10
     ax.text(
         X_min + (X_max - X_min) * 0,  # Position horizontale (10% de la largeur)
