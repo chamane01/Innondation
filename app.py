@@ -355,10 +355,20 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         bas_fonds = grid_Z < seuil_bas_fond
         return bas_fonds, seuil_bas_fond
 
-    def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
-        resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000  # Résolution en hectares
-        surface_bas_fond = np.sum(bas_fonds) * resolution
-        return surface_bas_fond
+    def calculer_surfaces_bas_fonds(grid_Z, grid_X, grid_Y, seuil_rel_bas_fond, polygones_gdf=None):
+        moyenne_Z = np.mean(grid_Z)
+        ecart_type_Z = np.std(grid_Z)
+        seuil_bas_fond = moyenne_Z - seuil_rel_bas_fond * ecart_type_Z
+        bas_fonds = grid_Z < seuil_bas_fond
+
+        resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000
+        surface_totale_bas_fond = np.sum(bas_fonds) * resolution
+        surface_emprise_bas_fond = 0
+
+
+       
+        
+   
         if polygones_gdf is not None:
         # Créer un GeoDataFrame pour les cellules de bas-fond
         bas_fond_cells = []
