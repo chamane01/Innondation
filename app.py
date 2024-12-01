@@ -203,12 +203,12 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
         polygones_dans_emprise = polygones_gdf[polygones_gdf.intersects(emprise)]  # Filtrer les polygones dans l'emprise
     else:
         polygones_dans_emprise = None
-except Exception as e:
+
+    except Exception as e:
     st.error(f"Erreur lors du chargement des polygones : {e}")
     polygones_dans_emprise = None
-
-# Fonction pour afficher les polygones
-def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
+    # Fonction pour afficher les polygone
+    def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
     """
     Affiche uniquement les contours des polygones sur une carte donnée.
     
@@ -218,6 +218,8 @@ def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
         edgecolor: Couleur des contours (par défaut : blanc).
         linewidth: Épaisseur des contours (par défaut : 1.0).
     """
+
+
     if gdf_polygones is not None and not gdf_polygones.empty:
         gdf_polygones.plot(
             ax=ax,
@@ -231,6 +233,7 @@ def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
 
     
 
+    
     # Détection des bas-fonds
     def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
         """
