@@ -194,7 +194,7 @@ if df is not None:
 def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
 
     def charger_polygones():
-    try:
+        try:
         # Charger le fichier GeoJSON contenant les polygones
         polygones_gdf = gpd.read_file("polygo200ha.geojson")  # Remplace par le nom de ton fichier
         if df is not None:
@@ -209,6 +209,11 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
         polygones_dans_emprise = None
 
     return polygones_dans_emprise
+            
+
+    
+        
+    
 
     
     def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
@@ -221,7 +226,7 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
         edgecolor: Couleur des contours (par défaut : blanc).
         linewidth: Épaisseur des contours (par défaut : 1.0).
     """
-    if gdf_polygones is not None and not gdf_polygones.empty:
+        if gdf_polygones is not None and not gdf_polygones.empty:
         gdf_polygones.plot(
             ax=ax,
             facecolor='none',  # Assure que le remplissage est complètement transparent
@@ -231,6 +236,7 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     else:
         st.warning("Aucun polygone à afficher dans l'emprise.")
 
+    
     
 
     
