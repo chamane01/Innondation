@@ -412,48 +412,6 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
     # Affichage de la carte de profondeur
     st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
 
-# Ajouter les polygones sur la carte
-if st.button("Afficher les polygones"):
-    # Charger les polygones
-    polygones_dans_emprise = charger_polygones()
-
-    # Définir les limites de la carte basées sur les polygones et ajouter 20% de marge
-    if polygones_dans_emprise is not None:
-        X_min, Y_min, X_max, Y_max = polygones_dans_emprise.total_bounds
-        
-        # Ajouter une marge de 20% autour de l'emprise
-        marge = 0.1
-        X_range = X_max - X_min
-        Y_range = Y_max - Y_min
-        
-        # Calculer les nouvelles limites avec la marge
-        X_min -= X_range * marge
-        Y_min -= Y_range * marge
-        X_max += X_range * marge
-        Y_max += Y_range * marge
-    else:
-        X_min, Y_min, X_max, Y_max = 0, 0, 1, 1  # Valeurs par défaut si aucun polygone n'est chargé
-
-    fig, ax = plt.subplots(figsize=(8, 6))
-    ax.set_xlim(X_min, X_max)
-    ax.set_ylim(Y_min, Y_max)
-    
-    # Ajouter la carte de fond OpenStreetMap en EPSG:32630
-    ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
-    
-    # Afficher les polygones
-
-    # Générer la carte de profondeur
-    generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max)
-
-
-    # Appel de la fonction pour afficher uniquement les contours des polygones
-    afficher_polygones(ax, polygones_dans_emprise, edgecolor='white', linewidth=1.5)
-
-    # Afficher la carte dans l'application Streamlit
-    st.pyplot(fig)
-
-
 # Fonction pour afficher les polygones
 def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
     if gdf_polygones is not None and not gdf_polygones.empty:
