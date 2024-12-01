@@ -326,6 +326,26 @@ def charger_polygones():
 
     return polygones_dans_emprise
 
+def afficher_polygones(ax, polygones, edgecolor='black', linewidth=1):
+    """
+    Affiche des polygones sur un axe matplotlib donné.
+    
+    ax : objet matplotlib Axes
+        L'axe sur lequel afficher les polygones.
+    polygones : list
+        Liste des polygones à afficher.
+    edgecolor : str
+        Couleur des bordures des polygones.
+    linewidth : float
+        Largeur de la bordure des polygones.
+    """
+    for poly in polygones:
+        ax.plot(*poly.exterior.xy, color=edgecolor, linewidth=linewidth)  # Trace le contour du polygone
+
+    ax.set_title("Affichage des Polygones")
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+
 # Fonction pour générer la carte de profondeur avec dégradé de couleurs
 def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0):
     # Détection des bas-fonds
