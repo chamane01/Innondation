@@ -10,6 +10,7 @@ from shapely.geometry import MultiPolygon
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
+import matplotlib.patches as mpatches
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -447,11 +448,6 @@ def generate_depth_map_with_legend(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_m
         linewidths=1.5,
         linestyles='solid',
     )
-    intersections_x = np.linspace(X_min, X_max, num=5)
-    intersections_y = np.linspace(Y_min, Y_max, num=5)
-    for x in intersections_x:
-        for y in intersections_y:
-            ax.plot(x, y, 'k+', markersize=7, alpha=1.0)
 
     # Ajouter des labels pour les contours
     ax.clabel(contour_lines, inline=True, fmt={seuil_bas_fond: f"{seuil_bas_fond:.2f} m"}, fontsize=12)
@@ -462,22 +458,31 @@ def generate_depth_map_with_legend(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_m
     for y in np.linspace(Y_min, Y_max, num=5):
         ax.axhline(y, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
 
-    # Affichage de la carte de profondeur
+    # Affichage de la surface des bas-fonds
     surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
     st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
-    # Afficher la surface des bas-fonds dans les polygones
-    st.write(f"**Surface des bas-fonds dans les polygones** : {surface_bas_fond_polygones:.2f} hectares")
+    
+    # Créer la légende
+    legend_elements = [
+        mpatches.Patch(color='cyan', label='Bas-fonds'),
+        mpatches.Patch(color='black', label=f'Contour Bas-fonds ({seuil_bas_fond:.2f} m)'),
+        mpatches.Patch(color=cmap(0.5), label='Profondeur')
+    ]
+    
+    # Ajouter la légende en bas de la carte
+    ax.legend(handles=legend_elements, loc='upper center', bbox_to_anchor=(0.5, -0.05), shadow=True, ncol=3)
 
-    # Ajouter la légende sous la carte
-    handles, labels = ax.get_legend_handles_labels()
-    ax.legend(handles, labels, bbox_to_anchor=(0.5, -0.1), loc='center', ncol=2, frameon=False, fontsize=10)
+# Exemple d'appel dans l'interface Streamlit
+st.title("Affichage des Polygones et Profondeur")
+
+# Téléchargement du fichier GeoJSON pour les polygones
+uploaded_file = st.file_uploader("Téléverser un fichier GeoJSON", type="geojson")
 
 # Ajouter les polygones sur la carte
 if st.button("Afficher les polygones"):
     # Charger les polygones
     polygones_dans_emprise = charger_polygones(uploaded_file)
 
-    # Si des polygones sont chargés, utiliser leur emprise pour ajuster les limites
     if polygones_dans_emprise is not None:
         # Calculer les limites du polygone
         X_min_polygone, Y_min_polygone, X_max_polygone, Y_max_polygone = polygones_dans_emprise.total_bounds
@@ -493,7 +498,6 @@ if st.button("Afficher les polygones"):
             marge = 0.1
             X_range = X_max_polygone - X_min_polygone
             Y_range = Y_max_polygone - Y_min_polygone
-            
             X_min = min(X_min_depth, X_min_polygone - X_range * marge)
             Y_min = min(Y_min_depth, Y_min_polygone - Y_range * marge)
             X_max = max(X_max_depth, X_max_polygone + X_range * marge)
