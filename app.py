@@ -309,13 +309,7 @@ if st.button("Générer la carte de profondeur avec bas-fonds"):
 
 
 
-import geopandas as gpd
-import numpy as np
-import matplotlib.pyplot as plt
-import streamlit as st
-import contextily as ctx
-from shapely.geometry import box
-
+# Fonction pour charger les polygones
 def charger_polygones(uploaded_file):
     try:
         if uploaded_file is not None:
@@ -330,7 +324,7 @@ def charger_polygones(uploaded_file):
                 emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
                 polygones_dans_emprise = polygones_gdf[polygones_gdf.intersects(emprise)]  # Filtrer les polygones dans l'emprise
             else:
-                polygones_dans_emprise = charger_polygones()  # Si pas de colonne X/Y dans df, prendre tous les polygones
+                polygones_dans_emprise = polygones_gdf  # Si pas de colonne X/Y dans df, prendre tous les polygones
         else:
             polygones_dans_emprise = None
     except Exception as e:
@@ -349,7 +343,7 @@ def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
 # Exemple d'appel dans l'interface Streamlit
 st.title("Affichage des Polygones et Profondeur")
 
-# Téléchargement du fichier GeoJSON
+# Téléchargement du fichier GeoJSON pour les polygones
 uploaded_file = st.file_uploader("Téléverser un fichier GeoJSON", type="geojson")
 
 def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0):
@@ -372,13 +366,16 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
     ax.set_xlim(X_min, X_max)
     ax.set_ylim(Y_min, Y_max)
 
-    # Masquer les coordonnées aux extrémités
+    # Afficher la carte de fond OpenStreetMap en EPSG:32630
+    ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+
     ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
     ax.set_xticks(np.linspace(X_min, X_max, num=5))
     ax.set_yticks(np.linspace(Y_min, Y_max, num=5))
     ax.xaxis.set_tick_params(labeltop=True)
     ax.yaxis.set_tick_params(labelright=True)
 
+    # Masquer les coordonnées aux extrémités
     xticks = ax.get_xticks()
     yticks = ax.get_yticks()
     ax.set_xticklabels(
@@ -388,12 +385,19 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
     ax.set_yticklabels(
         ["" if y == Y_min or y == Y_max else f"{int(y)}" for y in yticks],
         rotation=label_rotation_y,
-        va="center"
+        va="center"  # Alignement vertical des étiquettes Y
     )
+
+    # Modifier rotation
+    for label in ax.get_xticklabels():
+        label.set_rotation(label_rotation_x)
+
+    for label in ax.get_yticklabels():
+        label.set_rotation(label_rotation_y)
 
     # Ajouter les contours pour la profondeur
     depth_levels = np.linspace(grid_Z.min(), grid_Z.max(), 100)
-    cmap = plt.cm.plasma
+    cmap = plt.cm.plasma  # Couleurs allant de bleu à jaune
     cont = ax.contourf(grid_X, grid_Y, grid_Z, levels=depth_levels, cmap=cmap)
     cbar = plt.colorbar(cont, ax=ax)
     cbar.set_label('Profondeur (m)', rotation=270)
@@ -427,10 +431,11 @@ if st.button("Afficher les polygones"):
     # Charger les polygones
     polygones_dans_emprise = charger_polygones(uploaded_file)
 
+    # Si des polygones sont chargés, utiliser leur emprise pour ajuster les limites
     if polygones_dans_emprise is not None:
         X_min, Y_min, X_max, Y_max = polygones_dans_emprise.total_bounds
         
-        # Ajouter une marge de 20% autour de l'emprise
+        # Ajouter une marge de 20% autour de l'emprise des polygones
         marge = 0.1
         X_range = X_max - X_min
         Y_range = Y_max - Y_min
@@ -447,14 +452,11 @@ if st.button("Afficher les polygones"):
     ax.set_xlim(X_min, X_max)
     ax.set_ylim(Y_min, Y_max)
     
-    # Ajouter la carte de fond OpenStreetMap en EPSG:32630
-    ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
-    
-    # Afficher les polygones
-    afficher_polygones(ax, polygones_dans_emprise, edgecolor='white', linewidth=1.5)
-
-    # Générer la carte de profondeur
+    # Afficher la carte de profondeur
     generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max)
+
+    # Afficher les polygones dans l'emprise calculée
+    afficher_polygones(ax, polygones_dans_emprise, edgecolor='white', linewidth=1.5)
 
     # Afficher la carte dans l'application Streamlit
     st.pyplot(fig)
