@@ -307,101 +307,81 @@ if st.button("Générer la carte de profondeur avec bas-fonds"):
 
 
 
-import geopandas as gpd
-import numpy as np
-import matplotlib.pyplot as plt
 import streamlit as st
-from shapely.geometry import box
+import geopandas as gpd
+import matplotlib.pyplot as plt
 import contextily as ctx
+import numpy as np
+from shapely.geometry import box
 
-def generate_depth_map(grid_X, grid_Y, grid_Z, label_rotation_x=0, label_rotation_y=0):
-    def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
-        moyenne_Z = np.mean(grid_Z)
-        ecart_type_Z = np.std(grid_Z)
-        seuil_bas_fond = moyenne_Z - seuil_rel_bas_fond * ecart_type_Z
-        bas_fonds = grid_Z < seuil_bas_fond
-        return bas_fonds, seuil_bas_fond
+# Fonction pour charger les polygones depuis un fichier téléversé
+def charger_polygones(uploaded_file):
+    try:
+        if uploaded_file is not None:
+            # Lire le fichier GeoJSON téléchargé
+            polygones_gdf = gpd.read_file(uploaded_file)
+            
+            # Convertir le GeoDataFrame au CRS EPSG:32630
+            polygones_gdf = polygones_gdf.to_crs(epsg=32630)
+            
+            # Créer une emprise (bounding box) basée sur les données
+            # Ici, df fait référence à une structure de données que vous utilisez pour l'emprise
+            if 'X' in df.columns and 'Y' in df.columns:
+                emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
+                polygones_dans_emprise = polygones_gdf[polygones_gdf.intersects(emprise)]  # Filtrer les polygones dans l'emprise
+            else:
+                polygones_dans_emprise = polygones_gdf  # Si pas de colonne X/Y dans df, prendre tous les polygones
+        else:
+            polygones_dans_emprise = None
+    except Exception as e:
+        st.error(f"Erreur lors du chargement des polygones : {e}")
+        polygones_dans_emprise = None
 
-    def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
-        resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000
-        surface_bas_fond = np.sum(bas_fonds) * resolution
-        return surface_bas_fond
+    return polygones_dans_emprise
 
-    bas_fonds, seuil_bas_fond = detecter_bas_fonds(grid_Z)
-    surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
+# Fonction pour afficher les polygones
+def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
+    if gdf_polygones is not None and not gdf_polygones.empty:
+        gdf_polygones.plot(ax=ax, facecolor='none', edgecolor=edgecolor, linewidth=linewidth)
+    else:
+        st.warning("Aucun polygone à afficher dans l'emprise.")
 
-    fig, ax = plt.subplots(figsize=(8, 6))
-    ax.set_xlim(grid_X.min(), grid_X.max())
-    ax.set_ylim(grid_Y.min(), grid_Y.max())
+# Exemple d'appel dans l'interface Streamlit
+st.title("Affichage des Polygones et Profondeur")
 
-    ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
-
-    depth_levels = np.linspace(grid_Z.min(), grid_Z.max(), 100)
-    cmap = plt.cm.plasma
-    cont = ax.contourf(grid_X, grid_Y, grid_Z, levels=depth_levels, cmap=cmap)
-    cbar = plt.colorbar(cont, ax=ax)
-    cbar.set_label('Profondeur (m)', rotation=270)
-
-    ax.contourf(grid_X, grid_Y, bas_fonds, levels=[0.5, 1], colors='cyan', alpha=0.4, label='Bas-fonds')
-
-    contour_lines = ax.contour(grid_X, grid_Y, grid_Z, levels=[seuil_bas_fond], colors='black', linewidths=1.5)
-    ax.clabel(contour_lines, inline=True, fmt={seuil_bas_fond: f"{seuil_bas_fond:.2f} m"}, fontsize=12)
-
-    for x in np.linspace(grid_X.min(), grid_X.max(), num=5):
-        ax.axvline(x, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
-    for y in np.linspace(grid_Y.min(), grid_Y.max(), num=5):
-        ax.axhline(y, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
-
-    intersections_x = np.linspace(grid_X.min(), grid_X.max(), num=5)
-    intersections_y = np.linspace(grid_Y.min(), grid_Y.max(), num=5)
-    for x in intersections_x:
-        for y in intersections_y:
-            ax.plot(x, y, 'k+', markersize=7, alpha=1.0)
-
-    ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
-    ax.set_xticks(np.linspace(grid_X.min(), grid_X.max(), num=5))
-    ax.set_yticks(np.linspace(grid_Y.min(), grid_Y.max(), num=5))
-    ax.xaxis.set_tick_params(labeltop=True)
-    ax.yaxis.set_tick_params(labelright=True)
-
-    xticks = ax.get_xticks()
-    yticks = ax.get_yticks()
-    ax.set_xticklabels(["" if x == grid_X.min() or x == grid_X.max() else f"{int(x)}" for x in xticks], rotation=label_rotation_x)
-    ax.set_yticklabels(["" if y == grid_Y.min() or y == grid_Y.max() else f"{int(y)}" for y in yticks], rotation=label_rotation_y)
-
-    for label in ax.get_xticklabels():
-        label.set_rotation(label_rotation_x)
-
-    for label in ax.get_yticklabels():
-        label.set_rotation(label_rotation_y)
-
-    st.pyplot(fig)
-
-# Exemple d'utilisation dans Streamlit
-st.title("Carte de Profondeur")
-
+# Téléchargement du fichier GeoJSON
 uploaded_file = st.file_uploader("Téléverser un fichier GeoJSON", type="geojson")
 
 if uploaded_file is not None:
+    # Charger les polygones depuis le fichier téléchargé
     polygones_dans_emprise = charger_polygones(uploaded_file)
 
     if polygones_dans_emprise is not None:
+        # Définir les limites de la carte basées sur les polygones
         X_min, Y_min, X_max, Y_max = polygones_dans_emprise.total_bounds
         marge = 0.1
         X_range = X_max - X_min
         Y_range = Y_max - Y_min
-
+        
+        # Calculer les nouvelles limites avec la marge
         X_min -= X_range * marge
         Y_min -= Y_range * marge
         X_max += X_range * marge
         Y_max += Y_range * marge
-
-        grid_X, grid_Y, grid_Z = generate_grid(X_min, X_max, Y_min, Y_max)
-
-        generate_depth_map(grid_X, grid_Y, grid_Z)
+        
+        fig, ax = plt.subplots(figsize=(8, 6))
+        ax.set_xlim(X_min, X_max)
+        ax.set_ylim(Y_min, Y_max)
+        
+        # Ajouter la carte de fond OpenStreetMap
+        ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+        
+        # Afficher les polygones
+        afficher_polygones(ax, polygones_dans_emprise, edgecolor='white', linewidth=1.5)
+        
+        # Afficher la carte dans l'application Streamlit
+        st.pyplot(fig)
     else:
         st.warning("Aucun polygone valide n'a été trouvé dans le fichier.")
 else:
     st.info("Veuillez télécharger un fichier GeoJSON pour afficher les polygones.")
-
-
