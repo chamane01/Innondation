@@ -350,9 +350,20 @@ if st.button("Afficher les polygones"):
     # Charger les polygones
     polygones_dans_emprise = charger_polygones()
 
-    # Définir les limites de la carte basées sur les polygones
+    # Définir les limites de la carte basées sur les polygones et ajouter 20% de marge
     if polygones_dans_emprise is not None:
         X_min, Y_min, X_max, Y_max = polygones_dans_emprise.total_bounds
+        
+        # Ajouter une marge de 20% autour de l'emprise
+        marge = 0.2
+        X_range = X_max - X_min
+        Y_range = Y_max - Y_min
+        
+        # Calculer les nouvelles limites avec la marge
+        X_min -= X_range * marge
+        Y_min -= Y_range * marge
+        X_max += X_range * marge
+        Y_max += Y_range * marge
     else:
         X_min, Y_min, X_max, Y_max = 0, 0, 1, 1  # Valeurs par défaut si aucun polygone n'est chargé
 
