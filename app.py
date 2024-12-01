@@ -361,10 +361,14 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
 
     bas_fonds, seuil_bas_fond = detecter_bas_fonds(grid_Z)
     surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
+
     # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
     ax.set_xlim(X_min, X_max)
     ax.set_ylim(Y_min, Y_max)
-    ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+
+    # Retirer l'ajout de la carte OpenStreetMap ici car il est déjà ajouté dans afficher_polygones
+    # ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+
     ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
     ax.set_xticks(np.linspace(X_min, X_max, num=5))
     ax.set_yticks(np.linspace(Y_min, Y_max, num=5))
@@ -383,6 +387,7 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         rotation=label_rotation_y,
         va="center"  # Alignement vertical des étiquettes Y
     )
+
     # Modifier rotation
     for label in ax.get_xticklabels():
         label.set_rotation(label_rotation_x)
@@ -399,7 +404,7 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
 
     # Ajouter les bas-fonds en cyan
     ax.contourf(grid_X, grid_Y, bas_fonds, levels=[0.5, 1], colors='cyan', alpha=0.4, label='Bas-fonds')
-    
+
     # Ajouter une ligne de contour autour des bas-fonds
     contour_lines = ax.contour(
         grid_X, grid_Y, grid_Z,
@@ -408,6 +413,7 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         linewidths=1.5,
         linestyles='solid',
     )
+
     # Ajouter des labels pour les contours
     ax.clabel(contour_lines, inline=True, fmt={seuil_bas_fond: f"{seuil_bas_fond:.2f} m"}, fontsize=12)
 
@@ -420,14 +426,6 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
     # Affichage de la carte de profondeur
     st.pyplot(fig)
     st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
-
-
-
-
-
-
-
-
 
 # Ajouter les polygones sur la carte
 if st.button("Afficher les polygones"):
@@ -457,8 +455,12 @@ if st.button("Afficher les polygones"):
     
     # Ajouter la carte de fond OpenStreetMap en EPSG:32630
     ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+    
+    # Afficher les polygones
 
+    # Générer la carte de profondeur
     generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max)
+
 
     # Appel de la fonction pour afficher uniquement les contours des polygones
     afficher_polygones(ax, polygones_dans_emprise, edgecolor='white', linewidth=1.5)
