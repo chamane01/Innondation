@@ -413,6 +413,12 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         linewidths=1.5,
         linestyles='solid',
     )
+    intersections_x = np.linspace(X_min, X_max, num=5)
+    intersections_y = np.linspace(Y_min, Y_max, num=5)
+    for x in intersections_x:
+       for y in intersections_y:
+           ax.plot(x, y, 'k+', markersize=7, alpha=1.0)
+           
 
     # Ajouter des labels pour les contours
     ax.clabel(contour_lines, inline=True, fmt={seuil_bas_fond: f"{seuil_bas_fond:.2f} m"}, fontsize=12)
