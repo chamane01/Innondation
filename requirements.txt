@@ -15,5 +15,4 @@ pyproj # Pour la conversion des coordonnées
 ezdxf
 opencv-python
 datetime
-IO
 
