@@ -359,6 +359,29 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000  # Résolution en hectares
         surface_bas_fond = np.sum(bas_fonds) * resolution
         return surface_bas_fond
+        if polygones_gdf is not None:
+        # Créer un GeoDataFrame pour les cellules de bas-fond
+        bas_fond_cells = []
+        for i in range(grid_Z.shape[0]):
+            for j in range(grid_Z.shape[1]):
+                if bas_fonds[i, j]:
+                    # Créer une cellule polygonale
+                    x_min, x_max = grid_X[i, j], grid_X[i, j] + resolution
+                    y_min, y_max = grid_Y[i, j], grid_Y[i, j] + resolution
+                    cell = box(x_min, y_min, x_max, y_max)
+                    bas_fond_cells.append(cell)
+
+        bas_fond_gdf = gpd.GeoDataFrame(geometry=bas_fond_cells, crs="EPSG:32630")
+
+        # Intersection avec les polygones
+        intersections = gpd.overlay(bas_fond_gdf, polygones_gdf, how='intersection')
+        surface_emprise_bas_fond = intersections.area.sum() / 10000  # Convertir en hectares
+        return surface_totale_bas_fond, surface_emprise_bas_fond
+
+    
+
+
+    
 
     bas_fonds, seuil_bas_fond = detecter_bas_fonds(grid_Z)
     surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
@@ -432,11 +455,15 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
 
     # Affichage de la carte de profondeur
     st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
+    st.write(f"Surface des bas-fonds dans l'emprise : {surface_emprise:.2f} hectares")
 
 # Ajouter les polygones sur la carte
 if st.button("Afficher les polygones"):
     # Charger les polygones
     polygones_dans_emprise = charger_polygones(uploaded_file)
+    surface_totale, surface_emprise = calculer_surfaces_bas_fonds(
+        grid_Z, grid_X, grid_Y, seuil_rel_bas_fond=1.5, polygones_gdf=polygones_dans_emprise
+    )
 
     # Si des polygones sont chargés, utiliser leur emprise pour ajuster les limites
     if polygones_dans_emprise is not None:
