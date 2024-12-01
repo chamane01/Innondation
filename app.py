@@ -322,18 +322,18 @@ except Exception as e:
     polygones_dans_emprise = None
 
 # Fonction pour afficher les polygones
-def afficher_polygones(ax, gdf_polygones, couleur='blue', alpha=0.5):
+def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
     """
-    Affiche les polygones sur une carte donnée.
+    Affiche uniquement les contours des polygones sur une carte donnée.
     
     Args:
         ax: L'objet Axes de Matplotlib.
         gdf_polygones: GeoDataFrame contenant les polygones.
-        couleur: Couleur des polygones (par défaut : bleu).
-        alpha: Transparence des polygones (par défaut : 0.5).
+        edgecolor: Couleur des contours (par défaut : blanc).
+        linewidth: Épaisseur des contours (par défaut : 1.0).
     """
     if gdf_polygones is not None and not gdf_polygones.empty:
-        gdf_polygones.plot(ax=ax, color=couleur, edgecolor='black', alpha=alpha)
+        gdf_polygones.plot(ax=ax, color=None, edgecolor=edgecolor, linewidth=linewidth)
     else:
         st.warning("Aucun polygone à afficher dans l'emprise.")
 
@@ -344,8 +344,8 @@ if st.button("Afficher les polygones"):
     ax.set_ylim(Y_min, Y_max)
     ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
 
-    # Appel de la fonction pour afficher les polygones
-    afficher_polygones(ax, polygones_dans_emprise, couleur='green', alpha=0.7)
+    # Appel de la fonction pour afficher uniquement les contours des polygones
+    afficher_polygones(ax, polygones_dans_emprise, edgecolor='white', linewidth=1.5)
 
     # Afficher la carte dans l'application Streamlit
     st.pyplot(fig)
