@@ -259,6 +259,36 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
 
     # Ajouter les bas-fonds en cyan
     ax.contourf(grid_X, grid_Y, bas_fonds, levels=[0.5, 1], colors='cyan', alpha=0.4, label='Bas-fonds')
+
+    # Enregistrement de la carte en PNG
+    buf = BytesIO()
+    fig.savefig(buf, format="png")
+    buf.seek(0)
+
+    # Création du shapefile pour les contours des bas-fonds
+    polygons = []
+    for i in range(grid_X.shape[0]):
+        for j in range(grid_X.shape[1]):
+            if bas_fonds[i, j]:
+                x, y = grid_X[i, j], grid_Y[i, j]
+                poly = Polygon([(x, y), (x + 1, y), (x + 1, y + 1), (x, y + 1)])
+                polygons.append(poly)
+    gdf = gpd.GeoDataFrame(geometry=polygons, crs="EPSG:32630")
+
+    shapefile_buf = BytesIO()
+    with fiona.Env():
+        gdf.to_file(shapefile_buf, driver="ESRI Shapefile")
+    shapefile_buf.seek(0)
+
+    # Création du fichier DXF
+    doc = ezdxf.new()
+    msp = doc.modelspace()
+    for poly in polygons:
+        coords = list(poly.exterior.coords)
+        msp.add_lwpolyline(coords, close=True)
+    dxf_buf = BytesIO()
+    doc.write(dxf_buf)
+    dxf_buf.seek(0)
     
     # Ajouter une ligne de contour autour des bas-fonds
     contour_lines = ax.contour(
@@ -299,6 +329,11 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     st.pyplot(fig)
     # Afficher les surfaces calculées
     st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
+
+    # Ajout des boutons de téléchargement
+    st.download_button("Télécharger la carte (PNG)", buf, file_name="carte_profondeur.png", mime="image/png")
+    st.download_button("Télécharger les contours (Shapefile)", shapefile_buf, file_name="contours_bafonds.zip", mime="application/zip")
+    st.download_button("Télécharger les contours (DXF)", dxf_buf, file_name="contours_bafonds.dxf", mime="application/dxf")
 
 # Ajouter un bouton pour générer la carte de profondeur
 if st.button("Générer la carte de profondeur avec bas-fonds"):
