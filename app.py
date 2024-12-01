@@ -269,16 +269,11 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
         linestyles='solid',# Épaisseur de la ligne
     )
     # Ajouter des labels pour les contours
-    for text in contour_lines.clabels:
-    label = text[0]
-    # Créer une lueur en décalant le texte de fond et en le coloriant en blanc
-    label.set_fontsize(12)
-    label.set_color('white')
-    label.set_weight('bold')
-    label.set_path_effects([
-        plt.patheffects.withStroke(linewidth=3, foreground='white'),  # Lueur blanche autour du texte
-        plt.patheffects.Normal()
-    ])
+    ax.clabel(contour_lines,
+        inline=True,
+        fmt={seuil_bas_fond: f"{seuil_bas_fond:.2f} m"},  # Format du label
+        fontsize=12
+    )
 
 
     # Ajouter des lignes pour relier les tirets
@@ -457,13 +452,7 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
             ax.plot(x, y, 'k+', markersize=7, alpha=1.0)
 
     # Ajouter des labels pour les contours
-    ax.clabel(
-        contour_lines, 
-        inline=True, 
-        fmt={seuil_bas_fond: f"{seuil_bas_fond:.2f} m"}, 
-        fontsize=12,
-        inline_kwargs={"fontsize": 12, "bbox": dict(facecolor='white', edgecolor='none', alpha=0.7)}
-    )
+    ax.clabel(contour_lines, inline=True, fmt={seuil_bas_fond: f"{seuil_bas_fond:.2f} m"}, fontsize=12)
 
     # Ajouter des lignes pour relier les tirets
     for x in np.linspace(X_min, X_max, num=5):
