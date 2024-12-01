@@ -299,39 +299,7 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     st.pyplot(fig)
     # Afficher les surfaces calculées
     st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
-
-# Ajouter un bouton pour générer la carte de profondeur
-if st.button("Générer la carte de profondeur avec bas-fonds"):
-    generate_depth_map(label_rotation_x=0, label_rotation_y=-90)
-
-
-
-# Fonction pour charger les polygones depuis un fichier téléversé
-def charger_polygones(uploaded_file):
-    try:
-        if uploaded_file is not None:
-            # Lire le fichier GeoJSON téléchargé
-            polygones_gdf = gpd.read_file(uploaded_file)
-            
-            # Convertir le GeoDataFrame au CRS EPSG:32630
-            polygones_gdf = polygones_gdf.to_crs(epsg=32630)
-            
-            # Créer une emprise (bounding box) basée sur les données
-            # Ici, df fait référence à une structure de données que vous utilisez pour l'emprise
-            if 'X' in df.columns and 'Y' in df.columns:
-                emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
-                polygones_dans_emprise = polygones_gdf[polygones_gdf.intersects(emprise)]  # Filtrer les polygones dans l'emprise
-            else:
-                polygones_dans_emprise = polygones_gdf  # Si pas de colonne X/Y dans df, prendre tous les polygones
-        else:
-            polygones_dans_emprise = None
-    except Exception as e:
-        st.error(f"Erreur lors du chargement des polygones : {e}")
-        polygones_dans_emprise = None
-
-    return polygones_dans_emprise
-
-def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0):
+    def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0):
     def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
         moyenne_Z = np.mean(grid_Z)
         ecart_type_Z = np.std(grid_Z)
@@ -411,6 +379,39 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
 
     # Affichage de la carte de profondeur
     st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
+
+# Ajouter un bouton pour générer la carte de profondeur
+if st.button("Générer la carte de profondeur avec bas-fonds"):
+    generate_depth_map(label_rotation_x=0, label_rotation_y=-90)
+
+
+
+# Fonction pour charger les polygones depuis un fichier téléversé
+def charger_polygones(uploaded_file):
+    try:
+        if uploaded_file is not None:
+            # Lire le fichier GeoJSON téléchargé
+            polygones_gdf = gpd.read_file(uploaded_file)
+            
+            # Convertir le GeoDataFrame au CRS EPSG:32630
+            polygones_gdf = polygones_gdf.to_crs(epsg=32630)
+            
+            # Créer une emprise (bounding box) basée sur les données
+            # Ici, df fait référence à une structure de données que vous utilisez pour l'emprise
+            if 'X' in df.columns and 'Y' in df.columns:
+                emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
+                polygones_dans_emprise = polygones_gdf[polygones_gdf.intersects(emprise)]  # Filtrer les polygones dans l'emprise
+            else:
+                polygones_dans_emprise = polygones_gdf  # Si pas de colonne X/Y dans df, prendre tous les polygones
+        else:
+            polygones_dans_emprise = None
+    except Exception as e:
+        st.error(f"Erreur lors du chargement des polygones : {e}")
+        polygones_dans_emprise = None
+
+    return polygones_dans_emprise
+
+
 
 # Fonction pour afficher les polygones
 def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
