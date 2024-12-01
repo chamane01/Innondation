@@ -426,12 +426,12 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
     for label in ax.get_yticklabels():
         label.set_rotation(label_rotation_y)
 
-    # Ajouter les contours pour la profondeur
+    # Ajouter les contours pour la profondeur et Barre verticale
     depth_levels = np.linspace(grid_Z.min(), grid_Z.max(), 100)
     cmap = plt.cm.plasma  # Couleurs allant de bleu à jaune
     cont = ax.contourf(grid_X, grid_Y, grid_Z, levels=depth_levels, cmap=cmap)
     cbar = plt.colorbar(cont, ax=ax)
-    cbar.set_label('Profondeur (m)', rotation=270)
+    cbar.set_label('Profondeur (m)', rotation=270, labelpad=20)
 
     # Ajouter les bas-fonds en cyan
     bas_fonds, seuil_bas_fond = detecter_bas_fonds(grid_Z)  # Appel à la fonction externe
