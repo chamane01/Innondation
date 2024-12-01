@@ -461,3 +461,16 @@ else:
     st.info("Veuillez télécharger un fichier GeoJSON pour afficher les polygones.")
 
 
+
+    # Générer la carte de profondeur
+    generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max)
+
+
+    # Appel de la fonction pour afficher uniquement les contours des polygones
+    afficher_polygones(ax, polygones_dans_emprise, edgecolor='white', linewidth=1.5)
+
+    # Afficher la carte dans l'application Streamlit
+    st.pyplot(fig)
+
+
+
