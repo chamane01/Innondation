@@ -306,53 +306,121 @@ if st.button("Générer la carte de profondeur avec bas-fonds"):
 
 
 
-
-try:
+def generate_depth_map_and_polygons(label_rotation_x=0, label_rotation_y=0):
     # Charger le fichier GeoJSON contenant les polygones
-    polygones_gdf = gpd.read_file("polygo200ha.geojson")  # Remplace par le nom de ton fichier
-    if df is not None:
-        # Créer une emprise basée sur les données existantes (X, Y)
-        emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
-        polygones_gdf = polygones_gdf.to_crs(epsg=32630)  # Convertir en EPSG:32630
-        polygones_dans_emprise = polygones_gdf[polygones_gdf.intersects(emprise)]  # Filtrer les polygones dans l'emprise
-    else:
-        polygones_dans_emprise = None
-except Exception as e:
-    st.error(f"Erreur lors du chargement des polygones : {e}")
-    polygones_dans_emprise = None
-
-# Fonction pour afficher les polygones
-def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
-    """
-    Affiche uniquement les contours des polygones sur une carte donnée.
+    try:
+        polygones_gdf = gpd.read_file("polygo200ha.geojson")  # Remplacer par le nom de ton fichier
+        if polygones_gdf is not None:
+            # Extraire l'étendue et le CRS du fichier
+            extent = polygones_gdf.total_bounds  # [minx, miny, maxx, maxy]
+            crs = polygones_gdf.crs  # Projection du fichier
+        else:
+            polygones_gdf = None
+            extent = [0, 0, 0, 0]  # Si le fichier n'est pas chargé
+            crs = None
+    except Exception as e:
+        st.error(f"Erreur lors du chargement des polygones : {e}")
+        polygones_gdf = None
+        extent = [0, 0, 0, 0]
+        crs = None
     
-    Args:
-        ax: L'objet Axes de Matplotlib.
-        gdf_polygones: GeoDataFrame contenant les polygones.
-        edgecolor: Couleur des contours (par défaut : blanc).
-        linewidth: Épaisseur des contours (par défaut : 1.0).
-    """
-    if gdf_polygones is not None and not gdf_polygones.empty:
-        gdf_polygones.plot(
-            ax=ax,
-            facecolor='none',  # Assure que le remplissage est complètement transparent
-            edgecolor=edgecolor,
-            linewidth=linewidth
-        )
+    # Définir les limites de la carte en fonction de l'étendue du fichier
+    if extent != [0, 0, 0, 0]:
+        X_min, Y_min, X_max, Y_max = extent
     else:
-        st.warning("Aucun polygone à afficher dans l'emprise.")
+        X_min, X_max, Y_min, Y_max = 0, 100, 0, 100  # Valeurs par défaut si le fichier est vide ou non chargé
 
-# Ajouter les polygones sur la carte
-if st.button("Afficher les polygones"):
+    # Exemple de données pour la grille (remplacer par vos données réelles)
+    grid_X, grid_Y = np.meshgrid(np.linspace(X_min, X_max, num=100), np.linspace(Y_min, Y_max, num=100))
+    grid_Z = np.random.random((100, 100))  # Remplacer par vos propres données de profondeur
+
+    # Détection des bas-fonds
+    def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
+        """
+        Détermine les bas-fonds en fonction de la profondeur Z relative.
+        Bas-fond = Z < moyenne(Z) - seuil_rel_bas_fond * std(Z)
+        """
+        moyenne_Z = np.mean(grid_Z)
+        ecart_type_Z = np.std(grid_Z)
+        seuil_bas_fond = moyenne_Z - seuil_rel_bas_fond * ecart_type_Z
+        bas_fonds = grid_Z < seuil_bas_fond
+        return bas_fonds, seuil_bas_fond
+
+    # Calcul des surfaces des bas-fonds
+    def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
+        """
+        Calcule la surface des bas-fonds en hectares.
+        """
+        resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000  # Résolution en hectares
+        surface_bas_fond = np.sum(bas_fonds) * resolution
+        return surface_bas_fond
+
+    # Détecter les bas-fonds
+    bas_fonds, seuil_bas_fond = detecter_bas_fonds(grid_Z)
+    surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
+
+    # Créer la figure pour afficher la carte avec les polygones et les bas-fonds
     fig, ax = plt.subplots(figsize=(8, 6))
     ax.set_xlim(X_min, X_max)
     ax.set_ylim(Y_min, Y_max)
-    ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+    
+    # Ajouter la carte de fond (context basemap) en respectant le CRS du fichier
+    ctx.add_basemap(ax, crs=crs.to_string(), source=ctx.providers.OpenStreetMap.Mapnik)
 
-    # Appel de la fonction pour afficher uniquement les contours des polygones
-    afficher_polygones(ax, polygones_dans_emprise, edgecolor='white', linewidth=1.5)
+    ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
+    ax.set_xticks(np.linspace(X_min, X_max, num=5))
+    ax.set_yticks(np.linspace(Y_min, Y_max, num=5))
+    ax.xaxis.set_tick_params(labeltop=True)
+    ax.yaxis.set_tick_params(labelright=True)
 
-    # Afficher la carte dans l'application Streamlit
+    # Masquer les coordonnées aux extrémités
+    xticks = ax.get_xticks()
+    yticks = ax.get_yticks()
+    ax.set_xticklabels(
+        ["" if x == X_min or x == X_max else f"{int(x)}" for x in xticks],
+        rotation=label_rotation_x,
+    )
+    ax.set_yticklabels(
+        ["" if y == Y_min or y == Y_max else f"{int(y)}" for y in yticks],
+        rotation=label_rotation_y,
+        va="center"  # Alignement vertical des étiquettes Y
+    )
+
+    # Ajouter les contours pour la profondeur
+    depth_levels = np.linspace(grid_Z.min(), grid_Z.max(), 100)
+    cmap = plt.cm.plasma  # Couleurs allant de bleu à jaune
+    cont = ax.contourf(grid_X, grid_Y, grid_Z, levels=depth_levels, cmap=cmap)
+    cbar = plt.colorbar(cont, ax=ax)
+    cbar.set_label('Profondeur (m)', rotation=270)
+
+    # Ajouter les bas-fonds en cyan
+    ax.contourf(grid_X, grid_Y, bas_fonds, levels=[0.5, 1], colors='cyan', alpha=0.4, label='Bas-fonds')
+    
+    # Ajouter une ligne de contour autour des bas-fonds
+    contour_lines = ax.contour(
+        grid_X, grid_Y, grid_Z,
+        levels=[seuil_bas_fond],  # Niveau correspondant au seuil des bas-fonds
+        colors='black',  # Couleur des contours
+        linewidths=1.5,
+        linestyles='solid',# Épaisseur de la ligne
+    )
+    # Ajouter des labels pour les contours
+    ax.clabel(contour_lines,
+        inline=True,
+        fmt={seuil_bas_fond: f"{seuil_bas_fond:.2f} m"},  # Format du label
+        fontsize=12
+    )
+
+    # Ajouter les polygones sur la carte
+    if polygones_gdf is not None:
+        polygones_gdf.to_crs(crs).plot(ax=ax, facecolor='none', edgecolor='white', linewidth=1.5)
+
+    # Affichage de la carte de profondeur
     st.pyplot(fig)
 
+    # Afficher les surfaces calculées
+    st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
 
+# Ajouter un bouton pour afficher la carte avec les polygones et les bas-fonds
+if st.button("Afficher les polygones et la carte de profondeur avec bas-fonds"):
+    generate_depth_map_and_polygons(label_rotation_x=0, label_rotation_y=-90)
