@@ -355,7 +355,7 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         bas_fonds = grid_Z < seuil_bas_fond
         return bas_fonds, seuil_bas_fond
 
-    def calculer_surfaces_bas_fonds(grid_Z, grid_X, grid_Y, seuil_rel_bas_fond, polygones_gdf=None, polygones, emprise, bas_fonds):
+    def calculer_surfaces_bas_fonds(grid_Z, grid_X, grid_Y, seuil_rel_bas_fond, polygones_gdf=None):
         moyenne_Z = np.mean(grid_Z)
         ecart_type_Z = np.std(grid_Z)
         seuil_bas_fond = moyenne_Z - seuil_rel_bas_fond * ecart_type_Z
