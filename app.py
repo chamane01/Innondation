@@ -424,7 +424,6 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         ax.axhline(y, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
 
     # Affichage de la carte de profondeur
-    st.pyplot(fig)
     st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
 
 # Ajouter les polygones sur la carte
