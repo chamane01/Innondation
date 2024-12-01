@@ -322,7 +322,7 @@ def charger_polygones(uploaded_file):
                 emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
                 polygones_dans_emprise = polygones_gdf[polygones_gdf.intersects(emprise)]  # Filtrer les polygones dans l'emprise
             else:
-                polygones_dans_emprise = polygones_gdf  # Si pas de colonne X/Y dans df, prendre tous les polygones
+                polygones_dans_emprise = charger_polygones()  # Si pas de colonne X/Y dans df, prendre tous les polygones
         else:
             polygones_dans_emprise = None
     except Exception as e:
