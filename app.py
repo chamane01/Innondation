@@ -347,8 +347,6 @@ if st.button("Afficher les polygones"):
     fig, ax = plt.subplots(figsize=(8, 6))
     ax.set_xlim(X_min, X_max)
     ax.set_ylim(Y_min, Y_max)
-    
-    # Ajouter la carte de fond OpenStreetMap en EPSG:32630
     ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
 
     # Appel de la fonction pour afficher uniquement les contours des polygones
