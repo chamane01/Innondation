@@ -437,7 +437,7 @@ if st.button("Afficher les polygones"):
         X_min, Y_min, X_max, Y_max = polygones_dans_emprise.total_bounds
         
         # Ajouter une marge de 20% autour de l'emprise
-        marge = 0.2
+        marge = 0.05
         X_range = X_max - X_min
         Y_range = Y_max - Y_min
         
