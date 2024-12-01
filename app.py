@@ -433,31 +433,31 @@ if st.button("Afficher les polygones"):
 
     # Si des polygones sont chargés, utiliser leur emprise pour ajuster les limites
     if polygones_dans_emprise is not None:
-        X_min, Y_min, X_max, Y_max = polygones_dans_emprise.total_bounds
+        # Calculer les limites du polygone
+        X_min_polygone, Y_min_polygone, X_max_polygone, Y_max_polygone = polygones_dans_emprise.total_bounds
         
-        # Ajouter une marge de 20% autour de l'emprise des polygones
-        marge = 0.1
-        X_range = X_max - X_min
-        Y_range = Y_max - Y_min
-        
-        # Calculer les nouvelles limites avec la marge
-        X_min -= X_range * marge
-        Y_min -= Y_range * marge
-        X_max += X_range * marge
-        Y_max += Y_range * marge
-    else:
-        X_min, Y_min, X_max, Y_max = 0, 0, 1, 1  # Valeurs par défaut si aucun polygone n'est chargé
+        # Calculer les limites de la carte de profondeur
+        X_min_depth, Y_min_depth, X_max_depth, Y_max_depth = grid_X.min(), grid_Y.min(), grid_X.max(), grid_Y.max()
 
-    fig, ax = plt.subplots(figsize=(8, 6))
-    ax.set_xlim(X_min, X_max)
-    ax.set_ylim(Y_min, Y_max)
-    
-    # Afficher la carte de profondeur
-    generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max)
+        # Vérifier si l'emprise de la carte de profondeur couvre celle des polygones
+        if (X_min_depth <= X_min_polygone and X_max_depth >= X_max_polygone and
+            Y_min_depth <= Y_min_polygone and Y_max_depth >= Y_max_polygone):
+            # Si l'emprise de la carte de profondeur couvre l'étendue des polygones, ne pas appliquer de marge
+            X_min, Y_min, X_max, Y_max = X_min_depth, Y_min_depth, X_max_depth, Y_max_depth
+        else:
+            # Si l'emprise de la carte de profondeur ne couvre pas l'étendue des polygones, appliquer une marge de 10%
+            marge = 0.1
+            X_range = X_max_polygone - X_min_polygone
+            Y_range = Y_max_polygone - Y_min_polygone
+            
+            X_min = min(X_min_depth, X_min_polygone - X_range * marge)
+            Y_min = min(Y_min_depth, Y_min_polygone - Y_range * marge)
+            X_max = max(X_max_depth, X_max_polygone + X_range * marge)
+            Y_max = max(Y_max_depth, Y_max_polygone + Y_range * marge)
 
-    # Afficher les polygones dans l'emprise calculée
-    afficher_polygones(ax, polygones_dans_emprise, edgecolor='white', linewidth=1.5)
-
-    # Afficher la carte dans l'application Streamlit
-    st.pyplot(fig)
+        # Affichage de la carte
+        fig, ax = plt.subplots(figsize=(10, 10))
+        generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max)
+        afficher_polygones(ax, polygones_dans_emprise)
+        st.pyplot(fig)
 
