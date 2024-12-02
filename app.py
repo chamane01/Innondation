@@ -527,6 +527,15 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         ha="left",  # Aligné à gauche
         va="top",# Aligné en haut
     )
+    # Ajouter un cadre autour de la carte avec une marge spécifique
+    ax.add_patch(patches.Rectangle(
+        (X_min - margin, Y_min - margin),  # Position en bas à gauche avec marge
+        X_max - X_min + 2 * margin,  # Largeur du rectangle avec marge
+        Y_max - Y_min + 2 * margin,  # Hauteur du rectangle avec marge
+        linewidth=2,
+        edgecolor='black',
+        facecolor='none',  # Transparence (pas de remplissage)
+    ))
     
 
 
