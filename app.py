@@ -449,10 +449,10 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
     #ajouter rectangle 
     X_range = X_max - X_min
     Y_range = Y_max - Y_min
-    X_min_new = X_min - X_range * 0.02
-    X_max_new = X_max + X_range * 0.02
-    Y_min_new = Y_min - Y_range * 0.02
-    Y_max_new = Y_max + Y_range * 0.02
+    X_min_new = X_min - X_range * 0.2
+    X_max_new = X_max + X_range * 0.2
+    Y_min_new = Y_min - Y_range * 0.2
+    Y_max_new = Y_max + Y_range * 0.2
     rect = Rectangle(
         (X_min_new, Y_min_new),  # Position du coin inférieur gauche
         X_max_new - X_min_new,  # Largeur
