@@ -594,7 +594,29 @@ if st.button("Afficher les polygones"):
             shp_bytes.seek(0)
             return shp_bytes
 
-         
+        def generate_geojson(grid_X, grid_Y, grid_Z):
+            """Générer un fichier GeoJSON à partir des données de grille"""
+            gdf = gpd.GeoDataFrame(
+                {'X': grid_X.flatten(), 'Y': grid_Y.flatten(), 'Z': grid_Z.flatten()},
+                geometry=gpd.points_from_xy(grid_X.flatten(), grid_Y.flatten())
+            )
+            return io.BytesIO(gdf.to_json().encode())
+
+    
+        st.write("Téléchargez les données au format souhaité :")
+        if st.button("Télécharger en GPX"):
+            gpx_file = generate_gpx(grid_X, grid_Y, grid_Z)
+            st.download_button(label="Télécharger GPX", data=gpx_file, file_name="depth_map.gpx", mime="application/gpx+xml")
+
+        if st.button("Télécharger en Shapefile"):
+            shapefile = generate_shapefile(grid_X, grid_Y, grid_Z)
+            st.download_button(label="Télécharger Shapefile", data=shapefile, file_name="depth_map.shp", mime="application/zip")
+
+        if st.button("Télécharger en GeoJSON"):
+            geojson_file = generate_geojson(grid_X, grid_Y, grid_Z)
+            st.download_button(label="Télécharger GeoJSON", data=geojson_file, file_name="depth_map.geojson", mime="application/json")
+    
+            
     
     
     
@@ -603,13 +625,6 @@ if st.button("Afficher les polygones"):
         
     
     
-    # Créer un GeoDataFrame
-       
-
-    
-
-          #drole 
-               
                 
 
 
