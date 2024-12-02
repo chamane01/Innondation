@@ -1,3 +1,4 @@
+gpxpy
 streamlit
 pandas
 numpy
@@ -15,5 +16,3 @@ pyproj # Pour la conversion des coordonnées
 ezdxf
 opencv-python
 datetime
-io
-gpxpy
