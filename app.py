@@ -418,11 +418,6 @@ def afficher_couches_customisees(ax, osm_data):
     ax.set_ylabel("Latitude")
     ax.set_aspect('equal', adjustable='box')
 
-# Initialiser la carte et afficher
-fig, ax = plt.subplots(figsize=(12, 12))
-
-# Charger les données OSM
-osm_data = charger_osm_data()
 
 # Fonction pour générer la carte de profondeur
 def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0):
@@ -599,10 +594,12 @@ if st.button("Afficher les polygones"):
         )
 
         # Affichage de la carte
-        fig, ax = plt.subplots(figsize=(10, 10))
+        fig, ax = plt.subplots(figsize=(12, 12))
         generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=-90)
         afficher_polygones(ax, polygones_dans_emprise)
+        osm_data = charger_osm_data()
         afficher_couches_customisees(ax, osm_data)
+        
         
         st.pyplot(fig)
 
