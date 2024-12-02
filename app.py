@@ -446,13 +446,13 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         linewidths=1.5,
         linestyles='solid',
     )
-    
+    #ajouter rectangle 
     X_range = X_max - X_min
     Y_range = Y_max - Y_min
-    X_min_new = X_min - X_range * 0.005
-    X_max_new = X_max + X_range * 0.005
-    Y_min_new = Y_min - Y_range * 0.005
-    Y_max_new = Y_max + Y_range * 0.005
+    X_min_new = X_min - X_range * 0.02
+    X_max_new = X_max + X_range * 0.02
+    Y_min_new = Y_min - Y_range * 0.02
+    Y_max_new = Y_max + Y_range * 0.02
     rect = Rectangle(
         (X_min_new, Y_min_new),  # Position du coin inférieur gauche
         X_max_new - X_min_new,  # Largeur
@@ -462,7 +462,7 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         facecolor='none'  # Pas de couleur de remplissage
     )
     rect = Rectangle((X_min, Y_min), X_max - X_min, Y_max - Y_min,
-                     linewidth=2, edgecolor='red', facecolor='none', linestyle='--')
+                     linewidth=2, edgecolor='black, facecolor='none', linestyle='--')
     ax.add_patch(rect)
     
     intersections_x = np.linspace(X_min, X_max, num=5)
