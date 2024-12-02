@@ -602,8 +602,8 @@ if st.button("Afficher les polygones"):
             )
             return io.BytesIO(gdf.to_json().encode())
 
-        if condition:
-            st.write("Téléchargez les données au format souhaité :")
+    
+        st.write("Téléchargez les données au format souhaité :")
     
     
 
