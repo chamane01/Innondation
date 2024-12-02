@@ -463,7 +463,7 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
     )
     rect = Rectangle((X_min, Y_min), X_max - X_min, Y_max - Y_min,
                      linewidth=2, edgecolor='black', facecolor='none', linestyle='--')
-    ax.add_patch(rect)
+    ax.add_patch(rect_expanded
     
     intersections_x = np.linspace(X_min, X_max, num=5)
     intersections_y = np.linspace(Y_min, Y_max, num=5)
