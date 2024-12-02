@@ -314,55 +314,6 @@ if st.button("Générer la carte de profondeur avec bas-fonds"):
 
 
 
-uploaded_image = st.file_uploader("Téléverser une image pour les polygones", type=["png", "jpg", "jpeg"])
-def ajouter_image_sur_carte(ax, image_path, bounds):
-    """
-    Ajoute une image à la carte dans les limites spécifiées.
-
-    Parameters:
-    ax : matplotlib.axes._subplots.AxesSubplot
-        L'axe où l'image sera ajoutée.
-    image_path : str
-        Le chemin de l'image à ajouter.
-    bounds : tuple
-        Limites (X_min, Y_min, X_max, Y_max) pour positionner l'image.
-    """
-    try:
-        img = mpimg.imread(image_path)
-        X_min, Y_min, X_max, Y_max = bounds
-
-        # Ajouter l'image en utilisant imshow
-        ax.imshow(img, extent=(X_min, X_max, Y_min, Y_max), aspect='auto', zorder=10, alpha=0.6)
-
-        st.success("Image ajoutée avec succès.")
-        except Exception as e:
-        st.error(f"Erreur lors de l'ajout de l'image : {e}")
-
-if st.button("Ajouter une image sur la carte"):
-    if uploaded_image is not None:
-        # Charger les polygones
-        polygones_dans_emprise = charger_polygones(uploaded_file)
-
-        # Si des polygones sont chargés, utilisez leurs limites
-        if polygones_dans_emprise is not None and not polygones_dans_emprise.empty:
-            # Obtenir les limites du premier polygone comme exemple
-            bounds = polygones_dans_emprise.total_bounds  # (X_min, Y_min, X_max, Y_max)
-
-            # Créer la figure et l'axe
-            fig, ax = plt.subplots(figsize=(10, 8))
-
-            # Afficher les polygones
-            afficher_polygones(ax, polygones_dans_emprise)
-
-            # Ajouter l'image sur la carte
-            ajouter_image_sur_carte(ax, uploaded_image, bounds)
-
-            # Afficher la carte
-            st.pyplot(fig)
-        else:
-            st.warning("Aucun polygone disponible pour ajouter une image.")
-    else:
-        st.warning("Veuillez téléverser une image pour continuer.")
 
 
 # Fonction pour charger les polygones
@@ -448,6 +399,24 @@ def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
 
 # Fonction pour générer la carte de profondeur
 def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0):
+
+    try:
+        image = plt.imread("PHOTO-2024-10-11-09-52-280.png")  # Remplacez par le chemin de votre image
+        
+        # Définir les coordonnées où l'image sera positionnée
+        # Exemple : Positionner l'image dans le coin supérieur gauche
+        image_extent = [
+            X_min + (X_max - X_min) * 0.05,  # Gauche
+            X_min + (X_max - X_min) * 0.25,  # Droite
+            Y_max - (Y_max - Y_min) * 0.05,  # Haut
+            Y_max - (Y_max - Y_min) * 0.20   # Bas
+        ]
+        
+        # Ajouter l'image à l'axe
+        ax.imshow(image, extent=image_extent, aspect='auto', alpha=0.8)  # `alpha` pour la transparence
+    except Exception as e:
+        st.error(f"Erreur lors du chargement de l'image : {e}")
+
     # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
     ax.set_xlim(X_min, X_max)
     ax.set_ylim(Y_min, Y_max)
