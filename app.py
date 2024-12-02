@@ -689,7 +689,7 @@ def generate_geojson(grid_X, grid_Y, grid_Z):
         
 
         
-        st.write("Téléchargez les données au format souhaité :")
+       
         if st.button("Télécharger en GPX"):
             gpx_file = generate_gpx(grid_X, grid_Y, grid_Z)
             st.download_button(label="Télécharger GPX", data=gpx_file, file_name="depth_map.gpx", mime="application/gpx+xml")
@@ -700,7 +700,7 @@ def generate_geojson(grid_X, grid_Y, grid_Z):
         if st.button("Télécharger en GeoJSON"):
             geojson_file = generate_geojson(grid_X, grid_Y, grid_Z)
             st.download_button(label="Télécharger GeoJSON", data=geojson_file, file_name="depth_map.geojson", mime="application/json")
-            
+            st.write("Téléchargez les données au format souhaité :") 
     
     
 
