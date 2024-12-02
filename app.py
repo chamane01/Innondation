@@ -541,7 +541,7 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
                 # Retourner le fichier GPX sous forme de chaîne binaire
             return io.BytesIO(gpx.to_xml().encode())
 
-        def generate_shapefile(grid_X, grid_Y, grid_Z):
+    def generate_shapefile(grid_X, grid_Y, grid_Z):
             """Générer un fichier Shapefile à partir des données de grille"""
             gdf = gpd.GeoDataFrame(
             {'X': grid_X.flatten(), 'Y': grid_Y.flatten(), 'Z': grid_Z.flatten()},
@@ -552,7 +552,7 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
             shp_bytes.seek(0)
             return shp_bytes
 
-        def generate_geojson(grid_X, grid_Y, grid_Z):
+     def generate_geojson(grid_X, grid_Y, grid_Z):
             """Générer un fichier GeoJSON à partir des données de grille"""
             gdf = gpd.GeoDataFrame(
                 {'X': grid_X.flatten(), 'Y': grid_Y.flatten(), 'Z': grid_Z.flatten()},
