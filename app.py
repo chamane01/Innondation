@@ -538,8 +538,14 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
             for x, y, z in zip(grid_X.flatten(), grid_Y.flatten(), grid_Z.flatten()):
                 segment.points.append(gpxpy.gpx.GPXTrackPoint(y, x, elevation=z))  # GPX utilise (latitude, longitude)
                 track.segments.append(segment)
-                # Retourner le fichier GPX sous forme de chaîne binaire
-            return io.BytesIO(gpx.to_xml().encode())
+            gpx_file = "depth_map.gpx"
+            with open(gpx_file, 'w') as f:
+                f.write(gpx.to_xml())
+
+            st.success(f"Fichier GPX généré avec succès : {gpx_file}")
+    
+        
+    
 
     def generate_shapefile(grid_X, grid_Y, grid_Z):
             """Générer un fichier Shapefile à partir des données de grille"""
@@ -608,7 +614,12 @@ if st.button("Afficher les polygones"):
     
     
     
-        
+        def download_gpx(file_path):
+            with open(file_path, "rb") as f:
+                gpx_file = io.BytesIO(f.read())
+            return gpx_file
+    
+
         if st.button("Télécharger en GPX"):
             gpx_file = generate_gpx(grid_X, grid_Y, grid_Z)
             st.download_button(label="Télécharger GPX", data=gpx_file, file_name="depth_map.gpx", mime="application/gpx+xml")
