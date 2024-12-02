@@ -527,6 +527,32 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         ha="left",  # Aligné à gauche
         va="top",# Aligné en haut
     )
+
+def save_shapefile(polygons, filename="output.shp"):
+    # Créer un GeoDataFrame à partir des polygones
+    gdf = gpd.GeoDataFrame(geometry=polygons)
+    # Enregistrer le GeoDataFrame en Shapefile
+    gdf.to_file(filename)
+    st.success(f"Shapefile sauvegardé sous {filename}")
+
+def save_geojson(polygons, filename="output.geojson"):
+    # Créer un GeoDataFrame à partir des polygones
+    gdf = gpd.GeoDataFrame(geometry=polygons)
+    # Enregistrer le GeoDataFrame en GeoJSON
+    gdf.to_file(filename, driver="GeoJSON")
+    st.success(f"GeoJSON sauvegardé sous {filename}")
+def generate_download_buttons(polygons):
+    # Bouton pour télécharger le Shapefile
+    shapefile = "polygons.shp"
+    save_shapefile(polygons, shapefile)
+    with open(shapefile, "rb") as file:
+        st.download_button("Télécharger Shapefile", file, file_name=shapefile)
+
+    # Bouton pour télécharger le GeoJSON
+    geojson = "polygons.geojson"
+    save_geojson(polygons, geojson)
+    with open(geojson, "rb") as file:
+        st.download_button("Télécharger GeoJSON", file, file_name=geojson)
     
 
 
