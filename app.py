@@ -571,6 +571,19 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
     )
 
 st.write("Téléchargez les données au format souhaité :")
+
+if st.button("Télécharger en GPX"):
+    gpx_file = generate_gpx(grid_X, grid_Y, grid_Z)
+    st.download_button(label="Télécharger GPX", data=gpx_file, file_name="depth_map.gpx", mime="application/gpx+xml")
+
+if st.button("Télécharger en Shapefile"):
+    shapefile = generate_shapefile(grid_X, grid_Y, grid_Z)
+    st.download_button(label="Télécharger Shapefile", data=shapefile, file_name="depth_map.shp", mime="application/zip")
+
+if st.button("Télécharger en GeoJSON"):
+    geojson_file = generate_geojson(grid_X, grid_Y, grid_Z)
+    st.download_button(label="Télécharger GeoJSON", data=geojson_file, file_name="depth_map.geojson", mime="application/json")
+
     
 
 
@@ -614,18 +627,8 @@ if st.button("Afficher les polygones"):
         generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=-90)
         afficher_polygones(ax, polygones_dans_emprise)
         st.pyplot(fig)
+        
 
-if st.button("Télécharger en GPX"):
-    gpx_file = generate_gpx(grid_X, grid_Y, grid_Z)
-    st.download_button(label="Télécharger GPX", data=gpx_file, file_name="depth_map.gpx", mime="application/gpx+xml")
-
-if st.button("Télécharger en Shapefile"):
-    shapefile = generate_shapefile(grid_X, grid_Y, grid_Z)
-    st.download_button(label="Télécharger Shapefile", data=shapefile, file_name="depth_map.shp", mime="application/zip")
-
-if st.button("Télécharger en GeoJSON"):
-    geojson_file = generate_geojson(grid_X, grid_Y, grid_Z)
-    st.download_button(label="Télécharger GeoJSON", data=geojson_file, file_name="depth_map.geojson", mime="application/json")
 
         
         
