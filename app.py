@@ -594,7 +594,7 @@ if st.button("Afficher les polygones"):
     
     
     
-        def download_gpx(file_path):
+    def download_gpx(file_path):
             with open(file_path, "rb") as f:
                 gpx_file = io.BytesIO(f.read())
             return gpx_file
