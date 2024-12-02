@@ -392,7 +392,47 @@ def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
     resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000  # Résolution en hectares
     surface_bas_fond = np.sum(bas_fonds) * resolution
     return surface_bas_fond
+def generate_gpx(grid_X, grid_Y, grid_Z):
+    """Générer un fichier GPX à partir des données de grille"""
+    gpx = gpxpy.gpx.GPX()
+    track = gpxpy.gpx.GPXTrack()
+    gpx.tracks.append(track)
+    segment = gpxpy.gpx.GPXTrackSegment()
 
+    # Crée un segment GPX en ajoutant des points à partir des coordonnées
+    for x, y, z in zip(grid_X.flatten(), grid_Y.flatten(), grid_Z.flatten()):
+        segment.points.append(gpxpy.gpx.GPXTrackPoint(y, x, elevation=z))  # GPX utilise (latitude, longitude)
+    
+    track.segments.append(segment)
+
+    # Retourner le fichier GPX sous forme de chaîne binaire
+    return io.BytesIO(gpx.to_xml().encode())
+
+def generate_shapefile(grid_X, grid_Y, grid_Z):
+    """Générer un fichier Shapefile à partir des données de grille"""
+    # Créer un GeoDataFrame
+    gdf = gpd.GeoDataFrame(
+        {'X': grid_X.flatten(), 'Y': grid_Y.flatten(), 'Z': grid_Z.flatten()},
+        geometry=gpd.points_from_xy(grid_X.flatten(), grid_Y.flatten())
+    )
+
+    # Sauvegarder le fichier Shapefile
+    shp_bytes = io.BytesIO()
+    gdf.to_file(shp_bytes, driver='ESRI Shapefile')
+    shp_bytes.seek(0)
+    
+    return shp_bytes
+
+def generate_geojson(grid_X, grid_Y, grid_Z):
+    """Générer un fichier GeoJSON à partir des données de grille"""
+    # Créer un GeoDataFrame
+    gdf = gpd.GeoDataFrame(
+        {'X': grid_X.flatten(), 'Y': grid_Y.flatten(), 'Z': grid_Z.flatten()},
+        geometry=gpd.points_from_xy(grid_X.flatten(), grid_Y.flatten())
+    )
+    
+    # Retourner le GeoJSON sous forme de chaîne binaire
+    return io.BytesIO(gdf.to_json().encode())
 # Fonction pour générer la carte de profondeur
 def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0):
     # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
@@ -530,31 +570,7 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         va="top",# Aligné en haut
     )
 
-def save_shapefile(polygons, filename="output.shp"):
-    # Créer un GeoDataFrame à partir des polygones
-    gdf = gpd.GeoDataFrame(geometry=polygons)
-    # Enregistrer le GeoDataFrame en Shapefile
-    gdf.to_file(filename)
-    st.success(f"Shapefile sauvegardé sous {filename}")
-
-def save_geojson(polygons, filename="output.geojson"):
-    # Créer un GeoDataFrame à partir des polygones
-    gdf = gpd.GeoDataFrame(geometry=polygons)
-    # Enregistrer le GeoDataFrame en GeoJSON
-    gdf.to_file(filename, driver="GeoJSON")
-    st.success(f"GeoJSON sauvegardé sous {filename}")
-def generate_download_buttons(polygons):
-    # Bouton pour télécharger le Shapefile
-    shapefile = "polygons.shp"
-    save_shapefile(polygons, shapefile)
-    with open(shapefile, "rb") as file:
-        st.download_button("Télécharger Shapefile", file, file_name=shapefile)
-
-    # Bouton pour télécharger le GeoJSON
-    geojson = "polygons.geojson"
-    save_geojson(polygons, geojson)
-    with open(geojson, "rb") as file:
-        st.download_button("Télécharger GeoJSON", file, file_name=geojson)
+st.write("Téléchargez les données au format souhaité :")
     
 
 
@@ -598,6 +614,18 @@ if st.button("Afficher les polygones"):
         generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=-90)
         afficher_polygones(ax, polygones_dans_emprise)
         st.pyplot(fig)
+
+if st.button("Télécharger en GPX"):
+    gpx_file = generate_gpx(grid_X, grid_Y, grid_Z)
+    st.download_button(label="Télécharger GPX", data=gpx_file, file_name="depth_map.gpx", mime="application/gpx+xml")
+
+if st.button("Télécharger en Shapefile"):
+    shapefile = generate_shapefile(grid_X, grid_Y, grid_Z)
+    st.download_button(label="Télécharger Shapefile", data=shapefile, file_name="depth_map.shp", mime="application/zip")
+
+if st.button("Télécharger en GeoJSON"):
+    geojson_file = generate_geojson(grid_X, grid_Y, grid_Z)
+    st.download_button(label="Télécharger GeoJSON", data=geojson_file, file_name="depth_map.geojson", mime="application/json")
 
         
         
