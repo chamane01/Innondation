@@ -396,28 +396,52 @@ def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
     resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000  # Résolution en hectares
     surface_bas_fond = np.sum(bas_fonds) * resolution
     return surface_bas_fond
+def charger_et_redimensionner_image(uploaded_image, max_width=1000, max_height=1000):
+    try:
+        # Charger l'image
+        image = Image.open(uploaded_image)
+        
+        # Obtenir les dimensions de l'image
+        width, height = image.size
+        
+        # Calculer les nouveaux dimensions en maintenant le ratio
+        if width > max_width or height > max_height:
+            aspect_ratio = width / height
+            if width > height:
+                new_width = max_width
+                new_height = int(max_width / aspect_ratio)
+            else:
+                new_height = max_height
+                new_width = int(max_height * aspect_ratio)
+            image = image.resize((new_width, new_height), Image.ANTIALIAS)
+        
+        return image
+    except Exception as e:
+        print(f"Erreur lors du chargement ou redimensionnement de l'image : {e}")
+        return None
+
+def afficher_image_sur_carte(ax, uploaded_image, X_min, X_max, Y_min, Y_max):
+    try:
+        # Charger et redimensionner l'image
+        image = charger_et_redimensionner_image(uploaded_image)
+        
+        if image is not None:
+            # Convertir l'image en format compatible avec matplotlib
+            image = np.array(image)
+            
+            # Définir l'extent de l'image pour la placer correctement sur la carte
+            image_extent = [X_min, X_max, Y_min, Y_max]
+            
+            # Afficher l'image sur la carte
+            ax.imshow(image, extent=image_extent, aspect='auto', alpha=0.6)
+        else:
+            print("L'image n'a pas pu être chargée ou redimensionnée.")
+    except Exception as e:
+        print(f"Erreur lors de l'affichage de l'image sur la carte : {e}")
+
 
 # Fonction pour générer la carte de profondeur
 def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0):
-
-    try:
-        # Charger l'image (utilisateur ou par défaut)
-        uploaded_image = st.file_uploader("Téléverser une image pour la carte", type=["png", "jpg", "jpeg"])
-        if uploaded_image is not None:
-            image = plt.imread(uploaded_image)
-        else:
-            image = plt.imread("PHOTO-2024-10-11-09-52-280.png")  # Image par défaut
-
-        # Positionner l'image sur la carte
-        image_extent = [
-            X_min + (X_max - X_min) * 0.05,  # Gauche
-            X_min + (X_max - X_min) * 0.25,  # Droite
-            Y_max - (Y_max - Y_min) * 0.05,  # Haut
-            Y_max - (Y_max - Y_min) * 0.20   # Bas
-        ]
-        ax.imshow(image, extent=image_extent, aspect='auto', alpha=0.8)  # `alpha` pour la transparence
-    except Exception as e:
-        st.error(f"Erreur lors du chargement de l'image : {e}")
 
     try:
         ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
