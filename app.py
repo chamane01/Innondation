@@ -10,7 +10,6 @@ from shapely.geometry import MultiPolygon
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
-from matplotlib.patches import Rectangle
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -446,34 +445,6 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         linewidths=1.5,
         linestyles='solid',
     )
-    #ajouter rectangle 
-    X_min, X_max = 0, 10
-    Y_min, Y_max = 0, 5
-
-    X_min_new = X_min - X_range * 0.2
-    X_max_new = X_max + X_range * 0.2
-    Y_min_new = Y_min - Y_range * 0.2
-    Y_max_new = Y_max + Y_range * 0.2
-    rect_expanded = Rectangle(
-    (X_min_new, Y_min_new),  # Position du coin inférieur gauche du rectangle élargi
-    X_max_new - X_min_new,  # Largeur du rectangle élargi
-    Y_max_new - Y_min_new,  # Hauteur du rectangle élargi
-    linewidth=2,  # Épaisseur du contour
-    edgecolor='black',  # Couleur du contour
-    facecolor='none'  # Pas de couleur de remplissage
-    )
-    ax.add_patch(rect_expanded)
-    rect_original = Rectangle(
-    (X_min, Y_min),  # Position du coin inférieur gauche du rectangle d'origine
-    X_max - X_min,  # Largeur du rectangle d'origine
-    Y_max - Y_min,  # Hauteur du rectangle d'origine
-    linewidth=2,  # Épaisseur du contour
-    edgecolor='blue',  # Couleur du contour
-    facecolor='none',  # Pas de couleur de remplissage
-    linestyle='--'  # Style de ligne pointillée
-    )
-    ax.add_patch(rect_original)
-    
     intersections_x = np.linspace(X_min, X_max, num=5)
     intersections_y = np.linspace(Y_min, Y_max, num=5)
     for x in intersections_x:
@@ -556,7 +527,6 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         ha="left",  # Aligné à gauche
         va="top",# Aligné en haut
     )
-  
     
 
 
