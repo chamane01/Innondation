@@ -581,7 +581,7 @@ if st.button("Afficher les polygones"):
                 segment.points.append(gpxpy.gpx.GPXTrackPoint(y, x, elevation=z))  # GPX utilise (latitude, longitude)
                 track.segments.append(segment)
                 # Retourner le fichier GPX sous forme de chaîne binaire
-                return io.BytesIO(gpx.to_xml().encode())
+            return io.BytesIO(gpx.to_xml().encode())
 
         def generate_shapefile(grid_X, grid_Y, grid_Z):
             """Générer un fichier Shapefile à partir des données de grille"""
@@ -606,8 +606,6 @@ if st.button("Afficher les polygones"):
         st.write("Téléchargez les données au format souhaité :")
     
     
-
-
     
         
         if st.button("Télécharger en GPX"):
