@@ -527,9 +527,9 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         ha="left",  # Aligné à gauche
         va="top",# Aligné en haut
     )
-    # Ajouter un cadre autour de la carte avec une marge spécifique
-  def add_enlarged_rectangle(ax, X_min, X_max, Y_min, Y_max, expansion_factor=0.005):
     # Calculer la largeur et la hauteur du rectangle original
+    def add_enlarged_rectangle(ax, X_min, X_max, Y_min, Y_max, expansion_factor=0.005):
+    
     width = X_max - X_min
     height = Y_max - Y_min
 
@@ -565,6 +565,9 @@ add_enlarged_rectangle(ax, X_min, X_max, Y_min, Y_max)
 # Afficher la figure
 plt.xlim(0, 30)
 plt.ylim(0, 30)
+    # Ajouter un cadre autour de la carte avec une marge spécifique
+
+  
     
 
 
