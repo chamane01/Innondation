@@ -474,7 +474,7 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         label_y_position,
         f"Surface des bas-fonds : {surface_bas_fond:.2f} hectares",
         fontsize=12,
-        fontweight='bold'
+        fontweight='bold',
         color="black",
         ha="left",  # Aligné à gauche
         va="top",   # Aligné en haut
@@ -484,7 +484,7 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         label_y_position - (Y_max - Y_min) * 0.10,  # Légèrement plus bas
         f"Surface des bas-fonds dans les polygones : {surface_bas_fond_polygones:.2f} hectares",
         fontsize=12,
-        fontweight='bold'
+        fontweight='bold',
         color="black",
         ha="left",  # Aligné à gauche
         va="top",   # Aligné en haut
@@ -494,7 +494,7 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         label_y_position - (Y_max - Y_min) * 0.20,  # Légèrement plus bas
         f"Cote du bafond :{seuil_bas_fond:.2f} m",
         fontsize=12,
-        fontweight='bold'
+        fontweight='bold',
         color="black",
         ha="left",  # Aligné à gauche
         va="top",   # Aligné en haut
