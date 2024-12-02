@@ -35,6 +35,12 @@ st.markdown("## Sélectionner un site ou téléverser un fichier")
 option_site = st.selectbox("Sélectionnez un site", ("Aucun", "AYAME 1", "AYAME 2"))
 uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
 
+X_min, X_max = 0, 100
+Y_min, Y_max = 0, 100
+fig, ax = plt.subplots(figsize=(8, 8))
+ax.set_xlim(X_min, X_max)
+ax.set_ylim(Y_min, Y_max)
+
 images = [
     {"path": "PHOTO-2024-10-11-09-52-280.png", "extent": [10, 30, 70, 90]},  # [X_min, X_max, Y_min, Y_max]
     # Troisième image
@@ -42,6 +48,9 @@ images = [
 for img in images:
     image_data = mpimg.imread(img["path"])
     ax.imshow(image_data, extent=img["extent"], origin='upper', alpha=0.8)
+
+plt.show()
+
 # Charger les données en fonction de l'option sélectionnée
 def charger_fichier(fichier, is_uploaded=False):
     try:
