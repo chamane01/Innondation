@@ -529,7 +529,38 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         ha="left",  # Aligné à gauche
         va="top",# Aligné en haut
     )
+    def generate_gpx(grid_X, grid_Y, grid_Z):
+            """Générer un fichier GPX à partir des données de grille"""
+            gpx = gpxpy.gpx.GPX()
+            track = gpxpy.gpx.GPXTrack()
+            gpx.tracks.append(track)
+            segment = gpxpy.gpx.GPXTrackSegment()
+            for x, y, z in zip(grid_X.flatten(), grid_Y.flatten(), grid_Z.flatten()):
+                segment.points.append(gpxpy.gpx.GPXTrackPoint(y, x, elevation=z))  # GPX utilise (latitude, longitude)
+                track.segments.append(segment)
+                # Retourner le fichier GPX sous forme de chaîne binaire
+            return io.BytesIO(gpx.to_xml().encode())
 
+        def generate_shapefile(grid_X, grid_Y, grid_Z):
+            """Générer un fichier Shapefile à partir des données de grille"""
+            gdf = gpd.GeoDataFrame(
+            {'X': grid_X.flatten(), 'Y': grid_Y.flatten(), 'Z': grid_Z.flatten()},
+            geometry=gpd.points_from_xy(grid_X.flatten(), grid_Y.flatten())
+            ) 
+            shp_bytes = io.BytesIO()
+            gdf.to_file(shp_bytes, driver='ESRI Shapefile')
+            shp_bytes.seek(0)
+            return shp_bytes
+
+        def generate_geojson(grid_X, grid_Y, grid_Z):
+            """Générer un fichier GeoJSON à partir des données de grille"""
+            gdf = gpd.GeoDataFrame(
+                {'X': grid_X.flatten(), 'Y': grid_Y.flatten(), 'Z': grid_Z.flatten()},
+                geometry=gpd.points_from_xy(grid_X.flatten(), grid_Y.flatten())
+            )
+            return io.BytesIO(gdf.to_json().encode())
+
+    
 
 # Ajouter les polygones sur la carte
 if st.button("Afficher les polygones"):
@@ -571,37 +602,7 @@ if st.button("Afficher les polygones"):
         generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=-90)
         afficher_polygones(ax, polygones_dans_emprise)
         st.pyplot(fig)
-        def generate_gpx(grid_X, grid_Y, grid_Z):
-            """Générer un fichier GPX à partir des données de grille"""
-            gpx = gpxpy.gpx.GPX()
-            track = gpxpy.gpx.GPXTrack()
-            gpx.tracks.append(track)
-            segment = gpxpy.gpx.GPXTrackSegment()
-            for x, y, z in zip(grid_X.flatten(), grid_Y.flatten(), grid_Z.flatten()):
-                segment.points.append(gpxpy.gpx.GPXTrackPoint(y, x, elevation=z))  # GPX utilise (latitude, longitude)
-                track.segments.append(segment)
-                # Retourner le fichier GPX sous forme de chaîne binaire
-            return io.BytesIO(gpx.to_xml().encode())
-
-        def generate_shapefile(grid_X, grid_Y, grid_Z):
-            """Générer un fichier Shapefile à partir des données de grille"""
-            gdf = gpd.GeoDataFrame(
-            {'X': grid_X.flatten(), 'Y': grid_Y.flatten(), 'Z': grid_Z.flatten()},
-            geometry=gpd.points_from_xy(grid_X.flatten(), grid_Y.flatten())
-            ) 
-            shp_bytes = io.BytesIO()
-            gdf.to_file(shp_bytes, driver='ESRI Shapefile')
-            shp_bytes.seek(0)
-            return shp_bytes
-
-        def generate_geojson(grid_X, grid_Y, grid_Z):
-            """Générer un fichier GeoJSON à partir des données de grille"""
-            gdf = gpd.GeoDataFrame(
-                {'X': grid_X.flatten(), 'Y': grid_Y.flatten(), 'Z': grid_Z.flatten()},
-                geometry=gpd.points_from_xy(grid_X.flatten(), grid_Y.flatten())
-            )
-            return io.BytesIO(gdf.to_json().encode())
-
+        
     
         st.write("Téléchargez les données au format souhaité :")
     
