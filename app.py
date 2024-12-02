@@ -36,9 +36,8 @@ option_site = st.selectbox("Sélectionnez un site", ("Aucun", "AYAME 1", "AYAME 
 uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
 
 images = [
-    {"path": "image1.png", "extent": [10, 30, 70, 90]},  # [X_min, X_max, Y_min, Y_max]
-    {"path": "image2.png", "extent": [50, 70, 20, 40]},  # Deuxième image
-    {"path": "image3.png", "extent": [30, 50, 50, 70]},  # Troisième image
+    {"path": "PHOTO-2024-10-11-09-52-280.png", "extent": [10, 30, 70, 90]},  # [X_min, X_max, Y_min, Y_max]
+    # Troisième image
 ]
 for img in images:
     image_data = mpimg.imread(img["path"])
