@@ -401,10 +401,14 @@ def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
 def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0):
 
     try:
-        image = plt.imread("PHOTO-2024-10-11-09-52-280.png")  # Remplacez par le chemin de votre image
-        
-        # Définir les coordonnées où l'image sera positionnée
-        # Exemple : Positionner l'image dans le coin supérieur gauche
+        # Charger l'image (utilisateur ou par défaut)
+        uploaded_image = st.file_uploader("Téléverser une image pour la carte", type=["png", "jpg", "jpeg"])
+        if uploaded_image is not None:
+            image = plt.imread(uploaded_image)
+        else:
+            image = plt.imread("PHOTO-2024-10-11-09-52-280.png")  # Image par défaut
+
+        # Positionner l'image sur la carte
         image_extent = [
             X_min + (X_max - X_min) * 0.05,  # Gauche
             X_min + (X_max - X_min) * 0.25,  # Droite
@@ -416,6 +420,12 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         ax.imshow(image, extent=image_extent, aspect='auto', alpha=0.8)  # `alpha` pour la transparence
     except Exception as e:
         st.error(f"Erreur lors du chargement de l'image : {e}")
+
+    try:
+        ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+        ax.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='plasma')
+    except Exception as e:
+        st.error(f"Erreur lors de l'affichage de la carte : {e}")
 
     # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
     ax.set_xlim(X_min, X_max)
