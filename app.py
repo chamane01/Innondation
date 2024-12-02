@@ -391,34 +391,6 @@ def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
     surface_bas_fond = np.sum(bas_fonds) * resolution
     return surface_bas_fond
 
-def afficher_couches_customisees(ax, osm_data):
-    # Filtrer les routes, bâtiments et villes
-    routes = osm_data[osm_data['highway'].notna()]
-    batiments = osm_data[osm_data['building'].notna()]
-    villes = osm_data[osm_data['place'].notna()]
-
-    # Ajouter la carte de fond OSM
-    ctx.add_basemap(ax, crs="EPSG:4326", source=ctx.providers.OpenStreetMap.Mapnik)
-
-    # Afficher les routes avec une couleur personnalisée
-    routes.plot(ax=ax, color='yellow', linewidth=2, label='Routes')
-
-    # Afficher les bâtiments avec une couleur personnalisée (transparente)
-    batiments.plot(ax=ax, color='lightblue', edgecolor='darkblue', alpha=0.5, label='Bâtiments')
-
-    # Afficher les villes avec une couleur personnalisée (point)
-    villes.plot(ax=ax, color='red', marker='o', markersize=5, label='Villes')
-
-    # Ajouter une légende pour les couches
-    ax.legend()
-
-    # Paramètres de la carte
-    ax.set_title("Carte avec éléments personnalisés")
-    ax.set_xlabel("Longitude")
-    ax.set_ylabel("Latitude")
-    ax.set_aspect('equal', adjustable='box')
-
-
 # Fonction pour générer la carte de profondeur
 def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0):
     # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
@@ -594,13 +566,9 @@ if st.button("Afficher les polygones"):
         )
 
         # Affichage de la carte
-        fig, ax = plt.subplots(figsize=(12, 12))
+        fig, ax = plt.subplots(figsize=(10, 10))
         generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=-90)
         afficher_polygones(ax, polygones_dans_emprise)
-        osm_data = charger_osm_data()
-        afficher_couches_customisees(ax, osm_data)
-        
-        
         st.pyplot(fig)
 
         
