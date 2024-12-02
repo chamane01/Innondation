@@ -527,46 +527,6 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         ha="left",  # Aligné à gauche
         va="top",# Aligné en haut
     )
-    # Calculer la largeur et la hauteur du rectangle original
-    def add_enlarged_rectangle(ax, X_min, X_max, Y_min, Y_max, expansion_factor=0.005):
-    
-    width = X_max - X_min
-    height = Y_max - Y_min
-
-    # Augmenter les dimensions de 0.5% (expansion_factor)
-    expanded_width = width * (1 + expansion_factor)
-    expanded_height = height * (1 + expansion_factor)
-
-    # Calculer les nouvelles coordonnées (centrer le rectangle agrandi autour de l'original)
-    new_X_min = X_min - (expanded_width - width) / 2
-    new_X_max = X_max + (expanded_width - width) / 2
-    new_Y_min = Y_min - (expanded_height - height) / 2
-    new_Y_max = Y_max + (expanded_height - height) / 2
-
-    # Ajouter un rectangle agrandi à l'axe
-    ax.add_patch(patches.Rectangle(
-        (new_X_min, new_Y_min),  # Coin inférieur gauche du rectangle agrandi
-        expanded_width,  # Largeur agrandie
-        expanded_height,  # Hauteur agrandie
-        linewidth=2,
-        edgecolor='black',
-        facecolor='none',  # Aucun remplissage
-    ))
-
-# Exemple d'utilisation avec une figure
-fig, ax = plt.subplots()
-
-# Définir les coordonnées du rectangle d'origine
-X_min, X_max, Y_min, Y_max = 10, 20, 5, 15
-
-# Ajouter le rectangle agrandi à l'axe
-add_enlarged_rectangle(ax, X_min, X_max, Y_min, Y_max)
-
-# Afficher la figure
-plt.xlim(0, 30)
-plt.ylim(0, 30)
-    # Ajouter un cadre autour de la carte avec une marge spécifique
-
   
     
 
