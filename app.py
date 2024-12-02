@@ -415,6 +415,15 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
             Y_max - (Y_max - Y_min) * 0.05,  # Haut
             Y_max - (Y_max - Y_min) * 0.20   # Bas
         ]
+        ax.imshow(image, extent=image_extent, aspect='auto', alpha=0.8)  # `alpha` pour la transparence
+    except Exception as e:
+        st.error(f"Erreur lors du chargement de l'image : {e}")
+
+    try:
+        ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+        ax.contourf(grid_X, grid_Y, grid_Z, levels=100, cmap='plasma')
+    except Exception as e:
+        st.error(f"Erreur lors de l'affichage de la carte : {e}")
         
         # Ajouter l'image à l'axe
         ax.imshow(image, extent=image_extent, aspect='auto', alpha=0.8)  # `alpha` pour la transparence
