@@ -600,10 +600,12 @@ if st.button("Afficher les polygones"):
             return gpx_file
     
 
-        if st.button("Télécharger en GPX"):
-            gpx_file = generate_gpx(grid_X, grid_Y, grid_Z)
-            st.download_button(label="Télécharger GPX", data=gpx_file, file_name="depth_map.gpx", mime="application/gpx+xml")
+            if st.button("Télécharger en GPX"):
+                gpx_file = generate_gpx(grid_X, grid_Y, grid_Z)
+                st.download_button(label="Télécharger GPX", data=gpx_file, file_name="depth_map.gpx", mime="application/gpx+xml")
 
+            
+            
      
             
     
