@@ -458,7 +458,7 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         X_max_new - X_min_new,  # Largeur
         Y_max_new - Y_min_new,  # Hauteur
         linewidth=2,  # Épaisseur du contour
-        edgecolor='red',  # Couleur du contour
+        edgecolor='black',  # Couleur du contour
         facecolor='none'  # Pas de couleur de remplissage
     )
     rect = Rectangle((X_min, Y_min), X_max - X_min, Y_max - Y_min,
