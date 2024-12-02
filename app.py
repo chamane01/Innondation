@@ -392,7 +392,7 @@ def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
     return surface_bas_fond
 
 # Fonction pour générer la carte de profondeur
-def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0, niveau_bas_fond, systeme_projection):
+def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0):
     # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
     ax.set_xlim(X_min, X_max)
     ax.set_ylim(Y_min, Y_max)
@@ -460,16 +460,13 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
     for y in np.linspace(Y_min, Y_max, num=5):
         ax.axhline(y, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
 
-    # Calculer la surface des bas-fonds à l'intérieur des polygones
-    surface_bas_fond_polygones = calculer_surface_bas_fond_polygones(
-        polygones_dans_emprise, bas_fonds, grid_X, grid_Y
-    )
-
-    # Affichage de la carte
+    # Affichage de la carte de profondeur
     surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
     st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
+    # Afficher la surface des bas-fonds dans les polygones
     st.write(f"**Surface des bas-fonds dans les polygones** : {surface_bas_fond_polygones:.2f} hectares")
 
+    
     # Ajouter des labels sous l'emprise de la carte de profondeur
     label_y_position = Y_min - (Y_max - Y_min) * 0.10
     ax.text(
@@ -490,27 +487,6 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         ha="left",  # Aligné à gauche
         va="top",   # Aligné en haut
     )
-    # Ajout du label pour le niveau du bas-fond
-    ax.text(
-        X_min + (X_max - X_min) * 0,  # Position horizontale (10% de la largeur)
-        label_y_position - (Y_max - Y_min) * 0.10,  # Légèrement plus bas
-        f"Niveau du bas-fond : {niveau_bas_fond:.2f} m",  # Remplacez 'niveau_bas_fond' par votre valeur
-        fontsize=12,
-        color="black",
-        ha="left",  # Aligné à gauche
-        va="top",   # Aligné en haut
-    )
-    ax.text(
-        X_min + (X_max - X_min) * 0,  # Position horizontale (10% de la largeur)
-        label_y_position - (Y_max - Y_min) * 0.20,  # Légèrement plus bas
-        f"Système de projection : {systeme_projection}",  # Remplacez 'systeme_projection' par votre valeur
-        fontsize=12,
-        color="black",
-        ha="left",  # Aligné à gauche
-        va="top",   # Aligné en haut
-    )
-
-
 
 
 # Ajouter les polygones sur la carte
