@@ -478,6 +478,7 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         ha="left",  # Aligné à gauche
         va="top",   # Aligné en haut
     )
+    # Ajout du label pour le niveau du bas-fond
     ax.text(
         X_min + (X_max - X_min) * 0,  # Position horizontale (10% de la largeur)
         label_y_position - (Y_max - Y_min) * 0.10,  # Légèrement plus bas
@@ -487,6 +488,27 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         ha="left",  # Aligné à gauche
         va="top",   # Aligné en haut
     )
+    # Ajout du label pour le système de projection
+    ax.text(
+    X_min + (X_max - X_min) * 0,  # Position horizontale (10% de la largeur)
+    label_y_position - (Y_max - Y_min) * 0.20,  # Légèrement plus bas
+    f"Niveau du bas-fond : {niveau_bas_fond:.2f} m",  # Remplacez 'niveau_bas_fond' par votre valeur
+    fontsize=12,
+    color="black",
+    ha="left",  # Aligné à gauche
+    va="top",   # Aligné en haut
+    )
+    ax.text(
+    X_min + (X_max - X_min) * 0,  # Position horizontale (10% de la largeur)
+    label_y_position - (Y_max - Y_min) * 0.30,  # Légèrement plus bas
+    f"Système de projection : {systeme_projection}",  # Remplacez 'systeme_projection' par votre valeur
+    fontsize=12,
+    color="black",
+    ha="left",  # Aligné à gauche
+    va="top",   # Aligné en haut
+    )
+
+
 
 
 # Ajouter les polygones sur la carte
