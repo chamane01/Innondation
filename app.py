@@ -391,29 +391,38 @@ def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
     surface_bas_fond = np.sum(bas_fonds) * resolution
     return surface_bas_fond
 
-def afficher_osm_features(ax, X_min, X_max, Y_min, Y_max):
-    # Charger les données OpenStreetMap pour les éléments comme routes, bâtiments, et villes
-    # On peut utiliser 'osmnx' ou 'geopandas' pour télécharger les données, mais pour l'exemple,
-    # on suppose que vous avez déjà les shapefiles ou les GeoDataFrame des différentes couches.
+def afficher_couches_customisees(ax, osm_data):
+    # Filtrer les routes, bâtiments et villes
+    routes = osm_data[osm_data['highway'].notna()]
+    batiments = osm_data[osm_data['building'].notna()]
+    villes = osm_data[osm_data['place'].notna()]
 
-    # Exemple de chargement des géométries (vous pouvez remplacer par votre propre méthode de téléchargement)
-    routes = gpd.read_file("chemin/vers/routes.shp")  # Charger les routes depuis un shapefile
-    batiments = gpd.read_file("chemin/vers/batiments.shp")  # Charger les bâtiments
-    villes = gpd.read_file("chemin/vers/villes.shp")  # Charger les villes
+    # Ajouter la carte de fond OSM
+    ctx.add_basemap(ax, crs="EPSG:4326", source=ctx.providers.OpenStreetMap.Mapnik)
 
-    # Filtrer les données pour ne garder que celles qui se trouvent dans les limites de la carte
-    routes = routes.cx[X_min:X_max, Y_min:Y_max]
-    batiments = batiments.cx[X_min:X_max, Y_min:Y_max]
-    villes = villes.cx[X_min:X_max, Y_min:Y_max]
-
-    # Affichage des routes en jaune
+    # Afficher les routes avec une couleur personnalisée
     routes.plot(ax=ax, color='yellow', linewidth=2, label='Routes')
 
-    # Affichage des bâtiments en bleu
-    batiments.plot(ax=ax, color='blue', alpha=0.5, label='Bâtiments')
+    # Afficher les bâtiments avec une couleur personnalisée (transparente)
+    batiments.plot(ax=ax, color='lightblue', edgecolor='darkblue', alpha=0.5, label='Bâtiments')
 
-    # Affichage des villes en rouge
-    villes.plot(ax=ax, color='red', alpha=0.6, label='Villes')
+    # Afficher les villes avec une couleur personnalisée (point)
+    villes.plot(ax=ax, color='red', marker='o', markersize=5, label='Villes')
+
+    # Ajouter une légende pour les couches
+    ax.legend()
+
+    # Paramètres de la carte
+    ax.set_title("Carte avec éléments personnalisés")
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    ax.set_aspect('equal', adjustable='box')
+
+# Initialiser la carte et afficher
+fig, ax = plt.subplots(figsize=(12, 12))
+
+# Charger les données OSM
+osm_data = charger_osm_data()
 
 # Fonction pour générer la carte de profondeur
 def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0):
@@ -593,8 +602,8 @@ if st.button("Afficher les polygones"):
         fig, ax = plt.subplots(figsize=(10, 10))
         generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=-90)
         afficher_polygones(ax, polygones_dans_emprise)
-        afficher_osm_features(ax, X_min, X_max, Y_min, Y_max)
-        plt.tight_layout()
+        afficher_couches_customisees(ax, osm_data)
+        
         st.pyplot(fig)
 
         
