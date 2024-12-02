@@ -602,8 +602,14 @@ if st.button("Afficher les polygones"):
             )
             return io.BytesIO(gdf.to_json().encode())
 
+        if condition:
+            st.write("Téléchargez les données au format souhaité :")
     
-        st.write("Téléchargez les données au format souhaité :")
+    
+
+
+    
+        
         if st.button("Télécharger en GPX"):
             gpx_file = generate_gpx(grid_X, grid_Y, grid_Z)
             st.download_button(label="Télécharger GPX", data=gpx_file, file_name="depth_map.gpx", mime="application/gpx+xml")
