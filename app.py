@@ -445,6 +445,23 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         linewidths=1.5,
         linestyles='solid',
     )
+    
+    X_range = X_max - X_min
+    Y_range = Y_max - Y_min
+    X_min_new = X_min - X_range * 0.005
+    X_max_new = X_max + X_range * 0.005
+    Y_min_new = Y_min - Y_range * 0.005
+    Y_max_new = Y_max + Y_range * 0.005
+    rect = Rectangle(
+        (X_min_new, Y_min_new),  # Position du coin inférieur gauche
+        X_max_new - X_min_new,  # Largeur
+        Y_max_new - Y_min_new,  # Hauteur
+        linewidth=2,  # Épaisseur du contour
+        edgecolor='red',  # Couleur du contour
+        facecolor='none'  # Pas de couleur de remplissage
+    )
+    ax.add_patch(rect)
+    
     intersections_x = np.linspace(X_min, X_max, num=5)
     intersections_y = np.linspace(Y_min, Y_max, num=5)
     for x in intersections_x:
