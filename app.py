@@ -311,6 +311,60 @@ if st.button("Générer la carte de profondeur avec bas-fonds"):
 
 
 
+
+
+
+uploaded_image = st.file_uploader("Téléverser une image pour les polygones", type=["png", "jpg", "jpeg"])
+def ajouter_image_sur_carte(ax, image_path, bounds):
+    """
+    Ajoute une image à la carte dans les limites spécifiées.
+
+    Parameters:
+    ax : matplotlib.axes._subplots.AxesSubplot
+        L'axe où l'image sera ajoutée.
+    image_path : str
+        Le chemin de l'image à ajouter.
+    bounds : tuple
+        Limites (X_min, Y_min, X_max, Y_max) pour positionner l'image.
+    """
+    try:
+        img = mpimg.imread(image_path)
+        X_min, Y_min, X_max, Y_max = bounds
+
+        # Ajouter l'image en utilisant imshow
+        ax.imshow(img, extent=(X_min, X_max, Y_min, Y_max), aspect='auto', zorder=10, alpha=0.6)
+
+        st.success("Image ajoutée avec succès.")
+        except Exception as e:
+        st.error(f"Erreur lors de l'ajout de l'image : {e}")
+
+if st.button("Ajouter une image sur la carte"):
+    if uploaded_image is not None:
+        # Charger les polygones
+        polygones_dans_emprise = charger_polygones(uploaded_file)
+
+        # Si des polygones sont chargés, utilisez leurs limites
+        if polygones_dans_emprise is not None and not polygones_dans_emprise.empty:
+            # Obtenir les limites du premier polygone comme exemple
+            bounds = polygones_dans_emprise.total_bounds  # (X_min, Y_min, X_max, Y_max)
+
+            # Créer la figure et l'axe
+            fig, ax = plt.subplots(figsize=(10, 8))
+
+            # Afficher les polygones
+            afficher_polygones(ax, polygones_dans_emprise)
+
+            # Ajouter l'image sur la carte
+            ajouter_image_sur_carte(ax, uploaded_image, bounds)
+
+            # Afficher la carte
+            st.pyplot(fig)
+        else:
+            st.warning("Aucun polygone disponible pour ajouter une image.")
+    else:
+        st.warning("Veuillez téléverser une image pour continuer.")
+
+
 # Fonction pour charger les polygones
 def charger_polygones(uploaded_file):
     try:
