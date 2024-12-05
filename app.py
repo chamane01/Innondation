@@ -559,6 +559,9 @@ if st.button("Afficher les polygones"):
         geometry=gpd.points_from_xy(grid_X.flatten(), grid_Y.flatten())
         )
         return io.BytesIO(gdf.to_json().encode())
+
+    gpx_file = generate_gpx(grid_X, grid_Y, grid_Z)
+    gpx_file = generate_gpx(grid_X, grid_Y, grid_Z)
         
         
     
@@ -596,7 +599,7 @@ if st.button("Afficher les polygones"):
 
 
         st.write("Téléchargez les données au format souhaité :")
-        gpx_file = generate_gpx(grid_X, grid_Y, grid_Z)
+        
         geojson_file = generate_geojson(grid_X, grid_Y, grid_Z)
 
         if "gpx_file" not in st.session_state:
