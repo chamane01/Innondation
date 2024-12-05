@@ -592,6 +592,17 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         )
 
         # Options de téléchargement
+        
+
+        # Affichage de la carte
+        fig, ax = plt.subplots(figsize=(10, 10))
+        generate_depth_map(
+            ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max,
+            label_rotation_x=0, label_rotation_y=-90
+        )
+        afficher_polygones(ax, polygones_dans_emprise)
+        st.pyplot(fig)
+        
         st.write("Téléchargez les données au format souhaité :")
         st.download_button(
             label="Télécharger GPX",
@@ -605,15 +616,6 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
             file_name="depth_map.geojson",
             mime="application/json"
         )
-
-        # Affichage de la carte
-        fig, ax = plt.subplots(figsize=(10, 10))
-        generate_depth_map(
-            ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max,
-            label_rotation_x=0, label_rotation_y=-90
-        )
-        afficher_polygones(ax, polygones_dans_emprise)
-        st.pyplot(fig)
 
 
 
