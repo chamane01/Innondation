@@ -532,79 +532,56 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
 
 
 # Ajouter les polygones sur la carte
-if st.button("Afficher les polygones"):
-
-    def generate_gpx(grid_X, grid_Y, grid_Z):
-            """Générer un fichier GPX à partir des données de grille"""
-            gpx = gpxpy.gpx.GPX()
-            track = gpxpy.gpx.GPXTrack()
-            gpx.tracks.append(track)
-            segment = gpxpy.gpx.GPXTrackSegment()
-            for x, y, z in zip(grid_X.flatten(), grid_Y.flatten(), grid_Z.flatten()):
-                segment.points.append(gpxpy.gpx.GPXTrackPoint(y, x, elevation=z))  # GPX utilise (latitude, longitude)
-                track.segments.append(segment)
-                # Retourner le fichier GPX sous forme de chaîne binaire
-                return io.BytesIO(gpx.to_xml().encode())
-
-        
-    def generate_geojson(grid_X, grid_Y, grid_Z):
-            """Générer un fichier GeoJSON à partir des données de grille"""
-            gdf = gpd.GeoDataFrame(
-                {'X': grid_X.flatten(), 'Y': grid_Y.flatten(), 'Z': grid_Z.flatten()},
-                geometry=gpd.points_from_xy(grid_X.flatten(), grid_Y.flatten())
-            )
-            return io.BytesIO(gdf.to_json().encode())
-
+if st.button("Afficher les polygones et générer les fichiers"):
     # Charger les polygones
     polygones_dans_emprise = charger_polygones(uploaded_file)
 
-    # Si des polygones sont chargés, utiliser leur emprise pour ajuster les limites
-    if polygones_dans_emprise is not None:
-        # Calculer les limites du polygone
-        X_min_polygone, Y_min_polygone, X_max_polygone, Y_max_polygone = polygones_dans_emprise.total_bounds
-        
-        # Calculer les limites de la carte de profondeur
-        X_min_depth, Y_min_depth, X_max_depth, Y_max_depth = grid_X.min(), grid_Y.min(), grid_X.max(), grid_Y.max()
+    def save_dxf_file(contours, file_path):
+        """Sauvegarder un fichier DXF pour les contours."""
+        doc = ezdxf.new(dxfversion='R2010')
+        msp = doc.modelspace()
+        for collection in contours.collections:
+            for path in collection.get_paths():
+                points = path.vertices
+                for i in range(len(points) - 1):
+                    msp.add_line(points[i], points[i + 1])
+        doc.saveas(file_path)
 
-        # Vérifier si l'emprise de la carte de profondeur couvre celle des polygones
-        if (X_min_depth <= X_min_polygone and X_max_depth >= X_max_polygone and
-            Y_min_depth <= Y_min_polygone and Y_max_depth >= Y_max_polygone):
-            X_min, Y_min, X_max, Y_max = X_min_depth, Y_min_depth, X_max_depth, Y_max_depth
-        else:
-            marge = 0.1
-            X_range = X_max_polygone - X_min_polygone
-            Y_range = Y_max_polygone - Y_min_polygone
-            
-            X_min = min(X_min_depth, X_min_polygone - X_range * marge)
-            Y_min = min(Y_min_depth, Y_min_polygone - Y_range * marge)
-            X_max = max(X_max_depth, X_max_polygone + X_range * marge)
-            Y_max = max(Y_max_depth, Y_max_polygone + Y_range * marge)
+    def save_geojson_file(polygones, file_path):
+        """Sauvegarder un fichier GeoJSON pour les polygones."""
+        with open(file_path, "w") as geojson_file:
+            geojson_file.write(polygones.to_json())
 
-        # Calculer les bas-fonds
-        bas_fonds, _ = detecter_bas_fonds(grid_Z)
+    # Générer et enregistrer les fichiers nécessaires
+    carte_file = "carte_inondation.png"
+    dxf_file = "contours_inondation.dxf"
+    geojson_file = "polygones.geojson"
 
-        # Calculer la surface des bas-fonds à l'intérieur des polygones
-        surface_bas_fond_polygones = calculer_surface_bas_fonds_polygones(
-            polygones_dans_emprise, bas_fonds, grid_X, grid_Y
-        )
+    # Création et enregistrement de la carte
+    fig, ax = plt.subplots(figsize=(10, 10))
+    generate_depth_map(ax, grid_Z, grid_X, grid_Y)
+    afficher_polygones(ax, polygones_dans_emprise)
+    fig.savefig(carte_file)
 
-        # Affichage de la carte
-        fig, ax = plt.subplots(figsize=(10, 10))
-        generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=-90)
-        afficher_polygones(ax, polygones_dans_emprise)
-        st.pyplot(fig)
-    
-        st.write("Téléchargez les données au format souhaité :")
-    
-    
-        if st.button("Télécharger en GPX"):
-            gpx_file = generate_gpx(grid_X, grid_Y, grid_Z)
-            st.download_button(label="Télécharger GPX", data=gpx_file, file_name="depth_map.gpx", mime="application/gpx+xml")
+    # Sauvegarder les fichiers DXF et GeoJSON
+    save_dxf_file(contours_inondation, dxf_file)
+    save_geojson_file(polygones_dans_emprise, geojson_file)
 
-       
-        if st.button("Télécharger en GeoJSON"):
-            geojson_file = generate_geojson(grid_X, grid_Y, grid_Z)
-            st.download_button(label="Télécharger GeoJSON", data=geojson_file, file_name="depth_map.geojson", mime="application/json")
+    # Afficher les boutons de téléchargement
+    st.write("Téléchargez les fichiers générés :")
+
+    with open(carte_file, "rb") as carte:
+        st.download_button(label="Télécharger la carte (PNG)", data=carte, file_name=carte_file, mime="image/png")
+
+    with open(dxf_file, "rb") as dxf:
+        st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
+
+    with open(geojson_file, "rb") as geojson:
+        st.download_button(label="Télécharger le fichier GeoJSON", data=geojson, file_name=geojson_file, mime="application/json")
+
+    # Afficher la carte
+    st.pyplot(fig)
+
     
             
   
