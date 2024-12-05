@@ -532,11 +532,12 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
 
     
     if st.button("Afficher les polygones"):
-     # Charger les polygones
-     polygones_dans_emprise = charger_polygones(uploaded_file)
+    # Charger les polygones depuis le fichier uploadé
+    polygones_dans_emprise = charger_polygones(uploaded_file)
 
-     def generate_gpx(grid_X, grid_Y, grid_Z):
-        """Générer un fichier GPX à partir des données de grille"""
+    # Fonction pour générer un fichier GPX
+    def generate_gpx(grid_X, grid_Y, grid_Z):
+        """Génère un fichier GPX à partir des données de grille."""
         gpx = gpxpy.gpx.GPX()
         track = gpxpy.gpx.GPXTrack()
         gpx.tracks.append(track)
@@ -546,24 +547,22 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         track.segments.append(segment)
         return io.BytesIO(gpx.to_xml().encode())
 
-     def generate_geojson(grid_X, grid_Y, grid_Z):
-        """Générer un fichier GeoJSON à partir des données de grille"""
+    # Fonction pour générer un fichier GeoJSON
+    def generate_geojson(grid_X, grid_Y, grid_Z):
+        """Génère un fichier GeoJSON à partir des données de grille."""
         gdf = gpd.GeoDataFrame(
-        {'X': grid_X.flatten(), 'Y': grid_Y.flatten(), 'Z': grid_Z.flatten()},
-        geometry=gpd.points_from_xy(grid_X.flatten(), grid_Y.flatten())
+            {'X': grid_X.flatten(), 'Y': grid_Y.flatten(), 'Z': grid_Z.flatten()},
+            geometry=gpd.points_from_xy(grid_X.flatten(), grid_Y.flatten())
         )
         return io.BytesIO(gdf.to_json().encode())
 
-     gpx_file = generate_gpx(grid_X, grid_Y, grid_Z)
-     gpx_file = generate_gpx(grid_X, grid_Y, grid_Z)
-        
-        
-    
-    
+    # Générer les fichiers GPX et GeoJSON
+    gpx_file = generate_gpx(grid_X, grid_Y, grid_Z)
+    geojson_file = generate_geojson(grid_X, grid_Y, grid_Z)
 
-     # Si des polygones sont chargés, utiliser leur emprise pour ajuster les limites
-     if polygones_dans_emprise is not None:
-        # Calculer les limites du polygone
+    # Vérifier si des polygones sont chargés
+    if polygones_dans_emprise is not None:
+        # Calculer les limites des polygones
         X_min_polygone, Y_min_polygone, X_max_polygone, Y_max_polygone = polygones_dans_emprise.total_bounds
         
         # Calculer les limites de la carte de profondeur
@@ -574,6 +573,7 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
             Y_min_depth <= Y_min_polygone and Y_max_depth >= Y_max_polygone):
             X_min, Y_min, X_max, Y_max = X_min_depth, Y_min_depth, X_max_depth, Y_max_depth
         else:
+            # Ajouter une marge si nécessaire
             marge = 0.1
             X_range = X_max_polygone - X_min_polygone
             Y_range = Y_max_polygone - Y_min_polygone
@@ -591,33 +591,30 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
             polygones_dans_emprise, bas_fonds, grid_X, grid_Y
         )
 
-
+        # Options de téléchargement
         st.write("Téléchargez les données au format souhaité :")
-        
-        geojson_file = generate_geojson(grid_X, grid_Y, grid_Z)
+        st.download_button(
+            label="Télécharger GPX",
+            data=gpx_file,
+            file_name="depth_map.gpx",
+            mime="application/gpx+xml"
+        )
+        st.download_button(
+            label="Télécharger GeoJSON",
+            data=geojson_file,
+            file_name="depth_map.geojson",
+            mime="application/json"
+        )
 
-       
-    
-        if st.button("Télécharger en GPX"):
-            st.download_button(
-                label="Télécharger GPX",
-                data=gpx_file,
-                file_name="depth_map.gpx",
-                mime="application/gpx+xml"
-                )
-        if st.button("Télécharger en GeoJSON"):
-             st.download_button(
-                 label="Télécharger GeoJSON",
-                 data=geojson_file,
-                 file_name="depth_map.geojson",
-                 mime="application/json"
-                 )
-            
         # Affichage de la carte
         fig, ax = plt.subplots(figsize=(10, 10))
-        generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=-90)
+        generate_depth_map(
+            ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max,
+            label_rotation_x=0, label_rotation_y=-90
+        )
         afficher_polygones(ax, polygones_dans_emprise)
         st.pyplot(fig)
+
 
 
 
