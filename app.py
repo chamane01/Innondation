@@ -312,6 +312,62 @@ if st.button("Générer la carte de profondeur avec bas-fonds"):
 
 
 
+
+def fetch_osm_data(overpass_query):
+    url = "http://overpass-api.de/api/interpreter"
+    try:
+        response = requests.get(url, params={"data": overpass_query})
+        response.raise_for_status()
+        data = response.json()
+        return gpd.GeoDataFrame.from_features(data["features"], crs="EPSG:4326")
+    except Exception as e:
+        st.error(f"Erreur lors de la récupération des données OSM : {e}")
+        return None
+def superposer_donnees(polygones, osm_data, emprise):
+    try:
+        osm_data_utm = osm_data.to_crs(epsg=32630)
+        osm_dans_emprise = osm_data_utm[osm_data_utm.intersects(emprise)]
+        intersection = gpd.overlay(polygones, osm_dans_emprise, how="intersection")
+        return intersection
+    except Exception as e:
+        st.error(f"Erreur lors de la superposition : {e}")
+        return None
+
+st.title("Superposition des Polygones et Données OSM")
+
+if st.button("Charger les données OSM"):
+    overpass_query = (
+        "[out:json][timeout:25];"
+        "(node[\"landuse\"](bbox);way[\"landuse\"](bbox);rel[\"landuse\"](bbox););"
+        "out body geom;"
+    )
+    osm_data = fetch_osm_data(overpass_query)
+
+    if osm_data is not None and polygones is not None:
+        # Créer une emprise basée sur les polygones
+        emprise = box(polygones.total_bounds[0], polygones.total_bounds[1],
+                      polygones.total_bounds[2], polygones.total_bounds[3])
+
+        # Étape 3 : Superposer les données
+        intersection = superposer_donnees(polygones, osm_data, emprise)
+
+        # Afficher les résultats
+        if intersection is not None:
+            fig, ax = plt.subplots(figsize=(10, 10))
+            polygones.plot(ax=ax, facecolor="none", edgecolor="blue", linewidth=1.0, label="Polygones Locaux")
+            osm_data.to_crs(epsg=32630).plot(ax=ax, color="green", alpha=0.5, label="Données OSM")
+            intersection.plot(ax=ax, color="red", alpha=0.7, label="Intersection")
+
+            ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+
+            ax.legend()
+            st.pyplot(fig)
+        else:
+            st.warning("Aucune intersection trouvée.")
+
+
+
+
 # Fonction pour charger les polygones
 def charger_polygones(uploaded_file):
     try:
@@ -345,6 +401,8 @@ def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
 
 # Exemple d'appel dans l'interface Streamlit
 st.title("Affichage des Polygones et Profondeur")
+
+
 
 # Téléchargement du fichier GeoJSON pour les polygones
 uploaded_file = st.file_uploader("Téléverser un fichier GeoJSON", type="geojson")
