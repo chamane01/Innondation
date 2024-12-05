@@ -349,21 +349,12 @@ def charger_routes(fichier):
                 # Afficher les premières lignes pour vérifier la structure des données
                 st.write(gdf.head())
 
-                # Extraire les coordonnées des polylignes et afficher les latitudes et longitudes
+                # Extraire les polylignes
                 polylignes = gdf[gdf.geometry.type == 'LineString']
                 
-                # Extraire les latitudes et longitudes des polylignes
-                latitudes = []
-                longitudes = []
-                for geom in polylignes.geometry:
-                    coords = list(geom.coords)  # Convertir la géométrie en coordonnées
-                    latitudes.extend([coord[1] for coord in coords])  # Extraire la latitude
-                    longitudes.extend([coord[0] for coord in coords])  # Extraire la longitude
+                # Affichage des polylignes sur la carte
+                afficher_routes(polylignes)
                 
-                # Créer un DataFrame pour afficher les coordonnées
-                coord_df = pd.DataFrame({'Latitude': latitudes, 'Longitude': longitudes})
-                st.write("Coordonnées extraites des polylignes :", coord_df)
-
                 return polylignes
         else:
             st.error("Aucun fichier téléchargé.")
@@ -371,12 +362,29 @@ def charger_routes(fichier):
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
         return None
-def afficher_routes(ax, gdf_routes, color='blue', linewidth=2.0):
+        else:
+            st.error("Aucun fichier téléchargé.")
+            return None
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
+        return None
+def afficher_routes(gdf_routes, color='blue', linewidth=2.0):
     if gdf_routes is not None and not gdf_routes.empty:
+        # Créer un graphique pour afficher les routes
+        fig, ax = plt.subplots(figsize=(10, 10))  # Définir la taille de la carte
         gdf_routes.plot(ax=ax, color=color, linewidth=linewidth)
+        
+        # Ajouter un titre à la carte
+        ax.set_title("Carte des Polylignes", fontsize=15)
+        
+        # Ajouter les labels et ajuster la mise en page
+        ax.set_xlabel("Longitude")
+        ax.set_ylabel("Latitude")
+        
+        # Afficher la carte dans Streamlit
+        st.pyplot(fig)
     else:
         st.warning("Aucune route à afficher.")
-
 # Fonction pour afficher les polygones
 def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
     if gdf_polygones is not None and not gdf_polygones.empty:
