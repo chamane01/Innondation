@@ -531,7 +531,7 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
     )
 
     
-     if st.button("Afficher les polygones"):
+    if st.button("Afficher les polygones"):
      # Charger les polygones
      polygones_dans_emprise = charger_polygones(uploaded_file)
 
