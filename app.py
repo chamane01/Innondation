@@ -585,16 +585,6 @@ def generate_gpx(grid_X, grid_Y, grid_Z):
     # Retourner le fichier GPX sous forme de chaîne binaire
     return io.BytesIO(gpx.to_xml().encode())
 
-def generate_shapefile(grid_X, grid_Y, grid_Z):
-    """Générer un fichier Shapefile à partir des données de grille"""
-    gdf = gpd.GeoDataFrame(
-        {'X': grid_X.flatten(), 'Y': grid_Y.flatten(), 'Z': grid_Z.flatten()},
-        geometry=gpd.points_from_xy(grid_X.flatten(), grid_Y.flatten())
-    ) 
-    shp_bytes = io.BytesIO()
-    gdf.to_file(shp_bytes, driver='ESRI Shapefile')
-    shp_bytes.seek(0)
-    return shp_bytes
 
 def generate_geojson(grid_X, grid_Y, grid_Z):
     """Générer un fichier GeoJSON à partir des données de grille"""
@@ -609,7 +599,6 @@ st.write("Téléchargez les données au format souhaité :")
 
 # Créez les fichiers en dehors de l'événement de bouton
 gpx_file = generate_gpx(grid_X, grid_Y, grid_Z)
-shapefile = generate_shapefile(grid_X, grid_Y, grid_Z)
 geojson_file = generate_geojson(grid_X, grid_Y, grid_Z)
 
 # Ajouter les boutons de téléchargement
@@ -621,13 +610,6 @@ if st.button("Télécharger en GPX"):
         mime="application/gpx+xml"
     )
 
-if st.button("Télécharger en Shapefile"):
-    st.download_button(
-        label="Télécharger Shapefile", 
-        data=shapefile, 
-        file_name="depth_map.zip", 
-        mime="application/zip"
-    )
 
 if st.button("Télécharger en GeoJSON"):
     st.download_button(
