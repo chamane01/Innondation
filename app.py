@@ -529,15 +529,9 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         ha="left",  # Aligné à gauche
         va="top",# Aligné en haut
     )
-# Générer les fichiers
 
-
-
-
-
-
-# Ajouter les polygones sur la carte
-if st.button("Afficher les polygones"):
+    
+    if st.button("Afficher les polygones"):
     # Charger les polygones
     polygones_dans_emprise = charger_polygones(uploaded_file)
 
@@ -624,6 +618,18 @@ if st.button("Afficher les polygones"):
         generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=-90)
         afficher_polygones(ax, polygones_dans_emprise)
         st.pyplot(fig)
+
+
+
+
+
+
+
+
+
+
+
+# Ajouter les polygones sur la carte
 
 
 # Section du code Streamlit pour afficher les boutons de téléchargement
