@@ -591,6 +591,13 @@ if st.button("Afficher les polygones"):
         st.write("Téléchargez les données au format souhaité :")
         gpx_file = generate_gpx(grid_X, grid_Y, grid_Z)
         geojson_file = generate_geojson(grid_X, grid_Y, grid_Z)
+
+        if "gpx_file" not in st.session_state:
+            gpx_file = generate_gpx(grid_X, grid_Y, grid_Z)
+            geojson_file = generate_geojson(grid_X, grid_Y, grid_Z)
+            st.session_state.gpx_file = gpx_file
+            st.session_state.geojson_file = geojson_file
+    
         if st.button("Télécharger en GPX"):
             st.download_button(
                 label="Télécharger GPX",
