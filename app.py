@@ -362,12 +362,6 @@ def charger_routes(fichier):
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
         return None
-        else:
-            st.error("Aucun fichier téléchargé.")
-            return None
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
-        return None
 def afficher_routes(gdf_routes, color='blue', linewidth=2.0):
     if gdf_routes is not None and not gdf_routes.empty:
         # Créer un graphique pour afficher les routes
