@@ -333,22 +333,7 @@ def charger_polygones(uploaded_file):
         polygones_dans_emprise = None
 
     return polygones_dans_emprise
-def charger_routes(uploaded_file):
-    try:
-        if uploaded_file is not None:
-            # Lire le fichier GeoJSON téléchargé pour les routes
-            routes_gdf = gpd.read_file(uploaded_file)
-            
-            # Convertir le GeoDataFrame des routes au CRS EPSG:32630
-            routes_gdf = routes_gdf.to_crs(epsg=32630)
-            
-        else:
-            routes_gdf = None
-    except Exception as e:
-        st.error(f"Erreur lors du chargement des routes : {e}")
-        routes_gdf = None
 
-    return routes_gdf
 # Fonction pour afficher les polygones
 def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
     if gdf_polygones is not None and not gdf_polygones.empty:
@@ -356,21 +341,11 @@ def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
     else:
         st.warning("Aucun polygone à afficher dans l'emprise.")
 
-def afficher_routes(ax, gdf_routes, color='blue', linewidth=2.0):
-    if gdf_routes is not None and not gdf_routes.empty:
-        gdf_routes.plot(ax=ax, color=color, linewidth=linewidth)
-    else:
-        st.warning("Aucune route à afficher.")
-
 # Exemple d'appel dans l'interface Streamlit
 st.title("Affichage des Polygones et Profondeur")
 
 # Téléchargement du fichier GeoJSON pour les polygones
 uploaded_file = st.file_uploader("Téléverser un fichier GeoJSON", type="geojson")
-# Téléchargement du fichier GeoJSON pour les routes
-uploaded_file_routes = st.file_uploader("Téléverser un fichier GeoJSON pour les routes", type="geojson")
-
-
 
 
 
@@ -559,7 +534,6 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
 if st.button("Afficher les polygones"):
     # Charger les polygones
     polygones_dans_emprise = charger_polygones(uploaded_file)
-    routes_gdf = charger_routes(uploaded_file_routes)
 
     # Si des polygones sont chargés, utiliser leur emprise pour ajuster les limites
     if polygones_dans_emprise is not None:
@@ -595,7 +569,6 @@ if st.button("Afficher les polygones"):
         fig, ax = plt.subplots(figsize=(10, 10))
         generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=-90)
         afficher_polygones(ax, polygones_dans_emprise)
-        afficher_routes(ax, routes_gdf)
         st.pyplot(fig)
 
         
