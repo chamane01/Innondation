@@ -336,18 +336,25 @@ def charger_polygones(uploaded_file):
 
 def charger_routes(fichier):
     try:
-        # Charger le fichier GeoJSON avec GeoPandas
-        gdf = gpd.read_file(fichier)
-        
-        # Afficher les premières lignes pour vérifier la structure des données
-        st.write(gdf.head())
-        
-        # Si le fichier contient des polylignes, on peut extraire ces informations
-        # On suppose ici qu'il y a une colonne 'geometry' qui contient les objets géométriques
-        polylignes = gdf[gdf.geometry.type == 'LineString']
-        
-        # Vous pouvez également ajouter des étapes supplémentaires pour filtrer ou transformer les données
-        return polylignes
+        if fichier is not None:
+            # Créer un fichier temporaire pour écrire le contenu du fichier téléchargé
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".geojson") as temp_file:
+                temp_file.write(fichier.getvalue())
+                temp_file.close()
+
+                # Charger le fichier GeoJSON avec GeoPandas
+                gdf = gpd.read_file(temp_file.name)
+
+                # Afficher les premières lignes pour vérifier la structure des données
+                st.write(gdf.head())
+
+                # Si le fichier contient des polylignes, on peut extraire ces informations
+                polylignes = gdf[gdf.geometry.type == 'LineString']
+                
+                return polylignes
+        else:
+            st.error("Aucun fichier téléchargé.")
+            return None
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
         return None
