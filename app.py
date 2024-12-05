@@ -334,23 +334,23 @@ def charger_polygones(uploaded_file):
 
     return polygones_dans_emprise
 
-def charger_routes(uploaded_file_routes):
+def charger_routes(fichier):
     try:
-        if uploaded_file_routes is not None:
-            # Lire le fichier GeoJSON téléchargé pour les routes
-            routes_gdf = gpd.read_file(uploaded_file_routes)
-            
-            # Convertir le GeoDataFrame au CRS EPSG:32630
-            routes_gdf = routes_gdf.to_crs(epsg=32630)
-            
-            # Filtrer les routes si nécessaire (par exemple, vous pouvez ajuster cette partie en fonction des données)
-            return routes_gdf
-        else:
-            return None
+        # Charger le fichier GeoJSON avec GeoPandas
+        gdf = gpd.read_file(fichier)
+        
+        # Afficher les premières lignes pour vérifier la structure des données
+        st.write(gdf.head())
+        
+        # Si le fichier contient des polylignes, on peut extraire ces informations
+        # On suppose ici qu'il y a une colonne 'geometry' qui contient les objets géométriques
+        polylignes = gdf[gdf.geometry.type == 'LineString']
+        
+        # Vous pouvez également ajouter des étapes supplémentaires pour filtrer ou transformer les données
+        return polylignes
     except Exception as e:
-        st.error(f"Erreur lors du chargement des routes : {e}")
+        st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
         return None
-
 def afficher_routes(ax, gdf_routes, color='blue', linewidth=2.0):
     if gdf_routes is not None and not gdf_routes.empty:
         gdf_routes.plot(ax=ax, color=color, linewidth=linewidth)
@@ -369,7 +369,8 @@ st.title("Affichage des Polygones et Profondeur")
 
 # Téléchargement du fichier GeoJSON pour les polygones
 uploaded_file = st.file_uploader("Téléverser un fichier GeoJSON", type="geojson")
-routes_dans_emprise = charger_routes(uploaded_file_routes)
+uploaded_file_routes = st.file_uploader("Téléchargez votre fichier GeoJSON", type="geojson")
+
 
 
 
@@ -556,6 +557,16 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
 
 # Ajouter les polygones sur la carte
 if st.button("Afficher les polygones"):
+    if uploaded_file_routes is not None:
+        # Charger et traiter les données de routes
+        routes_dans_emprise = charger_routes(uploaded_file_routes)
+        if routes_dans_emprise is not None:
+            st.write(f"Nombre de polylignes extraites : {len(routes_dans_emprise)}")
+            # Afficher la carte avec les polylignes
+            st.map(routes_dans_emprise)
+            
+    
+    
     # Charger les polygones
     polygones_dans_emprise = charger_polygones(uploaded_file)
 
