@@ -349,9 +349,21 @@ def charger_routes(fichier):
                 # Afficher les premières lignes pour vérifier la structure des données
                 st.write(gdf.head())
 
-                # Si le fichier contient des polylignes, on peut extraire ces informations
+                # Extraire les coordonnées des polylignes et afficher les latitudes et longitudes
                 polylignes = gdf[gdf.geometry.type == 'LineString']
                 
+                # Extraire les latitudes et longitudes des polylignes
+                latitudes = []
+                longitudes = []
+                for geom in polylignes.geometry:
+                    coords = list(geom.coords)  # Convertir la géométrie en coordonnées
+                    latitudes.extend([coord[1] for coord in coords])  # Extraire la latitude
+                    longitudes.extend([coord[0] for coord in coords])  # Extraire la longitude
+                
+                # Créer un DataFrame pour afficher les coordonnées
+                coord_df = pd.DataFrame({'Latitude': latitudes, 'Longitude': longitudes})
+                st.write("Coordonnées extraites des polylignes :", coord_df)
+
                 return polylignes
         else:
             st.error("Aucun fichier téléchargé.")
