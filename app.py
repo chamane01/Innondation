@@ -334,6 +334,29 @@ def charger_polygones(uploaded_file):
 
     return polygones_dans_emprise
 
+def charger_routes(uploaded_file_routes):
+    try:
+        if uploaded_file_routes is not None:
+            # Lire le fichier GeoJSON téléchargé pour les routes
+            routes_gdf = gpd.read_file(uploaded_file_routes)
+            
+            # Convertir le GeoDataFrame au CRS EPSG:32630
+            routes_gdf = routes_gdf.to_crs(epsg=32630)
+            
+            # Filtrer les routes si nécessaire (par exemple, vous pouvez ajuster cette partie en fonction des données)
+            return routes_gdf
+        else:
+            return None
+    except Exception as e:
+        st.error(f"Erreur lors du chargement des routes : {e}")
+        return None
+
+def afficher_routes(ax, gdf_routes, color='blue', linewidth=2.0):
+    if gdf_routes is not None and not gdf_routes.empty:
+        gdf_routes.plot(ax=ax, color=color, linewidth=linewidth)
+    else:
+        st.warning("Aucune route à afficher.")
+
 # Fonction pour afficher les polygones
 def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
     if gdf_polygones is not None and not gdf_polygones.empty:
@@ -346,6 +369,7 @@ st.title("Affichage des Polygones et Profondeur")
 
 # Téléchargement du fichier GeoJSON pour les polygones
 uploaded_file = st.file_uploader("Téléverser un fichier GeoJSON", type="geojson")
+routes_dans_emprise = charger_routes(uploaded_file_routes)
 
 
 
@@ -569,6 +593,7 @@ if st.button("Afficher les polygones"):
         fig, ax = plt.subplots(figsize=(10, 10))
         generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=-90)
         afficher_polygones(ax, polygones_dans_emprise)
+        afficher_routes(ax, routes_dans_emprise, color='red', linewidth=2.0)
         st.pyplot(fig)
 
         
