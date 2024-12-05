@@ -598,7 +598,7 @@ if st.button("Afficher les polygones"):
                 file_name="depth_map.gpx",
                 mime="application/gpx+xml"
                 )
-         if st.button("Télécharger en GeoJSON"):
+        if st.button("Télécharger en GeoJSON"):
              st.download_button(
                  label="Télécharger GeoJSON",
                  data=geojson_file,
