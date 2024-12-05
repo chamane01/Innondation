@@ -530,32 +530,39 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
         va="top",# Aligné en haut
     )
 # Générer les fichiers
-def generate_gpx(grid_X, grid_Y, grid_Z):
-    """Générer un fichier GPX à partir des données de grille"""
-    gpx = gpxpy.gpx.GPX()
-    track = gpxpy.gpx.GPXTrack()
-    gpx.tracks.append(track)
-    segment = gpxpy.gpx.GPXTrackSegment()
-    for x, y, z in zip(grid_X.flatten(), grid_Y.flatten(), grid_Z.flatten()):
-        segment.points.append(gpxpy.gpx.GPXTrackPoint(y, x, elevation=z))  # GPX utilise (latitude, longitude)
-    track.segments.append(segment)
-    # Retourner le fichier GPX sous forme de chaîne binaire
-    return io.BytesIO(gpx.to_xml().encode())
 
 
-def generate_geojson(grid_X, grid_Y, grid_Z):
-    """Générer un fichier GeoJSON à partir des données de grille"""
-    gdf = gpd.GeoDataFrame(
-        {'X': grid_X.flatten(), 'Y': grid_Y.flatten(), 'Z': grid_Z.flatten()},
-        geometry=gpd.points_from_xy(grid_X.flatten(), grid_Y.flatten())
-    )
-    return io.BytesIO(gdf.to_json().encode())
+
+
 
 
 # Ajouter les polygones sur la carte
 if st.button("Afficher les polygones"):
     # Charger les polygones
     polygones_dans_emprise = charger_polygones(uploaded_file)
+
+    def generate_gpx(grid_X, grid_Y, grid_Z):
+        """Générer un fichier GPX à partir des données de grille"""
+        gpx = gpxpy.gpx.GPX()
+        track = gpxpy.gpx.GPXTrack()
+        gpx.tracks.append(track)
+        segment = gpxpy.gpx.GPXTrackSegment()
+        for x, y, z in zip(grid_X.flatten(), grid_Y.flatten(), grid_Z.flatten()):
+            segment.points.append(gpxpy.gpx.GPXTrackPoint(y, x, elevation=z))
+        track.segments.append(segment)
+        return io.BytesIO(gpx.to_xml().encode())
+
+    def generate_geojson(grid_X, grid_Y, grid_Z):
+        """Générer un fichier GeoJSON à partir des données de grille"""
+        gdf = gpd.GeoDataFrame(
+        {'X': grid_X.flatten(), 'Y': grid_Y.flatten(), 'Z': grid_Z.flatten()},
+        geometry=gpd.points_from_xy(grid_X.flatten(), grid_Y.flatten())
+        )
+        return io.BytesIO(gdf.to_json().encode())
+        
+        
+    
+    
 
     # Si des polygones sont chargés, utiliser leur emprise pour ajuster les limites
     if polygones_dans_emprise is not None:
