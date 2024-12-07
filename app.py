@@ -192,10 +192,9 @@ if df is not None:
 
 # Fonction pour générer la carte de profondeur avec dégradé de couleurs
 def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
-    X_min = df['X'].min()
-    X_max = df['X'].max()
-    Y_min = df['Y'].min()
-    Y_max = df['Y'].max()
+    X_min, X_max = grid_X.min(), grid_X.max()
+    Y_min, Y_max = grid_Y.min(), grid_Y.max()
+    
 
 
 
