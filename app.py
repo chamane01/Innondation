@@ -59,6 +59,11 @@ elif uploaded_file is not None:
 else:
     st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
     df = None
+
+
+
+
+uploaded_geojson_file = st.file_uploader("Téléversez un fichier GeoJSON pour les routes", type=["geojson"])
 def charger_geojson(fichier):
     try:
         gdf = gpd.read_file(fichier)
