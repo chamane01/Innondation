@@ -312,7 +312,7 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
         for y in intersections_y:
             ax.plot(x, y, 'k+', markersize=7, alpha=1.0)
 
-    if routes_dans_emprise is not None:
+    if routes is not None:
         afficher_routes(ax, routes)
                 
 
