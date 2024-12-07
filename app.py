@@ -63,7 +63,7 @@ else:
 
 
 
-uploaded_geojson_file = st.file_uploader("Téléversez un fichier GeoJSON pour les routes2", type=["geojson"])
+uploaded_geojson_file = st.file_uploader("Téléversez un fichier GeoJSON pour les routes", type=["geojson"])
 def charger_geojson(fichier):
     try:
         gdf = gpd.read_file(fichier)
@@ -219,29 +219,6 @@ if df is not None:
 # Fonction pour générer la carte de profondeur avec dégradé de couleurs
 def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
 
-
-
-    uploaded_geojson_file = st.file_uploader("Téléversez un fichier GeoJSON pour les routes", type=["geojson"])
-    def charger_geojson(fichier):
-       try:
-           gdf = gpd.read_file(fichier)
-           return gdf
-
-       except Exception as e:
-            st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
-            return None
-        
-        
-    routes_gdf = None
-    if uploaded_geojson_file is not None:
-        routes_gdf = charger_geojson(uploaded_geojson_file)
-
-    
-        
-         
-
-    
-
     # Détection des bas-fonds
     def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
         """
@@ -262,8 +239,6 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
         resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000  # Résolution en hectares
         surface_bas_fond = np.sum(bas_fonds) * resolution
         return surface_bas_fond
-
-    
 
     bas_fonds, seuil_bas_fond = detecter_bas_fonds(grid_Z)
     surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
@@ -345,11 +320,6 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     # Ajouter les bâtiments
     if batiments_dans_emprise is not None:
         batiments_dans_emprise.plot(ax=ax, facecolor='grey', edgecolor='black', linewidth=0.5, alpha=0.6)
-
-    if routes_gdf is not None:
-                routes_gdf = routes_gdf.to_crs(epsg=32630)  # Reprojeter les données si nécessaire
-                routes_gdf.plot(ax=ax, color='orange', linewidth=2, label="Routes")
-                st.write(f"**Nombre de routes affichées :** {len(routes_gdf)}")
 
     # Affichage de la carte de profondeur
     st.pyplot(fig)
