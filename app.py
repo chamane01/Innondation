@@ -361,10 +361,6 @@ def afficher_polygones(ax, polygones):
     polygones.plot(ax=ax, facecolor='none', edgecolor='red', linewidth=2)
 
 
-# Fonction pour afficher les routes
-def afficher_routes(ax, routes):
-    routes.plot(ax=ax, color='blue', linewidth=1.5)
-
 
 # Fonction pour charger les polygones depuis un fichier GeoJSON
 def charger_polygones(fichier):
@@ -374,14 +370,6 @@ def charger_polygones(fichier):
         st.error(f"Erreur lors du chargement des polygones : {e}")
         return None
 
-
-# Fonction pour charger les routes depuis un fichier GeoJSON
-def charger_routes(fichier):
-    try:
-        return gpd.read_file(fichier)
-    except Exception as e:
-        st.error(f"Erreur lors du chargement des routes : {e}")
-        return None
 
 
 # Fonction fictive pour détecter les bas-fonds
@@ -395,7 +383,7 @@ grid_Z = np.random.uniform(-20, 10, grid_X.shape)  # Profondeurs aléatoires
 
 # Widgets pour charger les fichiers
 uploaded_polygons_file = st.file_uploader("Téléchargez un fichier GeoJSON pour les polygones", type=["geojson"])
-uploaded_routes_file = st.file_uploader("Téléchargez un fichier GeoJSON pour les routes", type=["geojson"])
+
 
 # Déclencheur pour afficher les polygones, routes, et carte
 if st.button("Afficher la carte et les objets"):
@@ -415,11 +403,7 @@ if st.button("Afficher la carte et les objets"):
     else:
         st.warning("Aucun polygone à afficher.")
 
-    # Afficher les routes
-    if routes_dans_emprise is not None:
-        afficher_routes(ax, routes_dans_emprise)
-    else:
-        st.warning("Aucune route à afficher.")
+
 
     # Afficher la carte dans Streamlit
     st.pyplot(fig)
