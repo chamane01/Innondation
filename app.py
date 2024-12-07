@@ -313,7 +313,7 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
             ax.plot(x, y, 'k+', markersize=7, alpha=1.0)
 
     if routes_dans_emprise is not None:
-        afficher_routes(ax, routes_dans_emprise)
+        afficher_routes(ax, routes)
                 
 
     else:
