@@ -227,7 +227,7 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
            gdf = gpd.read_file(fichier)
            return gdf
 
-        except Exception as e:
+       except Exception as e:
             st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
             return None
         
