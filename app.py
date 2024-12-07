@@ -342,9 +342,10 @@ if st.button("Générer la carte de profondeur avec bas-fonds"):
             generate_depth_map(routes=routes, label_rotation_x=0, label_rotation_y=-90)
         except Exception as e:
             st.error(f"Erreur lors du chargement des routes : {e}")
-    else:
-        st.warning("Veuillez téléverser un fichier GeoJSON pour afficher les routes."))
+else:
+    st.warning("Veuillez téléverser un fichier GeoJSON pour afficher les routes."))
 
+        
 
 
 
