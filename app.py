@@ -239,8 +239,7 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     bas_fonds, seuil_bas_fond = detecter_bas_fonds(grid_Z)
     surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
 
-    uploaded_routes_file = st.file_uploader("Téléchargez un fichier GeoJSON pour les routes", type=["geojson"])
-
+    
     
     # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
     fig, ax = plt.subplots(figsize=(8, 6))
@@ -334,7 +333,17 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
 
 # Ajouter un bouton pour générer la carte de profondeur
 if st.button("Générer la carte de profondeur avec bas-fonds"):
-    generate_depth_map(label_rotation_x=0, label_rotation_y=-90)
+    uploaded_routes_file = st.file_uploader("Téléchargez un fichier GeoJSON pour les routes", type=["geojson"])
+
+    if uploaded_routes_file is not None:
+        # Charger le fichier GeoJSON
+        try:
+            routes = gpd.read_file(uploaded_routes_file)
+            generate_depth_map(routes=routes, label_rotation_x=0, label_rotation_y=-90)
+        except Exception as e:
+            st.error(f"Erreur lors du chargement des routes : {e}")
+    else:
+        st.warning("Veuillez téléverser un fichier GeoJSON pour afficher les routes."))
 
 
 
