@@ -142,11 +142,7 @@ if df is not None:
             contour_paths = [Polygon(path.vertices) for collection in contours_inondation.collections for path in collection.get_paths()]
             zone_inondee = gpd.GeoDataFrame(geometry=[MultiPolygon(contour_paths)], crs="EPSG:32630")
 
-            if routes_dans_emprise is not None:
-                afficher_routes(ax, routes_dans_emprise)
-
-            else:
-                st.warning("Aucune route à afficher.")
+            
         
     
         
@@ -315,6 +311,14 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     for x in intersections_x:
         for y in intersections_y:
             ax.plot(x, y, 'k+', markersize=7, alpha=1.0)
+
+    if routes_dans_emprise is not None:
+        afficher_routes(ax, routes_dans_emprise)
+                
+
+    else:
+        st.warning("Aucune route à afficher.")
+                
 
     
 
