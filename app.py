@@ -190,16 +190,12 @@ if df is not None:
             st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
             st.write(f"**Système de projection :** EPSG:32630")
 
+import geopandas as gpd
+
 # Fonction pour générer la carte de profondeur avec dégradé de couleurs
 def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     X_min, X_max = grid_X.min(), grid_X.max()
     Y_min, Y_max = grid_Y.min(), grid_Y.max()
-    
-
-
-
-
-    
 
     # Détection des bas-fonds
     def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
@@ -229,10 +225,8 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
         """
         Charger un fichier GeoJSON contenant des routes.
         """
-    
         try:
             return gpd.read_file(fichier)
-
         except Exception as e:
             st.error(f"Erreur lors du chargement des routes : {e}")
             return None
@@ -245,16 +239,9 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
             bbox = (X_min, Y_min, X_max, Y_max)
             routes_dans_emprise = routes.cx[bbox[0]:bbox[2], bbox[1]:bbox[3]]
             return routes_dans_emprise
-
         except Exception as e:
             st.error(f"Erreur lors du filtrage des routes dans l'emprise : {e}")
             return None
-            
-    
-        
-        
-        
-
     
     # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
     fig, ax = plt.subplots(figsize=(8, 6))
@@ -267,11 +254,11 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     ax.xaxis.set_tick_params(labeltop=True)
     ax.yaxis.set_tick_params(labelright=True)
 
-     # Masquer les coordonnées aux extrémités
+    # Masquer les coordonnées aux extrémités
     xticks = ax.get_xticks()
     yticks = ax.get_yticks()
     ax.set_xticklabels(
-         ["" if x == X_min or x == X_max else f"{int(x)}" for x in xticks],
+        ["" if x == X_min or x == X_max else f"{int(x)}" for x in xticks],
         rotation=label_rotation_x,
     )
     ax.set_yticklabels(
@@ -279,14 +266,11 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
         rotation=label_rotation_y,
         va="center"  # Alignement vertical des étiquettes Y
     )
-    #modifier rotation
+    
     for label in ax.get_xticklabels():
         label.set_rotation(label_rotation_x)
-
     for label in ax.get_yticklabels():
         label.set_rotation(label_rotation_y)
-
-    
 
     # Ajouter les contours pour la profondeur
     depth_levels = np.linspace(grid_Z.min(), grid_Z.max(), 100)
@@ -313,21 +297,18 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
         fontsize=12
     )
 
-
     # Ajouter des lignes pour relier les tirets
     for x in np.linspace(X_min, X_max, num=5):
         ax.axvline(x, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
     for y in np.linspace(Y_min, Y_max, num=5):
         ax.axhline(y, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
-#croisillon 
+
+    #croisillon 
     intersections_x = np.linspace(X_min, X_max, num=5)
     intersections_y = np.linspace(Y_min, Y_max, num=5)
     for x in intersections_x:
         for y in intersections_y:
             ax.plot(x, y, 'k+', markersize=7, alpha=1.0)
-
-    
-
 
     # Ajouter les bâtiments
     if batiments_dans_emprise is not None:
@@ -335,29 +316,27 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
 
     # Affichage de la carte de profondeur
     st.pyplot(fig)
+
     # Afficher les surfaces calculées
     st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
 
 # Ajouter un bouton pour générer la carte de profondeur
 if st.button("Générer la carte de profondeur avec bas-fonds"):
-    #generate_depth_map(label_rotation_x=0, label_rotation_y=-90)
     X_min, X_max, Y_min, Y_max = generate_depth_map(label_rotation_x=0, label_rotation_y=-90)
+    
     if uploaded_routes_file is not None:
         routes = charger_routes(uploaded_routes_file)
         if routes is not None:
             routes_dans_emprise = filtrer_routes_dans_emprise(routes, X_min, X_max, Y_min, Y_max)
             if routes_dans_emprise is not None and not routes_dans_emprise.empty:
                 st.write("Routes dans l'emprise chargées avec succès.")
-                st.map(routes_dans_emprise)
+                routes_dans_emprise.plot(ax=ax, color='blue', linewidth=2)  # Tracer les routes sur la carte
             else:
                 st.warning("Aucune route trouvée dans l'emprise.")
         else:
             st.warning("Impossible de charger les routes.")
     else:
         st.warning("Veuillez téléverser un fichier GeoJSON pour afficher les routes.")
-
-
-
 
 
 
