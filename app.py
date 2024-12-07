@@ -220,7 +220,7 @@ if df is not None:
 routes_gdf = None
 
 # Fonction pour générer la carte de profondeur avec dégradé de couleurs
-def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
+def generate_depth_map(routes_gdf,label_rotation_x=0, label_rotation_y=0):
 
     # Détection des bas-fonds
     def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
