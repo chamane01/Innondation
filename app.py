@@ -10,7 +10,6 @@ from shapely.geometry import MultiPolygon
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
-import tempfile
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -335,50 +334,6 @@ def charger_polygones(uploaded_file):
 
     return polygones_dans_emprise
 
-def charger_routes(fichier):
-    try:
-        if fichier is not None:
-            # Créer un fichier temporaire pour écrire le contenu du fichier téléchargé
-            with tempfile.NamedTemporaryFile(delete=False, suffix=".geojson") as temp_file:
-                temp_file.write(fichier.getvalue())
-                temp_file.close()
-
-                # Charger le fichier GeoJSON avec GeoPandas
-                gdf = gpd.read_file(temp_file.name)
-
-                # Afficher les premières lignes pour vérifier la structure des données
-                st.write(gdf.head())
-
-                # Extraire les polylignes
-                polylignes = gdf[gdf.geometry.type == 'LineString']
-                
-                # Affichage des polylignes sur la carte
-                afficher_routes(polylignes)
-                
-                return polylignes
-        else:
-            st.error("Aucun fichier téléchargé.")
-            return None
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
-        return None
-def afficher_routes(gdf_routes, color='blue', linewidth=2.0):
-    if gdf_routes is not None and not gdf_routes.empty:
-        # Créer un graphique pour afficher les routes
-        fig, ax = plt.subplots(figsize=(10, 10))  # Définir la taille de la carte
-        gdf_routes.plot(ax=ax, color=color, linewidth=linewidth)
-        
-        # Ajouter un titre à la carte
-        ax.set_title("Carte des Polylignes", fontsize=15)
-        
-        # Ajouter les labels et ajuster la mise en page
-        ax.set_xlabel("Longitude")
-        ax.set_ylabel("Latitude")
-        
-        # Afficher la carte dans Streamlit
-        st.pyplot(fig)
-    else:
-        st.warning("Aucune route à afficher.")
 # Fonction pour afficher les polygones
 def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
     if gdf_polygones is not None and not gdf_polygones.empty:
@@ -391,8 +346,6 @@ st.title("Affichage des Polygones et Profondeur")
 
 # Téléchargement du fichier GeoJSON pour les polygones
 uploaded_file = st.file_uploader("Téléverser un fichier GeoJSON", type="geojson")
-uploaded_file_routes = st.file_uploader("Téléchargez votre fichier GeoJSON", type="geojson")
-
 
 
 
@@ -579,16 +532,6 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
 
 # Ajouter les polygones sur la carte
 if st.button("Afficher les polygones"):
-    if uploaded_file_routes is not None:
-        # Charger et traiter les données de routes
-        routes_dans_emprise = charger_routes(uploaded_file_routes)
-        if routes_dans_emprise is not None:
-            st.write(f"Nombre de polylignes extraites : {len(routes_dans_emprise)}")
-            # Afficher la carte avec les polylignes
-            st.map(routes_dans_emprise)
-            
-    
-    
     # Charger les polygones
     polygones_dans_emprise = charger_polygones(uploaded_file)
 
@@ -626,7 +569,6 @@ if st.button("Afficher les polygones"):
         fig, ax = plt.subplots(figsize=(10, 10))
         generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=-90)
         afficher_polygones(ax, polygones_dans_emprise)
-        afficher_routes(ax, routes_dans_emprise, color='red', linewidth=2.0)
         st.pyplot(fig)
 
         
