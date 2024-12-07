@@ -63,7 +63,7 @@ else:
 
 
 
-uploaded_geojson_file = st.file_uploader("Téléversez un fichier GeoJSON pour les routes", type=["geojson"])
+uploaded_geojson_file = st.file_uploader("Téléversez un fichier GeoJSON pour les routes2", type=["geojson"])
 def charger_geojson(fichier):
     try:
         gdf = gpd.read_file(fichier)
