@@ -98,6 +98,7 @@ if df is not None:
 
         if st.button("Afficher la carte d'inondation"):
             surface_bleue = calculer_surface_bleue(st.session_state.flood_data['niveau_inondation'])
+            routes_dans_emprise = charger_routes(uploaded_routes_file) if uploaded_routes_file else None
             volume_eau = calculer_volume(surface_bleue)
             st.session_state.flood_data['surface_bleu'] = surface_bleue
             st.session_state.flood_data['volume_eau'] = volume_eau
@@ -140,6 +141,15 @@ if df is not None:
             # Transformer les contours en polygones pour analyser les bâtiments
             contour_paths = [Polygon(path.vertices) for collection in contours_inondation.collections for path in collection.get_paths()]
             zone_inondee = gpd.GeoDataFrame(geometry=[MultiPolygon(contour_paths)], crs="EPSG:32630")
+
+            if routes_dans_emprise is not None:
+                afficher_routes(ax, routes_dans_emprise)
+
+            else:
+                st.warning("Aucune route à afficher.")
+        
+    
+        
 
             # Filtrer et afficher tous les bâtiments
             if batiments_dans_emprise is not None:
@@ -193,6 +203,22 @@ if df is not None:
 # Fonction pour générer la carte de profondeur avec dégradé de couleurs
 def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
 
+    def afficher_routes(ax, routes):
+        routes.plot(ax=ax, color='blue', linewidth=1.5)
+
+    
+    def charger_routes(fichier):
+        try:
+            return gpd.read_file(fichier)
+        except Exception as e:
+            st.error(f"Erreur lors du chargement des routes : {e}")
+            return None
+        
+            
+
+    
+    
+
     # Détection des bas-fonds
     def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
         """
@@ -216,6 +242,8 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
 
     bas_fonds, seuil_bas_fond = detecter_bas_fonds(grid_Z)
     surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
+
+    uploaded_routes_file = st.file_uploader("Téléchargez un fichier GeoJSON pour les routes", type=["geojson"])
 
     
     # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
