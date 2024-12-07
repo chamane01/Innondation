@@ -322,21 +322,24 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
 
 # Ajouter un bouton pour générer la carte de profondeur
 if st.button("Générer la carte de profondeur avec bas-fonds"):
+    # Appelez la fonction et récupérez les coordonnées
     X_min, X_max, Y_min, Y_max = generate_depth_map(label_rotation_x=0, label_rotation_y=-90)
     
+    # Ensuite, vous pouvez charger et afficher les routes comme vous l'avez fait précédemment
     if uploaded_routes_file is not None:
         routes = charger_routes(uploaded_routes_file)
         if routes is not None:
             routes_dans_emprise = filtrer_routes_dans_emprise(routes, X_min, X_max, Y_min, Y_max)
             if routes_dans_emprise is not None and not routes_dans_emprise.empty:
                 st.write("Routes dans l'emprise chargées avec succès.")
-                routes_dans_emprise.plot(ax=ax, color='blue', linewidth=2)  # Tracer les routes sur la carte
+                st.map(routes_dans_emprise)
             else:
                 st.warning("Aucune route trouvée dans l'emprise.")
         else:
             st.warning("Impossible de charger les routes.")
     else:
         st.warning("Veuillez téléverser un fichier GeoJSON pour afficher les routes.")
+
 
 
 
