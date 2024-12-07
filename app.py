@@ -59,6 +59,18 @@ elif uploaded_file is not None:
 else:
     st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
     df = None
+def charger_geojson(fichier):
+    try:
+        gdf = gpd.read_file(fichier)
+        return gdf
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
+        return None
+
+# Charger les données du fichier GeoJSON des routes
+routes_gdf = None
+if uploaded_geojson_file is not None:
+    routes_gdf = charger_geojson(uploaded_geojson_file)
 
 # Charger et filtrer les bâtiments dans l'emprise de la carte
 try:
@@ -156,6 +168,15 @@ if df is not None:
                 ax.legend()
             else:
                 st.write("Aucun bâtiment à analyser dans cette zone.")
+
+            if routes_gdf is not None:
+                routes_gdf = routes_gdf.to_crs(epsg=32630)  # Reprojeter les données si nécessaire
+                routes_gdf.plot(ax=ax, color='orange', linewidth=2, label="Routes")
+                st.write(f"**Nombre de routes affichées :** {len(routes_gdf)}")
+
+            
+
+            
 
             st.pyplot(fig)
 
