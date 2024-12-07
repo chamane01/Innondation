@@ -334,6 +334,29 @@ def charger_polygones(uploaded_file):
 
     return polygones_dans_emprise
 
+def charger_routes(json_file):
+    try:
+        if json_file is not None:
+            # Lire le fichier JSON et le convertir en GeoDataFrame
+            routes_gdf = gpd.read_file(json_file)
+            
+            # Convertir au CRS EPSG:32630
+            routes_gdf = routes_gdf.to_crs(epsg=32630)
+            
+            # Filtrer les routes dans l'emprise
+            if 'X' in df.columns and 'Y' in df.columns:
+                emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
+                routes_dans_emprise = routes_gdf[routes_gdf.intersects(emprise)]
+            else:
+                routes_dans_emprise = routes_gdf
+        else:
+            routes_dans_emprise = None
+    except Exception as e:
+        st.error(f"Erreur lors du chargement des routes : {e}")
+        routes_dans_emprise = None
+
+    return routes_dans_emprise
+
 # Fonction pour afficher les polygones
 def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
     if gdf_polygones is not None and not gdf_polygones.empty:
@@ -341,11 +364,18 @@ def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
     else:
         st.warning("Aucun polygone à afficher dans l'emprise.")
 
+def afficher_routes(ax, gdf_routes, color='blue', linewidth=2.0):
+    if gdf_routes is not None and not gdf_routes.empty:
+        gdf_routes.plot(ax=ax, color=color, linewidth=linewidth)
+    else:
+        st.warning("Aucune route à afficher dans l'emprise.")
+
 # Exemple d'appel dans l'interface Streamlit
 st.title("Affichage des Polygones et Profondeur")
 
 # Téléchargement du fichier GeoJSON pour les polygones
 uploaded_file = st.file_uploader("Téléverser un fichier GeoJSON", type="geojson")
+uploaded_routes_file = st.file_uploader("Téléverser un fichier JSON pour les routes", type="json")
 
 
 
@@ -534,6 +564,7 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
 if st.button("Afficher les polygones"):
     # Charger les polygones
     polygones_dans_emprise = charger_polygones(uploaded_file)
+    routes_dans_emprise = charger_routes(uploaded_routes_file)
 
     # Si des polygones sont chargés, utiliser leur emprise pour ajuster les limites
     if polygones_dans_emprise is not None:
@@ -556,6 +587,39 @@ if st.button("Afficher les polygones"):
             Y_min = min(Y_min_depth, Y_min_polygone - Y_range * marge)
             X_max = max(X_max_depth, X_max_polygone + X_range * marge)
             Y_max = max(Y_max_depth, Y_max_polygone + Y_range * marge)
+
+        if routes_dans_emprise is not None:
+            fig, ax = plt.subplots(figsize=(10, 10))
+            generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max)
+            afficher_routes(ax, routes_dans_emprise)
+            if 'polygones_dans_emprise' in locals() and polygones_dans_emprise is not None:
+                afficher_polygones(ax, polygones_dans_emprise)
+            st.pyplot(fig)
+
+        else:
+            st.warning("Aucune route à afficher.")
+
+        
+        
+    
+            
+
+        
+
+        # Générer la carte de profondeur
+        
+        # Afficher les routes
+        
+
+        # Afficher les polygones si présents
+        
+
+        # Afficher la carte dans Streamlit
+        
+    
+
+
+        
 
         # Calculer les bas-fonds
         bas_fonds, _ = detecter_bas_fonds(grid_Z)
