@@ -217,6 +217,36 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
     bas_fonds, seuil_bas_fond = detecter_bas_fonds(grid_Z)
     surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
 
+    def charger_routes(fichier):
+        """
+        Charger un fichier GeoJSON contenant des routes.
+        """
+    
+        try:
+            return gpd.read_file(fichier)
+
+        except Exception as e:
+            st.error(f"Erreur lors du chargement des routes : {e}")
+            return None
+
+    def filtrer_routes_dans_emprise(routes, X_min, X_max, Y_min, Y_max):
+        """
+        Filtrer les routes pour ne garder que celles dans l'emprise donnée.
+        """
+        try:
+            bbox = (X_min, Y_min, X_max, Y_max)
+            routes_dans_emprise = routes.cx[bbox[0]:bbox[2], bbox[1]:bbox[3]]
+            return routes_dans_emprise
+
+        except Exception as e:
+            st.error(f"Erreur lors du filtrage des routes dans l'emprise : {e}")
+            return None
+            
+    
+        
+        
+        
+
     
     # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
     fig, ax = plt.subplots(figsize=(8, 6))
@@ -302,7 +332,21 @@ def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
 
 # Ajouter un bouton pour générer la carte de profondeur
 if st.button("Générer la carte de profondeur avec bas-fonds"):
-    generate_depth_map(label_rotation_x=0, label_rotation_y=-90)
+    #generate_depth_map(label_rotation_x=0, label_rotation_y=-90)
+    X_min, X_max, Y_min, Y_max = generate_depth_map(label_rotation_x=0, label_rotation_y=-90)
+    if uploaded_routes_file is not None:
+        routes = charger_routes(uploaded_routes_file)
+        if routes is not None:
+            routes_dans_emprise = filtrer_routes_dans_emprise(routes, X_min, X_max, Y_min, Y_max)
+            if routes_dans_emprise is not None and not routes_dans_emprise.empty:
+                st.write("Routes dans l'emprise chargées avec succès.")
+                st.map(routes_dans_emprise)
+            else:
+                st.warning("Aucune route trouvée dans l'emprise.")
+        else:
+            st.warning("Impossible de charger les routes.")
+    else:
+        st.warning("Veuillez téléverser un fichier GeoJSON pour afficher les routes.")
 
 
 
