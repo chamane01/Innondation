@@ -42,8 +42,7 @@ uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["
 st.title("Traitement d'un fichier Raster")
 
 # Téléversement du fichier raster
-uploaded_file = st.file_uploader("Téléversez un fichier raster", type=["tif", "geotiff", "img","hgt",])
-
+uploaded_file = st.file_uploader("Téléversez un fichier Raster (.tif, .tiff, .hgt)", type=["tif", "tiff", "hgt"])
 if uploaded_file is not None:
     try:
         # Charger le fichier raster
