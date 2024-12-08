@@ -13,6 +13,7 @@ from datetime import datetime
 import rasterio
 from rasterio.plot import show
 from rasterio.io import MemoryFile
+from io import BytesIO
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
