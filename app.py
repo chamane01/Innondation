@@ -33,26 +33,49 @@ with col2:
 with col3:
     st.write("")  # Cette colonne est laissée vide pour centrer les logos
 
-# Streamlit - Interface
-st.title("Traitement de fichiers Raster")
+# Titre de l'application
+st.title("Traitement de fichiers Raster avec GDAL")
 
 # Téléversement du fichier raster
 uploaded_file = st.file_uploader("Téléversez un fichier Raster (.tif, .tiff, .hgt)", type=["tif", "tiff", "hgt"])
 
 if uploaded_file is not None:
     try:
-        # Lire le fichier comme un objet en mémoire
+        # Charger le fichier comme un objet en mémoire
         with BytesIO(uploaded_file.read()) as byte_file:
-            # Tenter d'ouvrir le fichier raster
-            with rasterio.open(byte_file) as src:
+            # Créer un fichier temporaire pour que GDAL puisse l'ouvrir
+            temp_filename = f"/tmp/{uploaded_file.name}"
+            with open(temp_filename, "wb") as temp_file:
+                temp_file.write(byte_file.read())
+
+            # Ouvrir le fichier raster avec GDAL
+            dataset = gdal.Open(temp_filename)
+
+            if dataset is None:
+                st.error("Impossible de lire le fichier raster. Veuillez vérifier le format.")
+            else:
                 st.success("Fichier raster chargé avec succès!")
-                st.write(src.meta)  # Afficher les métadonnées du raster
-                
+
+                # Afficher les métadonnées
+                st.write("**Métadonnées du fichier raster :**")
+                st.write({
+                    "Driver": dataset.GetDriver().LongName,
+                    "Taille": f"{dataset.RasterXSize} x {dataset.RasterYSize}",
+                    "Bandes": dataset.RasterCount,
+                    "Projection": dataset.GetProjection(),
+                })
+
+                # Lire la première bande comme un tableau NumPy
+                band = dataset.GetRasterBand(1)
+                array = band.ReadAsArray()
+
                 # Afficher un aperçu de la première bande
                 fig, ax = plt.subplots(figsize=(8, 6))
-                show(src.read(1), ax=ax, cmap="terrain")
+                cax = ax.imshow(array, cmap="terrain")
+                fig.colorbar(cax, ax=ax, orientation="vertical", label="Altitude (m)")
                 ax.set_title("Aperçu du raster")
                 st.pyplot(fig)
+
     except Exception as e:
         st.error(f"Erreur lors du traitement du fichier raster : {e}")
 else:
