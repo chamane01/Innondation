@@ -23,42 +23,99 @@ with col3:
 
 
 
-# Ajouter une option pour téléverser un fichier HGT
-uploaded_hgt_file = st.file_uploader("Téléversez un fichier HGT", type=["hgt"])
+# Importer les bibliothèques nécessaires
+import streamlit as st
+import pandas as pd
+import numpy as np
+import geopandas as gpd
+import matplotlib.pyplot as plt
+from scipy.interpolate import griddata
+from shapely.geometry import Polygon, box
+from shapely.geometry import MultiPolygon
+import contextily as ctx
+import ezdxf  # Bibliothèque pour créer des fichiers DXF
+from datetime import datetime
+import rasterio  # Pour gérer les fichiers GeoTIFF
 
-# Fonction pour charger les données HGT
-def charger_hgt(fichier_hgt):
+# Streamlit - Titre de l'application avec deux logos centrés
+col1, col2, col3 = st.columns([1, 1, 1])
+with col1:
+    st.image("POPOPO.jpg", width=150)
+with col2:
+    st.image("logo.png", width=150)
+with col3:
+    st.write("")  # Cette colonne est laissée vide pour centrer les logos
+
+st.title("Carte des zones inondées avec niveaux d'eau et surface")
+
+# Initialiser session_state pour stocker les données d'inondation
+if 'flood_data' not in st.session_state:
+    st.session_state.flood_data = {
+        'surface_bleu': None,  
+        'volume_eau': None,
+        'niveau_inondation': 0.0
+    }
+
+# Étape 1 : Sélectionner un site ou téléverser un fichier
+st.markdown("## Sélectionner un site ou téléverser un fichier GeoTIFF")
+uploaded_tiff_file = st.file_uploader("Téléversez un fichier GeoTIFF (.tif)", type=["tif"])
+
+# Charger les données depuis un fichier GeoTIFF
+def charger_tiff(fichier_tiff):
     try:
-        with rasterio.open(fichier_hgt) as src:
+        with rasterio.open(fichier_tiff) as src:
             # Lire les métadonnées et les données raster
-            meta = src.meta
             data = src.read(1)  # Lire la première bande
-            return data, meta
+            transform = src.transform  # Transformation spatiale
+            crs = src.crs  # Système de coordonnées
+            return data, transform, crs
     except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier HGT : {e}")
-        return None, None
+        st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
+        return None, None, None
 
-# Si un fichier HGT est téléversé
-if uploaded_hgt_file is not None:
-    data_hgt, meta_hgt = charger_hgt(uploaded_hgt_file)
+# Si un fichier GeoTIFF est téléversé
+if uploaded_tiff_file is not None:
+    data_tiff, transform_tiff, crs_tiff = charger_tiff(uploaded_tiff_file)
 
-    if data_hgt is not None:
-        st.write("**Métadonnées du fichier HGT :**")
-        st.json(meta_hgt)  # Afficher les métadonnées
-        st.write(f"Dimensions : {data_hgt.shape}")
-        st.write(f"Valeurs min : {data_hgt.min()}, max : {data_hgt.max()}")
+    if data_tiff is not None:
+        st.write("**Informations sur le fichier GeoTIFF :**")
+        st.write(f"Dimensions : {data_tiff.shape}")
+        st.write(f"Valeurs min : {data_tiff.min()}, max : {data_tiff.max()}")
+        st.write(f"Système de coordonnées : {crs_tiff}")
 
         # Afficher les données raster sous forme d'image
         fig, ax = plt.subplots(figsize=(8, 6))
-        cax = ax.imshow(data_hgt, cmap='terrain', extent=(
-            meta_hgt['transform'][2],
-            meta_hgt['transform'][2] + meta_hgt['transform'][0] * data_hgt.shape[1],
-            meta_hgt['transform'][5] + meta_hgt['transform'][4] * data_hgt.shape[0],
-            meta_hgt['transform'][5]
-        ))
+        extent = (
+            transform_tiff[2],  # Min X
+            transform_tiff[2] + transform_tiff[0] * data_tiff.shape[1],  # Max X
+            transform_tiff[5] + transform_tiff[4] * data_tiff.shape[0],  # Min Y
+            transform_tiff[5]  # Max Y
+        )
+        cax = ax.imshow(data_tiff, cmap='terrain', extent=extent)
         fig.colorbar(cax, ax=ax, label="Altitude (m)")
-        ax.set_title("Carte d'altitude (HGT)")
+        ax.set_title("Carte d'altitude (GeoTIFF)")
         st.pyplot(fig)
+
+        # Niveau d'eau et analyse
+        st.session_state.flood_data['niveau_inondation'] = st.number_input(
+            "Entrez le niveau d'eau (mètres)", min_value=float(data_tiff.min()), max_value=float(data_tiff.max()), step=0.1
+        )
+
+        if st.button("Calculer et afficher la zone inondée"):
+            # Calculer la zone inondée
+            inondation_mask = data_tiff <= st.session_state.flood_data['niveau_inondation']
+            surface_inondee = np.sum(inondation_mask) * (transform_tiff[0] * transform_tiff[4]) / 10_000  # En hectares
+            st.session_state.flood_data['surface_bleu'] = surface_inondee
+            st.write(f"**Surface inondée :** {surface_inondee:.2f} hectares")
+
+            # Afficher la carte de l'inondation
+            fig, ax = plt.subplots(figsize=(8, 6))
+            ax.imshow(data_tiff, cmap='terrain', extent=extent)
+            ax.imshow(inondation_mask, cmap='Blues', alpha=0.5, extent=extent)
+            ax.set_title("Zone inondée (en bleu)")
+            fig.colorbar(cax, ax=ax, label="Altitude (m)")
+            st.pyplot(fig)
+
 
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
 
