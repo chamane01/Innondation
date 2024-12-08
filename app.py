@@ -26,61 +26,58 @@ with col3:
 
 
 
+import streamlit as st
+import rasterio
+import matplotlib.pyplot as plt
+from io import BytesIO
+
+# Fonction principale
+def process_raster(uploaded_file):
+    if uploaded_file is not None:
+        try:
+            # Enregistrer temporairement le fichier téléchargé
+            file_path = "/tmp/temp_file.tif"  # Chemin temporaire pour le fichier
+            with open(file_path, "wb") as f:
+                f.write(uploaded_file.read())
+            
+            # Lire le fichier directement depuis le disque
+            with rasterio.open(file_path) as src:
+                # Vérifier si le format est pris en charge
+                if src.driver not in ["GTiff", "HGT"]:
+                    st.error("Format non supporté. Veuillez téléverser un fichier .tif, .tiff ou .hgt.")
+                else:
+                    st.success("Fichier raster chargé avec succès!")
+                    # Afficher les métadonnées
+                    st.write({
+                        "Driver": src.driver,
+                        "Taille": f"{src.width} x {src.height}",
+                        "Bandes": src.count,
+                        "Projection": src.crs.to_string() if src.crs else "Aucune projection"
+                    })
+                    
+                    # Lire la première bande du raster
+                    array = src.read(1)
+                    
+                    # Afficher un aperçu du raster
+                    fig, ax = plt.subplots(figsize=(8, 6))
+                    cax = ax.imshow(array, cmap="terrain")
+                    fig.colorbar(cax, ax=ax, orientation="vertical", label="Altitude (m)")
+                    ax.set_title("Aperçu du raster")
+                    st.pyplot(fig)
+        
+        except Exception as e:
+            st.error(f"Erreur lors du traitement du fichier raster : {e}")
+
 # Titre de l'application
 st.title("Traitement de fichiers Raster avec Rasterio")
 
+# Téléversement du fichier raster
+uploaded_file = st.file_uploader("Téléversez un fichier Raster (.tif, .tiff, .hgt)", type=["tif", "tiff", "hgt"])
 
-with rasterio.open("000444.tif") as src:
-    st.write({
-        "Driver": src.driver,
-        "Taille": f"{src.width} x {src.height}",
-        "Bandes": src.count,
-        "Projection": src.crs.to_string() if src.crs else "Aucune projection"
-    })
-
-if uploaded_file is not None:
-    try:
-        # Enregistrer temporairement le fichier téléchargé
-        with open("temp_file.tif", "wb") as f:
-            f.write(uploaded_file.read())
-        
-        # Lire le fichier directement depuis le disque
-        with rasterio.open("temp_file.tif") as src:
-            # Vérifier si le format est pris en charge
-            if src.driver not in ["GTiff", "HGT"]:
-                st.error("Format non supporté. Veuillez téléverser un fichier .tif, .tiff ou .hgt.")
-            else:
-                st.success("Fichier raster chargé avec succès!")
-                st.write({
-                    "Driver": src.driver,
-                    "Taille": f"{src.width} x {src.height}",
-                    "Bandes": src.count,
-                    "Projection": src.crs.to_string() if src.crs else "Aucune projection"
-                })
-                array = src.read(1)
-                fig, ax = plt.subplots(figsize=(8, 6))
-                cax = ax.imshow(array, cmap="terrain")
-                fig.colorbar(cax, ax=ax, orientation="vertical", label="Altitude (m)")
-                ax.set_title("Aperçu du raster")
-                st.pyplot(fig)
-    except Exception as e:
-        st.error(f"Erreur lors du traitement du fichier raster : {e}")
+# Traitement du fichier téléchargé
+process_raster(uploaded_file)
 
 
-# Lecture du fichier XML des métadonnées si fourni
-if uploaded_xml is not None:
-    try:
-        # Charger le fichier XML
-        xml_content = uploaded_xml.read().decode("utf-8")
-        root = ET.fromstring(xml_content)
-
-        # Extraire et afficher des informations clés
-        st.write("**Métadonnées supplémentaires (XML) :**")
-        for child in root:
-            st.write(f"{child.tag}: {child.text}")
-
-    except Exception as e:
-        st.error(f"Erreur lors du traitement du fichier XML : {e}")
 
 # Instructions à l'utilisateur
 st.markdown("""
