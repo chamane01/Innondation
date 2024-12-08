@@ -20,6 +20,45 @@ with col2:
 with col3:
     st.write("")  # Cette colonne est laissée vide pour centrer les logos
 
+
+
+# Ajouter une option pour téléverser un fichier HGT
+uploaded_hgt_file = st.file_uploader("Téléversez un fichier HGT", type=["hgt"])
+
+# Fonction pour charger les données HGT
+def charger_hgt(fichier_hgt):
+    try:
+        with rasterio.open(fichier_hgt) as src:
+            # Lire les métadonnées et les données raster
+            meta = src.meta
+            data = src.read(1)  # Lire la première bande
+            return data, meta
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier HGT : {e}")
+        return None, None
+
+# Si un fichier HGT est téléversé
+if uploaded_hgt_file is not None:
+    data_hgt, meta_hgt = charger_hgt(uploaded_hgt_file)
+
+    if data_hgt is not None:
+        st.write("**Métadonnées du fichier HGT :**")
+        st.json(meta_hgt)  # Afficher les métadonnées
+        st.write(f"Dimensions : {data_hgt.shape}")
+        st.write(f"Valeurs min : {data_hgt.min()}, max : {data_hgt.max()}")
+
+        # Afficher les données raster sous forme d'image
+        fig, ax = plt.subplots(figsize=(8, 6))
+        cax = ax.imshow(data_hgt, cmap='terrain', extent=(
+            meta_hgt['transform'][2],
+            meta_hgt['transform'][2] + meta_hgt['transform'][0] * data_hgt.shape[1],
+            meta_hgt['transform'][5] + meta_hgt['transform'][4] * data_hgt.shape[0],
+            meta_hgt['transform'][5]
+        ))
+        fig.colorbar(cax, ax=ax, label="Altitude (m)")
+        ax.set_title("Carte d'altitude (HGT)")
+        st.pyplot(fig)
+
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
 
 # Initialiser session_state pour stocker les données d'inondation
