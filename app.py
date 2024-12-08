@@ -10,10 +10,6 @@ from shapely.geometry import MultiPolygon
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
-import rasterio
-from rasterio.plot import show
-import xml.etree.ElementTree as ET
-from io import BytesIO
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -23,71 +19,6 @@ with col2:
     st.image("logo.png", width=150)
 with col3:
     st.write("")  # Cette colonne est laissée vide pour centrer les logos
-
-
-
-import streamlit as st
-import rasterio
-import matplotlib.pyplot as plt
-from io import BytesIO
-
-# Fonction principale
-def process_raster(uploaded_file):
-    if uploaded_file is not None:
-        try:
-            # Enregistrer temporairement le fichier téléchargé
-            file_path = "/tmp/temp_file.tif"  # Chemin temporaire pour le fichier
-            with open(file_path, "wb") as f:
-                f.write(uploaded_file.read())
-            
-            # Lire le fichier directement depuis le disque
-            with rasterio.open(file_path) as src:
-                # Vérifier si le format est pris en charge
-                if src.driver not in ["GTiff", "HGT"]:
-                    st.error("Format non supporté. Veuillez téléverser un fichier .tif, .tiff ou .hgt.")
-                else:
-                    st.success("Fichier raster chargé avec succès!")
-                    # Afficher les métadonnées
-                    st.write({
-                        "Driver": src.driver,
-                        "Taille": f"{src.width} x {src.height}",
-                        "Bandes": src.count,
-                        "Projection": src.crs.to_string() if src.crs else "Aucune projection"
-                    })
-                    
-                    # Lire la première bande du raster
-                    array = src.read(1)
-                    
-                    # Afficher un aperçu du raster
-                    fig, ax = plt.subplots(figsize=(8, 6))
-                    cax = ax.imshow(array, cmap="terrain")
-                    fig.colorbar(cax, ax=ax, orientation="vertical", label="Altitude (m)")
-                    ax.set_title("Aperçu du raster")
-                    st.pyplot(fig)
-        
-        except Exception as e:
-            st.error(f"Erreur lors du traitement du fichier raster : {e}")
-
-# Titre de l'application
-st.title("Traitement de fichiers Raster avec Rasterio")
-
-# Téléversement du fichier raster
-uploaded_file = st.file_uploader("Téléversez un fichier Raster (.tif, .tiff, .hgt)", type=["tif", "tiff", "hgt"])
-
-# Traitement du fichier téléchargé
-process_raster(uploaded_file)
-
-
-
-# Instructions à l'utilisateur
-st.markdown("""
-**Instructions :**
-1. Chargez un fichier raster au format TIFF, GeoTIFF, ou HGT.
-2. (Optionnel) Chargez un fichier XML contenant des métadonnées supplémentaires.
-3. Consultez les métadonnées et l'aperçu.
-4. Ajoutez vos traitements spécifiques après le chargement.
-""")
-
 
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
 
