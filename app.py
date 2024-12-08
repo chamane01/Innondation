@@ -40,8 +40,9 @@ uploaded_file = st.file_uploader("Téléversez un fichier Raster (.tif, .tiff, .
 
 if uploaded_file is not None:
     try:
-        # Charger le fichier avec rasterio, quel que soit son type MIME
+        # Lire le fichier comme un objet en mémoire
         with BytesIO(uploaded_file.read()) as byte_file:
+            # Tenter d'ouvrir le fichier raster
             with rasterio.open(byte_file) as src:
                 st.success("Fichier raster chargé avec succès!")
                 st.write(src.meta)  # Afficher les métadonnées du raster
@@ -63,7 +64,6 @@ st.markdown("""
 2. Consultez les métadonnées et l'aperçu.
 3. Ajoutez vos traitements spécifiques après le chargement.
 """)
-
 
 
 
