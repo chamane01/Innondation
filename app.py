@@ -35,6 +35,14 @@ uploaded_file = st.file_uploader("Téléversez un fichier Raster (.tif, .tiff, .
 # Téléversement du fichier XML des métadonnées
 uploaded_xml = st.file_uploader("Téléversez un fichier XML des métadonnées (optionnel)", type=["xml"])
 
+with rasterio.open("000444.tif") as src:
+    st.write({
+        "Driver": src.driver,
+        "Taille": f"{src.width} x {src.height}",
+        "Bandes": src.count,
+        "Projection": src.crs.to_string() if src.crs else "Aucune projection"
+    })
+
 if uploaded_file is not None:
     try:
         # Charger le fichier comme un objet en mémoire
