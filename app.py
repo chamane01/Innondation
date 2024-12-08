@@ -29,11 +29,6 @@ with col3:
 # Titre de l'application
 st.title("Traitement de fichiers Raster avec Rasterio")
 
-# Téléversement du fichier raster
-uploaded_file = st.file_uploader("Téléversez un fichier Raster (.tif, .tiff, .hgt)", type=["tif", "tiff", "hgt"])
-
-# Téléversement du fichier XML des métadonnées
-uploaded_xml = st.file_uploader("Téléversez un fichier XML des métadonnées (optionnel)", type=["xml"])
 
 with rasterio.open("000444.tif") as src:
     st.write({
@@ -45,37 +40,32 @@ with rasterio.open("000444.tif") as src:
 
 if uploaded_file is not None:
     try:
-        # Charger le fichier comme un objet en mémoire
-        with BytesIO(uploaded_file.read()) as byte_file:
-            # Lire le fichier avec Rasterio
-            with rasterio.open(byte_file) as src:
-                # Vérifier si le format est pris en charge
-                if src.driver not in ["GTiff", "HGT"]:
-                    st.error("Format non supporté. Veuillez téléverser un fichier .tif, .tiff ou .hgt.")
-                else:
-                    st.success("Fichier raster chargé avec succès!")
-
-                    # Afficher les métadonnées
-                    st.write("**Métadonnées du fichier raster :**")
-                    st.write({
-                        "Driver": src.driver,
-                        "Taille": f"{src.width} x {src.height}",
-                        "Bandes": src.count,
-                        "Projection": src.crs,
-                    })
-
-                    # Lire la première bande comme un tableau NumPy
-                    array = src.read(1)
-
-                    # Afficher un aperçu de la première bande
-                    fig, ax = plt.subplots(figsize=(8, 6))
-                    cax = ax.imshow(array, cmap="terrain")
-                    fig.colorbar(cax, ax=ax, orientation="vertical", label="Altitude (m)")
-                    ax.set_title("Aperçu du raster")
-                    st.pyplot(fig)
-
+        # Enregistrer temporairement le fichier téléchargé
+        with open("temp_file.tif", "wb") as f:
+            f.write(uploaded_file.read())
+        
+        # Lire le fichier directement depuis le disque
+        with rasterio.open("temp_file.tif") as src:
+            # Vérifier si le format est pris en charge
+            if src.driver not in ["GTiff", "HGT"]:
+                st.error("Format non supporté. Veuillez téléverser un fichier .tif, .tiff ou .hgt.")
+            else:
+                st.success("Fichier raster chargé avec succès!")
+                st.write({
+                    "Driver": src.driver,
+                    "Taille": f"{src.width} x {src.height}",
+                    "Bandes": src.count,
+                    "Projection": src.crs.to_string() if src.crs else "Aucune projection"
+                })
+                array = src.read(1)
+                fig, ax = plt.subplots(figsize=(8, 6))
+                cax = ax.imshow(array, cmap="terrain")
+                fig.colorbar(cax, ax=ax, orientation="vertical", label="Altitude (m)")
+                ax.set_title("Aperçu du raster")
+                st.pyplot(fig)
     except Exception as e:
         st.error(f"Erreur lors du traitement du fichier raster : {e}")
+
 
 # Lecture du fichier XML des métadonnées si fourni
 if uploaded_xml is not None:
