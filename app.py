@@ -14,6 +14,7 @@ import rasterio
 from rasterio.plot import show
 from rasterio.io import MemoryFile
 from io import BytesIO
+from osgeo import gdal
 
 try:
     with rasterio.open(uploaded_file) as src:
