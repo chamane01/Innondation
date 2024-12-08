@@ -40,7 +40,7 @@ uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["
 st.title("Traitement d'un fichier Raster")
 
 # Téléversement du fichier raster
-uploaded_file = st.file_uploader("Téléversez un fichier raster", type=["tif", "geotiff", "img"])
+uploaded_file = st.file_uploader("Téléversez un fichier raster", type=["tif", "geotiff", "img","hgt",])
 
 if uploaded_file is not None:
     try:
