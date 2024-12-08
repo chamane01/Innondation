@@ -1,4 +1,5 @@
 osgeo
+rasterio
 gpxpy
 streamlit
 pandas
