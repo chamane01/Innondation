@@ -15,6 +15,14 @@ from rasterio.plot import show
 from rasterio.io import MemoryFile
 from io import BytesIO
 
+try:
+    with rasterio.open(uploaded_file) as src:
+        print(src.profile)  # Afficher les métadonnées du fichier
+except Exception as e:
+    print(f"Erreur lors de l'ouverture du fichier raster : {e}")
+
+
+
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
 with col1:
@@ -32,34 +40,19 @@ uploaded_file = st.file_uploader("Téléversez un fichier Raster (.tif, .tiff, .
 
 if uploaded_file is not None:
     try:
-        # Charger le fichier dans la mémoire à l'aide de BytesIO et MemoryFile
-        with BytesIO(uploaded_file.read()) as byte_file:
-            with MemoryFile(byte_file) as memfile:
-                with memfile.open() as src:
-                    st.success("Fichier raster chargé avec succès !")
-                    
-                    # Afficher les métadonnées
-                    st.subheader("Métadonnées du fichier")
-                    st.write(src.meta)
-                    
-                    # Visualisation de la première bande
-                    st.subheader("Aperçu du raster (première bande)")
-                    fig, ax = plt.subplots(figsize=(8, 6))
-                    show(src.read(1), ax=ax, cmap="terrain")
-                    ax.set_title("Aperçu des données")
-                    st.pyplot(fig)
-
-                    # Exemple de traitement - Histogramme des valeurs
-                    st.subheader("Histogramme des valeurs du raster")
-                    hist, bins = np.histogram(src.read(1).flatten(), bins=50)
-                    fig, ax = plt.subplots()
-                    ax.plot(bins[:-1], hist)
-                    ax.set_title("Histogramme des valeurs")
-                    st.pyplot(fig)
+        # Vérification du type de fichier
+        if uploaded_file.type in ['image/tiff', 'application/zip']:
+            with BytesIO(uploaded_file.read()) as byte_file:
+                with rasterio.open(byte_file) as src:
+                    st.success("Fichier raster chargé avec succès!")
+                    st.write(src.meta)  # Afficher les métadonnées du raster
+                    st.image(src.read(1), use_column_width=True)  # Afficher un aperçu
+        else:
+            st.error("Format de fichier invalide. Veuillez télécharger un fichier TIFF (.tif ou .tiff).")
     except Exception as e:
         st.error(f"Erreur lors du traitement du fichier raster : {e}")
 else:
-    st.info("Veuillez téléverser un fichier raster pour commencer.")
+    st.info("Veuillez téléverser un fichier raster.")
 
 # Instructions à l'utilisateur
 st.markdown("""
