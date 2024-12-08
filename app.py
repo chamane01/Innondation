@@ -32,6 +32,39 @@ if 'flood_data' not in st.session_state:
         'niveau_inondation': 0.0
     }
 
+import streamlit as st
+import pandas as pd
+import numpy as np
+import geopandas as gpd
+import matplotlib.pyplot as plt
+from scipy.interpolate import griddata
+from shapely.geometry import Polygon, box
+from shapely.geometry import MultiPolygon
+import contextily as ctx
+import ezdxf  # Bibliothèque pour créer des fichiers DXF
+from datetime import datetime
+import rasterio
+from rasterio.plot import show
+
+# Streamlit - Titre de l'application avec deux logos centrés
+col1, col2, col3 = st.columns([1, 1, 1])
+with col1:
+    st.image("POPOPO.jpg", width=150)
+with col2:
+    st.image("logo.png", width=150)
+with col3:
+    st.write("")  # Cette colonne est laissée vide pour centrer les logos
+
+st.title("Carte des zones inondées avec niveaux d'eau et surface")
+
+# Initialiser session_state pour stocker les données d'inondation
+if 'flood_data' not in st.session_state:
+    st.session_state.flood_data = {
+        'surface_bleu': None,  
+        'volume_eau': None,
+        'niveau_inondation': 0.0
+    }
+
 # Étape 1 : Sélectionner un site ou téléverser un fichier
 st.markdown("## Sélectionner un site ou téléverser un fichier")
 option_site = st.selectbox("Sélectionnez un site", ("Aucun", "AYAME 1", "AYAME 2"))
