@@ -35,6 +35,45 @@ st.markdown("## Sélectionner un site ou téléverser un fichier")
 option_site = st.selectbox("Sélectionnez un site", ("Aucun", "AYAME 1", "AYAME 2"))
 uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
 
+
+# Configuration de l'application
+st.title("Traitement d'un fichier Raster")
+
+# Téléversement du fichier raster
+uploaded_file = st.file_uploader("Téléversez un fichier raster", type=["tif", "geotiff", "img"])
+
+if uploaded_file is not None:
+    try:
+        # Charger le fichier raster
+        with rasterio.open(uploaded_file) as src:
+            st.success("Fichier raster chargé avec succès !")
+            
+            # Afficher les métadonnées
+            st.subheader("Métadonnées du fichier")
+            st.write(src.meta)
+            
+            # Visualisation de la première bande
+            st.subheader("Aperçu du raster (première bande)")
+            fig, ax = plt.subplots(figsize=(8, 6))
+            show(src, ax=ax)
+            st.pyplot(fig)
+            
+            # Traitement ou exportation (remplacez cette partie par vos besoins)
+            st.write("Traitement en cours... (personnalisez cette étape selon vos besoins)")
+            
+    except Exception as e:
+        st.error(f"Erreur lors du traitement du fichier raster : {str(e)}")
+else:
+    st.info("Veuillez téléverser un fichier raster pour commencer.")
+
+# Note d'aide
+st.markdown("""
+**Instructions :**
+1. Chargez un fichier raster au format TIFF, GeoTIFF, ou IMG.
+2. Consultez les métadonnées et l'aperçu.
+3. Ajoutez vos traitements spécifiques après le chargement.
+""")
+
 # Charger les données en fonction de l'option sélectionnée
 def charger_fichier(fichier, is_uploaded=False):
     try:
