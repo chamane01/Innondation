@@ -32,7 +32,7 @@ with col2:
 with col3:
     st.write("")  # Cette colonne est laissée vide pour centrer les logos
 
-# Interface Streamlit
+# Streamlit - Interface
 st.title("Traitement de fichiers Raster")
 
 # Téléversement du fichier raster
@@ -40,15 +40,17 @@ uploaded_file = st.file_uploader("Téléversez un fichier Raster (.tif, .tiff, .
 
 if uploaded_file is not None:
     try:
-        # Vérification du type de fichier
-        if uploaded_file.type in ['image/tiff', 'application/zip']:
-            with BytesIO(uploaded_file.read()) as byte_file:
-                with rasterio.open(byte_file) as src:
-                    st.success("Fichier raster chargé avec succès!")
-                    st.write(src.meta)  # Afficher les métadonnées du raster
-                    st.image(src.read(1), use_column_width=True)  # Afficher un aperçu
-        else:
-            st.error("Format de fichier invalide. Veuillez télécharger un fichier TIFF (.tif ou .tiff).")
+        # Charger le fichier avec rasterio, quel que soit son type MIME
+        with BytesIO(uploaded_file.read()) as byte_file:
+            with rasterio.open(byte_file) as src:
+                st.success("Fichier raster chargé avec succès!")
+                st.write(src.meta)  # Afficher les métadonnées du raster
+                
+                # Afficher un aperçu de la première bande
+                fig, ax = plt.subplots(figsize=(8, 6))
+                show(src.read(1), ax=ax, cmap="terrain")
+                ax.set_title("Aperçu du raster")
+                st.pyplot(fig)
     except Exception as e:
         st.error(f"Erreur lors du traitement du fichier raster : {e}")
 else:
@@ -57,10 +59,12 @@ else:
 # Instructions à l'utilisateur
 st.markdown("""
 **Instructions :**
-1. Chargez un fichier raster au format TIFF, GeoTIFF, ou IMG.
+1. Chargez un fichier raster au format TIFF, GeoTIFF, ou HGT.
 2. Consultez les métadonnées et l'aperçu.
 3. Ajoutez vos traitements spécifiques après le chargement.
 """)
+
+
 
 
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
