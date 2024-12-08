@@ -10,6 +10,9 @@ from shapely.geometry import MultiPolygon
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
+import rasterio
+from rasterio.plot import show
+import xml.etree.ElementTree as ET
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -19,6 +22,76 @@ with col2:
     st.image("logo.png", width=150)
 with col3:
     st.write("")  # Cette colonne est laissée vide pour centrer les logos
+
+
+
+# Titre de l'application
+st.title("Traitement de fichiers Raster avec Rasterio")
+
+# Téléversement du fichier raster
+uploaded_file = st.file_uploader("Téléversez un fichier Raster (.tif, .tiff, .hgt)", type=["tif", "tiff", "hgt"])
+
+# Téléversement du fichier XML des métadonnées
+uploaded_xml = st.file_uploader("Téléversez un fichier XML des métadonnées (optionnel)", type=["xml"])
+
+if uploaded_file is not None:
+    try:
+        # Charger le fichier comme un objet en mémoire
+        with BytesIO(uploaded_file.read()) as byte_file:
+            # Lire le fichier avec Rasterio
+            with rasterio.open(byte_file) as src:
+                # Vérifier si le format est pris en charge
+                if src.driver not in ["GTiff", "HGT"]:
+                    st.error("Format non supporté. Veuillez téléverser un fichier .tif, .tiff ou .hgt.")
+                else:
+                    st.success("Fichier raster chargé avec succès!")
+
+                    # Afficher les métadonnées
+                    st.write("**Métadonnées du fichier raster :**")
+                    st.write({
+                        "Driver": src.driver,
+                        "Taille": f"{src.width} x {src.height}",
+                        "Bandes": src.count,
+                        "Projection": src.crs,
+                    })
+
+                    # Lire la première bande comme un tableau NumPy
+                    array = src.read(1)
+
+                    # Afficher un aperçu de la première bande
+                    fig, ax = plt.subplots(figsize=(8, 6))
+                    cax = ax.imshow(array, cmap="terrain")
+                    fig.colorbar(cax, ax=ax, orientation="vertical", label="Altitude (m)")
+                    ax.set_title("Aperçu du raster")
+                    st.pyplot(fig)
+
+    except Exception as e:
+        st.error(f"Erreur lors du traitement du fichier raster : {e}")
+
+# Lecture du fichier XML des métadonnées si fourni
+if uploaded_xml is not None:
+    try:
+        # Charger le fichier XML
+        xml_content = uploaded_xml.read().decode("utf-8")
+        root = ET.fromstring(xml_content)
+
+        # Extraire et afficher des informations clés
+        st.write("**Métadonnées supplémentaires (XML) :**")
+        for child in root:
+            st.write(f"{child.tag}: {child.text}")
+
+    except Exception as e:
+        st.error(f"Erreur lors du traitement du fichier XML : {e}")
+
+# Instructions à l'utilisateur
+st.markdown("""
+**Instructions :**
+1. Chargez un fichier raster au format TIFF, GeoTIFF, ou HGT.
+2. (Optionnel) Chargez un fichier XML contenant des métadonnées supplémentaires.
+3. Consultez les métadonnées et l'aperçu.
+4. Ajoutez vos traitements spécifiques après le chargement.
+""")
+
 
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
 
