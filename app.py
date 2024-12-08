@@ -1,4 +1,3 @@
-# Importer les bibliothèques nécessaires
 import streamlit as st
 import pandas as pd
 import numpy as np
@@ -8,6 +7,7 @@ from scipy.interpolate import griddata
 from shapely.geometry import Polygon, box
 from shapely.geometry import MultiPolygon
 import contextily as ctx
+import rasterio  # Bibliothèque pour lire les fichiers raster
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
 
@@ -25,40 +25,44 @@ st.title("Carte des zones inondées avec niveaux d'eau et surface")
 # Initialiser session_state pour stocker les données d'inondation
 if 'flood_data' not in st.session_state:
     st.session_state.flood_data = {
-        'surface_bleu': None,  
+        'surface_bleu': None,
         'volume_eau': None,
         'niveau_inondation': 0.0
     }
 
-# Étape 1 : Sélectionner un site ou téléverser un fichier
-st.markdown("## Sélectionner un site ou téléverser un fichier")
-option_site = st.selectbox("Sélectionnez un site", ("Aucun", "AYAME 1", "AYAME 2"))
-uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
+# Étape 1 : Téléverser un fichier raster
+st.markdown("## Téléversez un fichier raster")
+uploaded_file = st.file_uploader("Téléversez un fichier raster (.tif)", type=["tif"])
 
-# Charger les données en fonction de l'option sélectionnée
-def charger_fichier(fichier, is_uploaded=False):
+def charger_raster(fichier):
     try:
-        if is_uploaded:
-            if fichier.name.endswith('.xlsx'):
-                df = pd.read_excel(fichier)
-            elif fichier.name.endswith('.txt'):
-                df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
-        else:
-            df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
-        return df
+        with rasterio.open(fichier) as src:
+            data = src.read(1)  # Charger la première bande
+            transform = src.transform
+            bounds = src.bounds
+            resolution = src.res
+            return data, transform, bounds, resolution
     except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier : {e}")
-        return None
+        st.error(f"Erreur lors du chargement du fichier raster : {e}")
+        return None, None, None, None
 
-if option_site == "AYAME 1":
-    df = charger_fichier('AYAME1.txt')
-elif option_site == "AYAME 2":
-    df = charger_fichier('AYAME2.txt')
-elif uploaded_file is not None:
-    df = charger_fichier(uploaded_file, is_uploaded=True)
-else:
-    st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
-    df = None
+# Charger les données si un fichier raster est téléversé
+if uploaded_file is not None:
+    raster_data, transform, bounds, resolution = charger_raster(uploaded_file)
+    if raster_data is not None:
+        st.markdown("---")
+
+        # Récupérer les coordonnées et autres informations
+        X_min, X_max = bounds.left, bounds.right
+        Y_min, Y_max = bounds.bottom, bounds.top
+        grid_X, grid_Y = np.meshgrid(
+            np.arange(X_min, X_max, resolution[0]),
+            np.arange(Y_min, Y_max, resolution[1])
+        )
+        grid_Z = raster_data
+
+        # Demander le niveau d'inondation et la méthode d'interpolation
+        st.session_state.flood_data['niveau_inondation'] = st.number_input("Entrez le niveau d'eau (mètres)", min_value=0.0, step=0.1)
 
 
 
