@@ -14,7 +14,6 @@ import rasterio
 from rasterio.plot import show
 from rasterio.io import MemoryFile
 
-
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
 with col1:
@@ -23,6 +22,52 @@ with col2:
     st.image("logo.png", width=150)
 with col3:
     st.write("")  # Cette colonne est laissée vide pour centrer les logos
+
+# Interface Streamlit
+st.title("Traitement de fichiers Raster")
+
+# Téléversement du fichier raster
+uploaded_file = st.file_uploader("Téléversez un fichier Raster (.tif, .tiff, .hgt)", type=["tif", "tiff", "hgt"])
+
+if uploaded_file is not None:
+    try:
+        # Charger le fichier dans la mémoire à l'aide de BytesIO et MemoryFile
+        with BytesIO(uploaded_file.read()) as byte_file:
+            with MemoryFile(byte_file) as memfile:
+                with memfile.open() as src:
+                    st.success("Fichier raster chargé avec succès !")
+                    
+                    # Afficher les métadonnées
+                    st.subheader("Métadonnées du fichier")
+                    st.write(src.meta)
+                    
+                    # Visualisation de la première bande
+                    st.subheader("Aperçu du raster (première bande)")
+                    fig, ax = plt.subplots(figsize=(8, 6))
+                    show(src.read(1), ax=ax, cmap="terrain")
+                    ax.set_title("Aperçu des données")
+                    st.pyplot(fig)
+
+                    # Exemple de traitement - Histogramme des valeurs
+                    st.subheader("Histogramme des valeurs du raster")
+                    hist, bins = np.histogram(src.read(1).flatten(), bins=50)
+                    fig, ax = plt.subplots()
+                    ax.plot(bins[:-1], hist)
+                    ax.set_title("Histogramme des valeurs")
+                    st.pyplot(fig)
+    except Exception as e:
+        st.error(f"Erreur lors du traitement du fichier raster : {e}")
+else:
+    st.info("Veuillez téléverser un fichier raster pour commencer.")
+
+# Instructions à l'utilisateur
+st.markdown("""
+**Instructions :**
+1. Chargez un fichier raster au format TIFF, GeoTIFF, ou IMG.
+2. Consultez les métadonnées et l'aperçu.
+3. Ajoutez vos traitements spécifiques après le chargement.
+""")
+
 
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
 
@@ -34,49 +79,10 @@ if 'flood_data' not in st.session_state:
         'niveau_inondation': 0.0
     }
 
-
-# Interface Streamlit
-st.title("Traitement de fichiers Raster")
-
-# Téléversement du fichier raster
-uploaded_file = st.file_uploader("Téléversez un fichier Raster (.tif, .tiff, .hgt)", type=["tif", "tiff", "hgt"])
-
-if uploaded_file is not None:
-    try:
-        # Lire le fichier téléversé avec MemoryFile
-        with MemoryFile(uploaded_file.read()) as memfile:
-            with memfile.open() as src:
-                st.success("Fichier raster chargé avec succès !")
-                
-                # Afficher les métadonnées
-                st.subheader("Métadonnées du fichier")
-                st.write(src.meta)
-                
-                # Visualisation de la première bande
-                st.subheader("Aperçu du raster (première bande)")
-                fig, ax = plt.subplots(figsize=(8, 6))
-                show(src.read(1), ax=ax, cmap="terrain")
-                ax.set_title("Aperçu des données")
-                st.pyplot(fig)
-
-                # Exemple de traitement - Histogramme des valeurs
-                st.subheader("Histogramme des valeurs du raster")
-                hist, bins = np.histogram(src.read(1).flatten(), bins=50)
-                fig, ax = plt.subplots()
-                ax.plot(bins[:-1], hist)
-                ax.set_title("Histogramme des valeurs")
-                st.pyplot(fig)
-    except Exception as e:
-        st.error(f"Erreur lors du traitement du fichier raster : {e}")
-else:
-    st.info("Veuillez téléverser un fichier raster pour commencer.")
-# Note d'aide
-st.markdown("""
-**Instructions :**
-1. Chargez un fichier raster au format TIFF, GeoTIFF, ou IMG.
-2. Consultez les métadonnées et l'aperçu.
-3. Ajoutez vos traitements spécifiques après le chargement.
-""")
+# Étape 1 : Sélectionner un site ou téléverser un fichier
+st.markdown("## Sélectionner un site ou téléverser un fichier")
+option_site = st.selectbox("Sélectionnez un site", ("Aucun", "AYAME 1", "AYAME 2"))
+uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
 
 # Charger les données en fonction de l'option sélectionnée
 def charger_fichier(fichier, is_uploaded=False):
