@@ -38,35 +38,41 @@ option_site = st.selectbox("Sélectionnez un site", ("Aucun", "AYAME 1", "AYAME 
 uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
 
 
-# Configuration de l'application
-st.title("Traitement d'un fichier Raster")
+# Interface Streamlit
+st.title("Traitement de fichiers Raster")
 
 # Téléversement du fichier raster
 uploaded_file = st.file_uploader("Téléversez un fichier Raster (.tif, .tiff, .hgt)", type=["tif", "tiff", "hgt"])
+
 if uploaded_file is not None:
     try:
-        # Charger le fichier raster
-        with rasterio.open(uploaded_file) as src:
-            st.success("Fichier raster chargé avec succès !")
-            
-            # Afficher les métadonnées
-            st.subheader("Métadonnées du fichier")
-            st.write(src.meta)
-            
-            # Visualisation de la première bande
-            st.subheader("Aperçu du raster (première bande)")
-            fig, ax = plt.subplots(figsize=(8, 6))
-            show(src, ax=ax)
-            st.pyplot(fig)
-            
-            # Traitement ou exportation (remplacez cette partie par vos besoins)
-            st.write("Traitement en cours... (personnalisez cette étape selon vos besoins)")
-            
+        # Lire le fichier téléversé avec MemoryFile
+        with MemoryFile(uploaded_file.read()) as memfile:
+            with memfile.open() as src:
+                st.success("Fichier raster chargé avec succès !")
+                
+                # Afficher les métadonnées
+                st.subheader("Métadonnées du fichier")
+                st.write(src.meta)
+                
+                # Visualisation de la première bande
+                st.subheader("Aperçu du raster (première bande)")
+                fig, ax = plt.subplots(figsize=(8, 6))
+                show(src.read(1), ax=ax, cmap="terrain")
+                ax.set_title("Aperçu des données")
+                st.pyplot(fig)
+
+                # Exemple de traitement - Histogramme des valeurs
+                st.subheader("Histogramme des valeurs du raster")
+                hist, bins = np.histogram(src.read(1).flatten(), bins=50)
+                fig, ax = plt.subplots()
+                ax.plot(bins[:-1], hist)
+                ax.set_title("Histogramme des valeurs")
+                st.pyplot(fig)
     except Exception as e:
-        st.error(f"Erreur lors du traitement du fichier raster : {str(e)}")
+        st.error(f"Erreur lors du traitement du fichier raster : {e}")
 else:
     st.info("Veuillez téléverser un fichier raster pour commencer.")
-
 # Note d'aide
 st.markdown("""
 **Instructions :**
