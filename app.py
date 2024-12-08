@@ -216,11 +216,8 @@ if df is not None:
             st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
             st.write(f"**Système de projection :** EPSG:32630")
 
-
-routes_gdf = None
-
 # Fonction pour générer la carte de profondeur avec dégradé de couleurs
-def generate_depth_map(routes_gdf,label_rotation_x=0, label_rotation_y=0):
+def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
 
     # Détection des bas-fonds
     def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
@@ -323,11 +320,6 @@ def generate_depth_map(routes_gdf,label_rotation_x=0, label_rotation_y=0):
     # Ajouter les bâtiments
     if batiments_dans_emprise is not None:
         batiments_dans_emprise.plot(ax=ax, facecolor='grey', edgecolor='black', linewidth=0.5, alpha=0.6)
-
-    if routes_gdf is not None:
-        routes_gdf = routes_gdf.to_crs(epsg=32630)  # Reprojeter les données si nécessaire
-        routes_gdf.plot(ax=ax, color='orange', linewidth=2, label="Routes")
-        st.write(f"**Nombre de routes affichées :** {len(routes_gdf)}")
 
     # Affichage de la carte de profondeur
     st.pyplot(fig)
