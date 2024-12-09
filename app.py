@@ -161,7 +161,13 @@ if 'flood_data' not in st.session_state:
         'volume_eau': None,
         'niveau_inondation': 0.0
     }
+option_site = st.selectbox("Sélectionnez un site", ("Aucun", "AYAME 1", "AYAME 2"))
 
+# Ajouter une vérification
+if option_site:
+    st.write(f"Site sélectionné : {option_site}")
+else:
+    st.error("Aucun site sélectionné. Veuillez faire un choix.")
 # Étape 1 : Sélectionner un site ou téléverser un fichier
 if option_site == "AYAME 1":
     df = charger_fichier('AYAME1.txt')
@@ -182,22 +188,22 @@ def charger_fichier(fichier, is_uploaded=False):
                 df = pd.read_excel(fichier)
             elif fichier.name.endswith('.txt'):
                 df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
+            elif fichier.name.endswith('.tif'):
+                # Exemple pour un fichier TIFF
+                import rasterio
+                with rasterio.open(fichier) as src:
+                    array = src.read(1)  # Charger la première bande
+                    transform = src.transform  # Obtenir la transformation géographique
+                df = pd.DataFrame(array)  # Conversion simplifiée pour les tests
         else:
             df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
         return df
+    except FileNotFoundError:
+        st.error(f"Fichier introuvable : {fichier}")
+        return None
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier : {e}")
         return None
-
-if option_site == "AYAME 1":
-    df = charger_fichier('AYAME1.txt')
-elif option_site == "AYAME 2":
-    df = charger_fichier('AYAME2.txt')
-elif uploaded_file is not None:
-    df = charger_fichier(uploaded_file, is_uploaded=True)
-else:
-    st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
-    df = None
 
 def charger_tiff(fichier_tiff):
     """Charge un fichier TIFF et extrait les données X, Y, Z."""
