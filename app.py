@@ -175,32 +175,43 @@ uploaded_file = st.file_uploader("Téléversez un fichier", type=["txt", "xlsx",
 
 
 # Charger les données en fonction de l'option sélectionnée
-def charger_fichier(uploaded_file, is_uploaded=False):
+def charger_fichier(uploaded_file=None, is_uploaded=False, option_site=None):
+    """
+    Fonction pour charger un fichier en fonction du site sélectionné ou d'un fichier téléversé.
+    """
     try:
         if option_site:
             st.write(f"Site sélectionné : {option_site}")
+
+            if option_site == "AYAME 1":
+                st.write("Chargement du site AYAME 1")
+                df = charger_fichier('AYAME1.txt')
+
+            elif option_site == "AYAME 2":
+                st.write("Chargement du site AYAME 2")
+                df = charger_fichier('AYAME2.txt')
+
             else:
-                st.error("Aucun site sélectionné. Veuillez faire un choix.")
-        if option_site == "AYAME 1":
-            st.write("Chargement du site AYAME 1")
-            df = charger_fichier('AYAME1.txt')
+                st.error("Aucun site valide sélectionné. Veuillez faire un choix.")
+                df = None
 
-        elif option_site == "AYAME 2":
-            st.write("Chargement du site AYAME 2")
-            df = charger_fichier('AYAME2.txt')
-    elif uploaded_file:  # Vérifie que `uploaded_file` n'est pas None
-    st.write(f"Chargement d'un fichier téléversé : {uploaded_file.name}")
-    df = charger_fichier(uploaded_file, is_uploaded=True)
+        elif uploaded_file:  # Vérifie que `uploaded_file` n'est pas None
+            st.write(f"Chargement d'un fichier téléversé : {uploaded_file.name}")
+            df = pd.read_csv(uploaded_file)  # Exemple : lecture d'un fichier CSV téléversé
+
         else:
-    st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
-    df = None
-    except FileNotFoundError:
-        st.error(f"Fichier introuvable : {fichier}")
-        return None
-        except Exception as e:
-            st.error(f"Erreur lors du chargement du fichier : {e}")
-            return None
+            st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
+            df = None
 
+        return df
+
+    except FileNotFoundError as e:
+        st.error(f"Fichier introuvable : {e}")
+        return None
+
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier : {e}")
+        return None
     
         
 
