@@ -16,7 +16,6 @@ import streamlit as st
 import rasterio
 import numpy as np
 import matplotlib.pyplot as plt
-from rasterio.crs import CRS
 
 # Fonction pour charger et lire un fichier GeoTIFF
 def charger_tiff(fichier_tiff):
@@ -29,25 +28,6 @@ def charger_tiff(fichier_tiff):
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None
-
-# Afficher la carte avec les zones inondées en bleu semi-transparent
-def afficher_carte_inondation(data_tiff, transform_tiff, inondation_mask, niveau_inondation):
-    # Calcul des limites géographiques
-    extent = (
-        transform_tiff[2],  # Min X
-        transform_tiff[2] + transform_tiff[0] * data_tiff.shape[1],  # Max X
-        transform_tiff[5] + transform_tiff[4] * data_tiff.shape[0],  # Min Y
-        transform_tiff[5]  # Max Y
-    )
-
-    # Création de la carte
-    fig, ax = plt.subplots(figsize=(8, 6))
-    ax.imshow(data_tiff, cmap='terrain', extent=extent)
-    ax.imshow(inondation_mask, cmap='Blues', alpha=0.5, extent=extent)
-    ax.set_title(f"Zone inondée pour un niveau de {niveau_inondation} m (en bleu)")
-    ax.set_xlabel("Longitude")
-    ax.set_ylabel("Latitude")
-    return fig
 
 # Fonction principale de l'application
 def main():
@@ -68,56 +48,33 @@ def main():
             st.write(f"- Valeurs min : {data_tiff.min()}, max : {data_tiff.max()}")
             st.write(f"- Système de coordonnées : {crs_tiff}")
             
-            # Visualisation initiale
+            # Calcul de la taille réelle d'un pixel
+            pixel_size_x = abs(transform_tiff[0])  # Taille réelle d'un pixel en X (longitude)
+            pixel_size_y = abs(transform_tiff[4])  # Taille réelle d'un pixel en Y (latitude)
+
+            # Affichage des dimensions réelles
+            st.write(f"### Dimensions réelles des pixels (en coordonnées projetées) :")
+            st.write(f"- Longueur du pixel en X : {pixel_size_x} mètres")
+            st.write(f"- Largeur du pixel en Y : {pixel_size_y} mètres")
+
+            # Calcul de l'emprise de l'image
+            width_in_meters = pixel_size_x * data_tiff.shape[1]  # Largeur totale de l'image
+            height_in_meters = pixel_size_y * data_tiff.shape[0]  # Hauteur totale de l'image
+
+            st.write(f"### Dimensions totales de l'image :")
+            st.write(f"- Largeur totale (en X) : {width_in_meters} mètres")
+            st.write(f"- Hauteur totale (en Y) : {height_in_meters} mètres")
+
+            # Afficher la carte avec les zones inondées
             st.write("### Carte d'altitude")
-            extent = (
-                transform_tiff[2],
-                transform_tiff[2] + transform_tiff[0] * data_tiff.shape[1],
-                transform_tiff[5] + transform_tiff[4] * data_tiff.shape[0],
-                transform_tiff[5]
-            )
             fig, ax = plt.subplots(figsize=(8, 6))
-            cax = ax.imshow(data_tiff, cmap='terrain', extent=extent)
+            cax = ax.imshow(data_tiff, cmap='terrain', extent=(0, width_in_meters, 0, height_in_meters))
             fig.colorbar(cax, ax=ax, label="Altitude (m)")
             st.pyplot(fig)
 
-            # Sélection du niveau d'eau
-            niveau_inondation = st.slider("Définir le niveau d'inondation (m)", 
-                                          float(data_tiff.min()), float(data_tiff.max()), step=0.1)
-            
-            if st.button("Calculer et afficher la zone inondée"):
-                # Calcul du masque d'inondation
-                inondation_mask = data_tiff <= niveau_inondation
-                # Nombre de pixels affectés par l'inondation
-                pixels_inondes = np.sum(inondation_mask)
-                st.write(f"### Nombre de pixels inondés : {pixels_inondes}")
-                
-                # Dimension réelle des pixels en coordonnées projetées
-                pixel_size_x = transform_tiff[0]  # Dimension en X (longitude)
-                pixel_size_y = abs(transform_tiff[4])  # Dimension en Y (latitude)
-
-                st.write(f"### Dimensions réelles des pixels (en coordonnées projetées) :")
-                st.write(f"- Longueur du pixel en X : {pixel_size_x} mètres")
-                st.write(f"- Largeur du pixel en Y : {pixel_size_y} mètres")
-
-                # Calcul de la superficie (en mètres carrés)
-                surface_pixel_m2 = pixel_size_x * pixel_size_y  # en m²
-                # Superficie inondée en mètres carrés
-                surface_inondee_m2 = pixels_inondes * surface_pixel_m2
-                # Conversion en hectares (1 hectare = 10 000 m²)
-                surface_inondee_hectares = surface_inondee_m2 / 10_000
-                st.write(f"### Surface inondée : {surface_inondee_hectares:.2f} hectares")
-
-                # Afficher l'échelle de la carte
-                scale = max(pixel_size_x, pixel_size_y)
-                st.write(f"### Échelle de la carte : {scale} mètres par pixel")
-
-                # Afficher la carte avec les zones inondées
-                fig = afficher_carte_inondation(data_tiff, transform_tiff, inondation_mask, niveau_inondation)
-                st.pyplot(fig)
-
 if __name__ == "__main__":
     main()
+
 
 
 
