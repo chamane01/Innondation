@@ -12,6 +12,88 @@ import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
 import rasterio
 
+import streamlit as st
+import rasterio
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Fonction pour charger et lire un fichier TIFF
+def read_tiff(file_path):
+    with rasterio.open(file_path) as src:
+        raster_data = src.read(1)  # Lecture de la première bande
+        transform = src.transform  # Transformation géographique
+        nodata = src.nodata  # Valeur nodata
+        pixel_area = abs(transform[0] * transform[4])  # Surface d'un pixel
+    return raster_data, nodata, pixel_area
+
+# Fonction pour calculer la surface inondée
+def calculate_flooded_area(raster_data, threshold, nodata, pixel_area):
+    # Identifier les pixels inondés
+    flooded_pixels = np.where((raster_data > threshold) & (raster_data != nodata), 1, 0)
+    num_flooded_pixels = np.sum(flooded_pixels)  # Nombre de pixels inondés
+    flooded_area = num_flooded_pixels * pixel_area  # Surface totale inondée
+    return flooded_area, flooded_pixels
+
+# Fonction pour afficher le raster avec matplotlib
+def plot_raster(raster_data, nodata, cmap="Blues", mask=None):
+    # Remplacer les valeurs nodata par NaN pour les ignorer
+    raster_data = np.where(raster_data == nodata, np.nan, raster_data)
+    
+    # Appliquer un masque si fourni
+    if mask is not None:
+        raster_data = np.ma.masked_array(raster_data, mask=~mask)
+
+    # Création de la figure
+    fig, ax = plt.subplots(figsize=(8, 6))
+    cax = ax.imshow(raster_data, cmap=cmap, interpolation='none')
+    ax.set_title('Carte de profondeur ou d\'inondation')
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    fig.colorbar(cax, ax=ax, label='Profondeur')
+    return fig
+
+# Définition de l'application Streamlit
+def main():
+    st.title("Carte d'inondation et calcul de surface")
+    st.write("Chargez un fichier TIFF contenant des données raster pour afficher la carte et calculer la surface inondée.")
+
+    # Téléchargement du fichier TIFF
+    uploaded_file = st.file_uploader("Choisissez un fichier TIFF", type=["tiff", "tif"])
+    
+    if uploaded_file:
+        # Lecture du fichier TIFF
+        try:
+            raster_data, nodata, pixel_area = read_tiff(uploaded_file)
+            
+            # Affichage des dimensions et des valeurs min/max
+            st.write("### Informations sur le fichier TIFF")
+            st.write(f"- Dimensions : {raster_data.shape}")
+            st.write(f"- Valeur minimale : {np.nanmin(raster_data)}")
+            st.write(f"- Valeur maximale : {np.nanmax(raster_data)}")
+            st.write(f"- Valeur nodata : {nodata}")
+            st.write(f"- Surface d'un pixel (m²) : {pixel_area}")
+
+            # Sélection du seuil de profondeur
+            threshold = st.slider("Définir le seuil de profondeur (niveau d'eau)", 
+                                   float(np.nanmin(raster_data)), float(np.nanmax(raster_data)), step=0.1)
+            
+            # Calcul de la surface inondée
+            flooded_area, flooded_pixels = calculate_flooded_area(raster_data, threshold, nodata, pixel_area)
+            st.write(f"### Surface inondée : {flooded_area:.2f} m²")
+
+            # Sélection du colormap pour la visualisation
+            colormap = st.selectbox("Choisissez une palette de couleurs", ["Blues", "viridis", "plasma", "cividis"])
+
+            # Visualisation de la carte inondée
+            st.write("### Carte inondée")
+            fig = plot_raster(raster_data, nodata, cmap=colormap, mask=flooded_pixels.astype(bool))
+            st.pyplot(fig)
+        except Exception as e:
+            st.error(f"Erreur lors de la lecture du fichier : {e}")
+
+if __name__ == "__main__":
+    main()
+
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
 with col1:
