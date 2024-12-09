@@ -35,7 +35,7 @@ if "flood_data" not in st.session_state:
 # Étape 1 : Téléverser un fichier
 st.markdown("## Téléversez un fichier GeoTIFF et GeoJSON pour les analyses")
 uploaded_tiff_file = st.file_uploader("Téléversez un fichier GeoTIFF (.tif)", type=["tif"])
-uploaded_geojson_file = st.file_uploader("Téléversez un fichier GeoJSON pour les routes", type=["geojson"], key="geojson_routes")
+
 
 # Charger les données raster
 def charger_tiff(fichier_tiff):
