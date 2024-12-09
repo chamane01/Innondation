@@ -24,24 +24,24 @@ with col3:
 
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
 
-# Initialiser session_state pour stocker les données
+# Initialisation des données
 if "flood_data" not in st.session_state:
     st.session_state.flood_data = {
-        "surface_bleu": None,
+        "surface_bleue": None,
         "volume_eau": None,
         "niveau_inondation": 0.0,
     }
 
-# Étape 1 : Téléverser un fichier
+# Téléversement des fichiers GeoTIFF et GeoJSON
 st.markdown("## Téléversez un fichier GeoTIFF et GeoJSON pour les analyses")
 uploaded_tiff_file = st.file_uploader("Téléversez un fichier GeoTIFF (.tif)", type=["tif"])
+uploaded_geojson_file = st.file_uploader("Téléversez un fichier GeoJSON pour les routes", type=["geojson"])
 
-
-# Charger les données raster
+# Fonction pour charger un GeoTIFF
 def charger_tiff(fichier_tiff):
     try:
         with rasterio.open(fichier_tiff) as src:
-            data = src.read(1)  # Première bande
+            data = src.read(1)
             transform = src.transform
             crs = src.crs
             return data, transform, crs
@@ -49,7 +49,16 @@ def charger_tiff(fichier_tiff):
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None
 
-# Traitement GeoTIFF
+# Fonction pour charger un GeoJSON
+def charger_geojson(fichier_geojson):
+    try:
+        gdf = gpd.read_file(fichier_geojson)
+        return gdf
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
+        return None
+
+# Traitement des données GeoTIFF
 if uploaded_tiff_file is not None:
     data_tiff, transform_tiff, crs_tiff = charger_tiff(uploaded_tiff_file)
 
@@ -62,10 +71,10 @@ if uploaded_tiff_file is not None:
         # Affichage des données raster
         fig, ax = plt.subplots(figsize=(8, 6))
         extent = (
-            transform_tiff[2],  # Min X
-            transform_tiff[2] + transform_tiff[0] * data_tiff.shape[1],  # Max X
-            transform_tiff[5] + transform_tiff[4] * data_tiff.shape[0],  # Min Y
-            transform_tiff[5],  # Max Y
+            transform_tiff[2], 
+            transform_tiff[2] + transform_tiff[0] * data_tiff.shape[1],
+            transform_tiff[5] + transform_tiff[4] * data_tiff.shape[0], 
+            transform_tiff[5]
         )
         cax = ax.imshow(data_tiff, cmap="terrain", extent=extent)
         fig.colorbar(cax, ax=ax, label="Altitude (m)")
@@ -83,9 +92,7 @@ if uploaded_tiff_file is not None:
 
         # Calcul de la zone inondée
         mask_inondee = data_tiff <= niveau_eau
-        surface_inondee = np.sum(mask_inondee) * (
-            transform_tiff[0] * abs(transform_tiff[4])
-        ) / 1e4  # En hectares
+        surface_inondee = np.sum(mask_inondee) * (transform_tiff[0] * abs(transform_tiff[4])) / 1e4  # En hectares
 
         st.write(f"Surface inondée : **{surface_inondee:.2f} hectares**")
 
@@ -96,79 +103,28 @@ if uploaded_tiff_file is not None:
         ctx.add_basemap(ax, crs=crs_tiff.to_string(), source=ctx.providers.OpenStreetMap.Mapnik)
         st.pyplot(fig)
 
-
-
-
-
-st.title("Carte des zones inondées avec niveaux d'eau et surface")
-
-# Initialiser session_state pour stocker les données d'inondation
-if 'flood_data' not in st.session_state:
-    st.session_state.flood_data = {
-        'surface_bleu': None,  
-        'volume_eau': None,
-        'niveau_inondation': 0.0
-    }
-
-# Étape 1 : Sélectionner un site ou téléverser un fichier
-st.markdown("## Sélectionner un site ou téléverser un fichier")
-option_site = st.selectbox("Sélectionnez un site", ("Aucun", "AYAME 1", "AYAME 2"))
-uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
-
-# Charger les données en fonction de l'option sélectionnée
-def charger_fichier(fichier, is_uploaded=False):
-    try:
-        if is_uploaded:
-            if fichier.name.endswith('.xlsx'):
-                df = pd.read_excel(fichier)
-            elif fichier.name.endswith('.txt'):
-                df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
-        else:
-            df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
-        return df
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier : {e}")
-        return None
-
-if option_site == "AYAME 1":
-    df = charger_fichier('AYAME1.txt')
-elif option_site == "AYAME 2":
-    df = charger_fichier('AYAME2.txt')
-elif uploaded_file is not None:
-    df = charger_fichier(uploaded_file, is_uploaded=True)
-else:
-    st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
-    df = None
-
-
-
-
-uploaded_geojson_file = st.file_uploader("Téléversez un fichier GeoJSON pour les routes", type=["geojson"])
-def charger_geojson(fichier):
-    try:
-        gdf = gpd.read_file(fichier)
-        return gdf
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
-        return None
-
-# Charger les données du fichier GeoJSON des routes
-routes_gdf = None
+# Traitement des données GeoJSON
 if uploaded_geojson_file is not None:
     routes_gdf = charger_geojson(uploaded_geojson_file)
+    if routes_gdf is not None:
+        st.write("### Données des routes")
+        st.map(routes_gdf)
 
-# Charger et filtrer les bâtiments dans l'emprise de la carte
+# Gestion des bâtiments
 try:
     batiments_gdf = gpd.read_file("batiments2.geojson")
-    if df is not None:
-        emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
-        batiments_gdf = batiments_gdf.to_crs(epsg=32630)
+    if uploaded_tiff_file is not None:
+        emprise = box(
+            transform_tiff[2],
+            transform_tiff[5] + transform_tiff[4] * data_tiff.shape[0],
+            transform_tiff[2] + transform_tiff[0] * data_tiff.shape[1],
+            transform_tiff[5],
+        )
         batiments_dans_emprise = batiments_gdf[batiments_gdf.intersects(emprise)]
-    else:
-        batiments_dans_emprise = None
+        st.write("### Bâtiments dans la zone analysée")
+        st.map(batiments_dans_emprise)
 except Exception as e:
     st.error(f"Erreur lors du chargement des bâtiments : {e}")
-    batiments_dans_emprise = None
 
 # Traitement des données si le fichier est chargé
 if df is not None:
