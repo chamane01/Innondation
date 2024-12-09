@@ -76,19 +76,47 @@ if uploaded_tiff_file is not None:
             "Entrez le niveau d'eau (mètres)", min_value=float(data_tiff.min()), max_value=float(data_tiff.max()), step=0.1
         )
 
-        if st.button("Calculer et afficher la zone inondée"):
-            # Calculer la zone inondée
-            inondation_mask = data_tiff <= st.session_state.flood_data['niveau_inondation']
-            surface_inondee = np.sum(inondation_mask) * (transform_tiff[0] * transform_tiff[4]) / 10_000  # En hectares
-            st.session_state.flood_data['surface_bleu'] = surface_inondee
-            st.write(f"**Surface inondée :** {surface_inondee:.2f} hectares")
+         if st.button("Afficher la carte d'inondation"):
+            surface_bleue = calculer_surface_bleue(st.session_state.flood_data['niveau_inondation'])
+            volume_eau = calculer_volume(surface_bleue)
+            st.session_state.flood_data['surface_bleu'] = surface_bleue
+            st.session_state.flood_data['volume_eau'] = volume_eau
 
-            # Afficher la carte de l'inondation
             fig, ax = plt.subplots(figsize=(8, 6))
-            ax.imshow(data_tiff, cmap='terrain', extent=extent)
-            ax.imshow(inondation_mask, cmap='Blues', alpha=0.5, extent=extent)
-            ax.set_title("Zone inondée (en bleu)")
-            fig.colorbar(cax, ax=ax, label="Altitude (m)")
+            ax.set_xlim(X_min, X_max)
+            ax.set_ylim(Y_min, Y_max)
+            ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+            
+            # Ajouter des coordonnées sur les quatre côtés
+            ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
+            ax.set_xticks(np.linspace(X_min, X_max, num=5))  # Coordonnées sur l'axe X
+            ax.set_yticks(np.linspace(Y_min, Y_max, num=5))  # Coordonnées sur l'axe Y
+            ax.xaxis.set_tick_params(labeltop=True)  # Affiche les labels sur le haut
+            ax.yaxis.set_tick_params(labelright=True)  # Affiche les labels à droite
+            
+            # Ajouter les lignes pour relier les tirets (lignes horizontales et verticales)
+            # Lignes verticales (de haut en bas)
+            for x in np.linspace(X_min, X_max, num=5):
+                ax.axvline(x, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
+            # Lignes horizontales (de gauche à droite)
+            for y in np.linspace(Y_min, Y_max, num=5):
+                ax.axhline(y, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
+
+            # Ajouter les croisillons aux intersections avec opacité à 100%
+            intersections_x = np.linspace(X_min, X_max, num=5)
+            intersections_y = np.linspace(Y_min, Y_max, num=5)
+            for x in intersections_x:
+                for y in intersections_y:
+                    ax.plot(x, y, 'k+', markersize=7, alpha=1.0)  # 'k+' : plus noire, alpha=1 pour opacité 100%
+            
+            # Tracer la zone inondée avec les contours
+            contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
+            ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
+            ax.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], colors='#007FFF', alpha=0.5)
+
+            # Transformer les contours en polygones pour analyser les bâtiments
+            contour_paths = [Polygon(path.vertices) for collection in contours_inondation.collections for path in collection.get_paths()]
+            zone_inondee = gpd.GeoDataFrame(geometry=contour_paths)
             st.pyplot(fig)
 
 
