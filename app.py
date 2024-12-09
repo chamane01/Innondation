@@ -73,6 +73,21 @@ def charger_tiff(fichier_tiff):
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None
 
+uploaded_geojson_file = st.file_uploader("Téléversez un fichier GeoJSON pour les routes", type=["geojson"])
+def charger_geojson(fichier):
+    try:
+        gdf = gpd.read_file(fichier)
+        return gdf
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
+        return None
+
+# Charger les données du fichier GeoJSON des routes
+routes_gdf = None
+if uploaded_geojson_file is not None:
+    routes_gdf = charger_geojson(uploaded_geojson_file)
+
+
 # Si un fichier GeoTIFF est téléversé
 if uploaded_tiff_file is not None:
     data_tiff, transform_tiff, crs_tiff = charger_tiff(uploaded_tiff_file)
@@ -101,19 +116,97 @@ if uploaded_tiff_file is not None:
             "Entrez le niveau d'eau (mètres)", min_value=float(data_tiff.min()), max_value=float(data_tiff.max()), step=0.1
         )
 
-        if st.button("Calculer et afficher la zone inondée"):
-            # Calculer la zone inondée
-            inondation_mask = data_tiff <= st.session_state.flood_data['niveau_inondation']
-            surface_inondee = np.sum(inondation_mask) * (transform_tiff[0] * transform_tiff[4]) / 10_000  # En hectares
-            st.session_state.flood_data['surface_bleu'] = surface_inondee
-            st.write(f"**Surface inondée :** {surface_inondee:.2f} hectares")
+        # Traitement des données si le fichier est chargé
+if df is not None:
+    st.markdown("---")
 
-            # Afficher la carte de l'inondation
+    # Vérification du fichier : colonnes X, Y, Z
+    if 'X' not in df.columns or 'Y' not in df.columns or 'Z' not in df.columns:
+        st.error("Erreur : colonnes 'X', 'Y' et 'Z' manquantes.")
+    else:
+        st.session_state.flood_data['niveau_inondation'] = st.number_input("Entrez le niveau d'eau (mètres)", min_value=0.0, step=0.1)
+        interpolation_method = st.selectbox("Méthode d'interpolation", ['linear', 'nearest'])
+
+        X_min, X_max = df['X'].min(), df['X'].max()
+        Y_min, Y_max = df['Y'].min(), df['Y'].max()
+        resolution = st.number_input("Résolution de la grille", value=300, min_value=100, max_value=1000)
+        grid_X, grid_Y = np.mgrid[X_min:X_max:resolution*1j, Y_min:Y_max:resolution*1j]
+        grid_Z = griddata((df['X'], df['Y']), df['Z'], (grid_X, grid_Y), method=interpolation_method)
+
+        def calculer_surface_bleue(niveau_inondation):
+            return np.sum((grid_Z <= niveau_inondation)) * (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000
+
+
+        if st.button("Afficher la carte d'inondation"):
+            surface_bleue = calculer_surface_bleue(st.session_state.flood_data['niveau_inondation'])
+            volume_eau = calculer_volume(surface_bleue)
+            st.session_state.flood_data['surface_bleu'] = surface_bleue
+            st.session_state.flood_data['volume_eau'] = volume_eau
+
             fig, ax = plt.subplots(figsize=(8, 6))
-            ax.imshow(data_tiff, cmap='terrain', extent=extent)
-            ax.imshow(inondation_mask, cmap='Blues', alpha=0.5, extent=extent)
-            ax.set_title("Zone inondée (en bleu)")
-            fig.colorbar(cax, ax=ax, label="Altitude (m)")
+            ax.set_xlim(X_min, X_max)
+            ax.set_ylim(Y_min, Y_max)
+            ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+            # Ajouter des coordonnées sur les quatre côtés
+            ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
+            ax.set_xticks(np.linspace(X_min, X_max, num=5))# Coordonnées sur l'axe X
+            ax.set_yticks(np.linspace(Y_min, Y_max, num=5))# Coordonnées sur l'axe Y
+            ax.xaxis.set_tick_params(labeltop=True)# Affiche les labels sur le haut
+            ax.yaxis.set_tick_params(labelright=True)# Affiche les labels à droite
+            
+            # Ajouter les lignes pour relier les tirets (lignes horizontales et verticales)
+            # Lignes verticales (de haut en bas)
+            for x in np.linspace(X_min, X_max, num=5):
+                ax.axvline(x, color='black', linewidth=0.5, linestyle='--',alpha=0.2)
+            # Lignes horizontales (de gauche à droite)
+            for y in np.linspace(Y_min, Y_max, num=5):
+                ax.axhline(y, color='black', linewidth=0.5, linestyle='--',alpha=0.2)
+
+            # Ajouter les croisillons aux intersections avec opacité à 100%
+            # Déterminer les positions d'intersection
+            intersections_x = np.linspace(X_min, X_max, num=5)
+            intersections_y = np.linspace(Y_min, Y_max, num=5)
+            # Tracer les croisillons aux intersections avec opacité à 100%
+            for x in intersections_x:
+                for y in intersections_y:
+                    ax.plot(x, y, 'k+', markersize=7, alpha=1.0) # 'k+' : plus noire, alpha=1 pour opacité 100%
+                    
+
+
+            # Tracer la zone inondée avec les contours
+            contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
+            ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
+            ax.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], colors='#007FFF', alpha=0.5)
+
+            # Transformer les contours en polygones pour analyser les bâtiments
+            contour_paths = [Polygon(path.vertices) for collection in contours_inondation.collections for path in collection.get_paths()]
+            zone_inondee = gpd.GeoDataFrame(geometry=[MultiPolygon(contour_paths)], crs="EPSG:32630")
+
+            # Filtrer et afficher tous les bâtiments
+            if batiments_dans_emprise is not None:
+                batiments_dans_emprise.plot(ax=ax, facecolor='grey', edgecolor='black', linewidth=0.5, alpha=0.6, label="Bâtiments non inondés")
+                
+                # Séparer les bâtiments inondés
+                batiments_inondes = batiments_dans_emprise[batiments_dans_emprise.intersects(zone_inondee.unary_union)]
+                nombre_batiments_inondes = len(batiments_inondes)
+
+                # Afficher les bâtiments inondés en rouge
+                batiments_inondes.plot(ax=ax, facecolor='red', edgecolor='red', linewidth=1, alpha=0.8, label="Bâtiments inondés")
+
+                st.write(f"Nombre de bâtiments dans la zone inondée : {nombre_batiments_inondes}")
+                ax.legend()
+            else:
+                st.write("Aucun bâtiment à analyser dans cette zone.")
+
+            if routes_gdf is not None:
+                routes_gdf = routes_gdf.to_crs(epsg=32630)  # Reprojeter les données si nécessaire
+                routes_gdf.plot(ax=ax, color='orange', linewidth=2, label="Routes")
+                st.write(f"**Nombre de routes affichées :** {len(routes_gdf)}")
+
+            
+
+            
+
             st.pyplot(fig)
 
 
