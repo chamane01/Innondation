@@ -170,6 +170,7 @@ if 'flood_data' not in st.session_state:
 st.markdown("## Sélectionner un site ou téléverser un fichier")
 option_site = st.selectbox("Sélectionnez un site", ("Aucun", "AYAME 1", "AYAME 2"))
 uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
+uploaded_tiff_file = st.file_uploader("Téléversez un fichier TIFF", type=["tiff", "tif"])
 
 # Charger les données en fonction de l'option sélectionnée
 def charger_fichier(fichier, is_uploaded=False):
@@ -186,6 +187,17 @@ def charger_fichier(fichier, is_uploaded=False):
         st.error(f"Erreur lors du chargement du fichier : {e}")
         return None
 
+def charger_tiff(fichier):
+    try:
+        with rasterio.open(fichier) as src:
+            image = src.read(1)  # Lire la première bande
+            transform = src.transform  # Transformée géographique
+            crs = src.crs  # Système de projection
+        return image, transform, crs
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier TIFF : {e}")
+        return None, None, None
+
 if option_site == "AYAME 1":
     df = charger_fichier('AYAME1.txt')
 elif option_site == "AYAME 2":
@@ -196,7 +208,23 @@ else:
     st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
     df = None
 
+# Fonction de traitement selon le type de fichier
+def charger_donnees():
+    if option_site == "AYAME 1":
+        return charger_fichier('AYAME1.txt')
+    elif option_site == "AYAME 2":
+        return charger_fichier('AYAME2.txt')
+    elif uploaded_file is not None:
+        return charger_fichier(uploaded_file, is_uploaded=True)
+    elif uploaded_tiff_file is not None:
+        # Charger les données du fichier TIFF
+        return charger_tiff(uploaded_tiff_file)
+    else:
+        st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
+        return None
 
+# Charger les données du fichier sélectionné
+df = charger_donnees()
 
 
 uploaded_geojson_file = st.file_uploader("Téléversez un fichier GeoJSON pour les routes", type=["geojson"])
@@ -210,6 +238,18 @@ def charger_geojson(fichier):
 
 # Charger les données du fichier GeoJSON des routes
 routes_gdf = None
+
+if uploaded_tiff_file is not None:
+    image, transform, crs = df
+    # Appliquer la logique de calcul sur l'image (qui représente le niveau d'inondation, par exemple)
+    # Vous pouvez adapter le calcul en fonction des données du fichier TIFF
+    niveau_inondation = st.number_input("Entrez le niveau d'eau (mètres)", min_value=0.0, step=0.1)
+    surface_bleue = np.sum(image <= niveau_inondation) * (transform[0] * transform[4]) / 10000  # Conversion en hectares
+    volume_eau = surface_bleue * niveau_inondation * 10000
+    st.session_state.flood_data['surface_bleu'] = surface_bleue
+    st.session_state.flood_data['volume_eau'] = volume_eau
+    st.write(f"Surface inondée estimée : {surface_bleue:.2f} hectares")
+    
 if uploaded_geojson_file is not None:
     routes_gdf = charger_geojson(uploaded_geojson_file)
 
