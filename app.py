@@ -162,11 +162,6 @@ if df is not None:
             else:
                 st.write("Aucun bâtiment à analyser dans cette zone.")
 
-            if routes_gdf is not None:
-                routes_gdf = routes_gdf.to_crs(epsg=32630)  # Reprojeter les données si nécessaire
-                routes_gdf.plot(ax=ax, color='orange', linewidth=2, label="Routes")
-                st.write(f"**Nombre de routes affichées :** {len(routes_gdf)}")
-
             
 
             
