@@ -207,7 +207,7 @@ def charger_fichier(fichier, is_uploaded=False):
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier : {e}")
         return None
-
+uploaded_file = st.file_uploader("Téléversez un fichier", type=["txt", "xlsx", "tif"])
 def charger_tiff(fichier_tiff):
     """Charge un fichier TIFF et extrait les données X, Y, Z."""
     try:
