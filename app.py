@@ -16,6 +16,7 @@ import streamlit as st
 import rasterio
 import numpy as np
 import matplotlib.pyplot as plt
+from rasterio.crs import CRS
 
 # Fonction pour charger et lire un fichier GeoTIFF
 def charger_tiff(fichier_tiff):
@@ -48,7 +49,7 @@ def afficher_carte_inondation(data_tiff, transform_tiff, inondation_mask, niveau
     ax.set_ylabel("Latitude")
     return fig
 
-# Définition de l'application Streamlit
+# Fonction principale de l'application
 def main():
     st.title("Analyse des zones inondées")
     st.markdown("## Téléversez un fichier GeoTIFF pour analyser les zones inondées.")
@@ -91,22 +92,26 @@ def main():
                 pixels_inondes = np.sum(inondation_mask)
                 st.write(f"### Nombre de pixels inondés : {pixels_inondes}")
                 
-                # Dimension réelle des pixels
+                # Dimension réelle des pixels en coordonnées projetées
                 pixel_size_x = transform_tiff[0]  # Dimension en X (longitude)
                 pixel_size_y = abs(transform_tiff[4])  # Dimension en Y (latitude)
 
-                st.write(f"### Dimensions du pixel en plan (en coordonnées géographiques) :")
-                st.write(f"- Longueur du pixel en X : {pixel_size_x} m")
-                st.write(f"- Largeur du pixel en Y : {pixel_size_y} m")
+                st.write(f"### Dimensions réelles des pixels (en coordonnées projetées) :")
+                st.write(f"- Longueur du pixel en X : {pixel_size_x} mètres")
+                st.write(f"- Largeur du pixel en Y : {pixel_size_y} mètres")
 
-                # Surface totale en mètres carrés
+                # Calcul de la superficie (en mètres carrés)
                 surface_pixel_m2 = pixel_size_x * pixel_size_y  # en m²
-                # Surface inondée en m²
+                # Superficie inondée en mètres carrés
                 surface_inondee_m2 = pixels_inondes * surface_pixel_m2
-                # Conversion en hectares (1 hectare = 10,000 m²)
+                # Conversion en hectares (1 hectare = 10 000 m²)
                 surface_inondee_hectares = surface_inondee_m2 / 10_000
                 st.write(f"### Surface inondée : {surface_inondee_hectares:.2f} hectares")
-                
+
+                # Afficher l'échelle de la carte
+                scale = max(pixel_size_x, pixel_size_y)
+                st.write(f"### Échelle de la carte : {scale} mètres par pixel")
+
                 # Afficher la carte avec les zones inondées
                 fig = afficher_carte_inondation(data_tiff, transform_tiff, inondation_mask, niveau_inondation)
                 st.pyplot(fig)
