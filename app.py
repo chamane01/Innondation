@@ -17,8 +17,6 @@ import rasterio
 import numpy as np
 import matplotlib.pyplot as plt
 from skimage import measure
-from matplotlib.patches import Polygon as MplPolygon
-from matplotlib.collections import PatchCollection
 
 # Fonction pour charger et lire un fichier TIFF
 def read_tiff(file_path):
@@ -31,39 +29,35 @@ def read_tiff(file_path):
 
 # Fonction pour calculer la surface inondée et générer un masque
 def calculate_flooded_area(raster_data, threshold, nodata, pixel_area):
-    # Identifier les pixels inondés
     flooded_pixels = np.where((raster_data > threshold) & (raster_data != nodata), 1, 0)
-    num_flooded_pixels = np.sum(flooded_pixels)  # Nombre de pixels inondés
-    flooded_area = num_flooded_pixels * pixel_area  # Surface totale inondée
-    return flooded_area, num_flooded_pixels, flooded_pixels
+    num_flooded_pixels = np.sum(flooded_pixels)
+    flooded_area = num_flooded_pixels * pixel_area
+    return flooded_area, flooded_pixels, num_flooded_pixels
 
-# Fonction pour tracer les contours
+# Fonction pour trouver les contours
 def find_contours(mask):
-    contours = measure.find_contours(mask, level=0.5)  # Détection des contours
+    contours = measure.find_contours(mask, level=0.5)
     return contours
 
-# Fonction pour afficher le raster avec des couleurs vives, contours et zones remplies
-def plot_flooded_area(raster_data, nodata, flooded_mask, contours, transform, cmap="Blues", highlight_color="red"):
-    # Remplacer les valeurs nodata par NaN pour les ignorer
+# Fonction pour afficher le raster avec les zones colorées et les contours
+def plot_flooded_area(raster_data, nodata, flooded_mask, below_threshold_mask, contours, cmap="Blues", highlight_color="red"):
     raster_data = np.where(raster_data == nodata, np.nan, raster_data)
 
     # Création de la figure
-    fig, ax = plt.subplots(figsize=(10, 8))
+    fig, ax = plt.subplots(figsize=(8, 6))
     cax = ax.imshow(raster_data, cmap=cmap, interpolation='none')
 
-    # Appliquer le masque avec une couleur vive
-    ax.imshow(np.ma.masked_array(flooded_mask, ~flooded_mask), cmap="autumn", alpha=0.5)
+    # Appliquer le masque des zones inondées (en bleu clair, 20% d'opacité)
+    ax.imshow(np.ma.masked_array(below_threshold_mask, ~below_threshold_mask), cmap="Blues", alpha=0.2)
 
-    # Ajouter les contours et remplir les zones inondées
-    patches = []
+    # Appliquer le masque des zones inondées
+    ax.imshow(np.ma.masked_array(flooded_mask, ~flooded_mask), cmap="autumn", alpha=0.6)
+
+    # Ajouter les contours
     for contour in contours:
-        coords = [(transform[0] * x + transform[2], transform[4] * y + transform[5]) for y, x in contour]
-        polygon = MplPolygon(coords, closed=True)
-        patches.append(polygon)
-    p = PatchCollection(patches, facecolor="orange", edgecolor=highlight_color, alpha=0.5)
-    ax.add_collection(p)
+        ax.plot(contour[:, 1], contour[:, 0], color=highlight_color, linewidth=2)
 
-    ax.set_title('Carte d\'inondation avec surface marquée et contours')
+    ax.set_title('Carte des zones inondées')
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     fig.colorbar(cax, ax=ax, label='Profondeur')
@@ -71,49 +65,53 @@ def plot_flooded_area(raster_data, nodata, flooded_mask, contours, transform, cm
 
 # Définition de l'application Streamlit
 def main():
-    st.title("Carte d'inondation avec surface marquée et contours")
-    st.write("Chargez un fichier TIFF contenant des données raster pour afficher la carte, calculer la surface inondée et tracer les contours.")
+    st.title("Carte des inondations")
+    st.write("Chargez un fichier TIFF pour analyser les zones inondées et les pixels sous le seuil.")
 
     # Téléchargement du fichier TIFF
     uploaded_file = st.file_uploader("Choisissez un fichier TIFF", type=["tiff", "tif"])
     
     if uploaded_file:
-        # Lecture du fichier TIFF
         try:
+            # Lecture du fichier TIFF
             raster_data, nodata, pixel_area, transform = read_tiff(uploaded_file)
-            
+
             # Affichage des dimensions et des valeurs min/max
             st.write("### Informations sur le fichier TIFF")
             st.write(f"- Dimensions : {raster_data.shape}")
             st.write(f"- Valeur minimale : {np.nanmin(raster_data)}")
             st.write(f"- Valeur maximale : {np.nanmax(raster_data)}")
             st.write(f"- Valeur nodata : {nodata}")
-            st.write(f"- Surface d'un pixel (m²) : {pixel_area}")
+            st.write(f"- Surface d'un pixel (m²) : {pixel_area:.2f} m²")
 
-            # Sélection du seuil de profondeur
-            threshold = st.slider("Définir le seuil de profondeur (niveau d'eau)", 
+            # Sélection du seuil
+            threshold = st.slider("Définir le seuil d'inondation", 
                                    float(np.nanmin(raster_data)), float(np.nanmax(raster_data)), step=0.1)
             
-            # Calcul de la surface inondée et génération du masque
-            flooded_area, num_flooded_pixels, flooded_mask = calculate_flooded_area(raster_data, threshold, nodata, pixel_area)
-            st.write(f"### Nombre de pixels inondés : {num_flooded_pixels}")
-            st.write(f"### Surface inondée totale : {flooded_area:.2f} m²")
+            # Calcul des zones inondées et des pixels sous le seuil
+            flooded_area, flooded_mask, num_flooded_pixels = calculate_flooded_area(raster_data, threshold, nodata, pixel_area)
+            below_threshold_mask = np.where((raster_data <= threshold) & (raster_data != nodata), 1, 0)
+            num_below_threshold_pixels = np.sum(below_threshold_mask)
 
-            # Trouver les contours de la zone inondée
+            st.write(f"### Résultats")
+            st.write(f"- Surface inondée : {flooded_area:.2f} m²")
+            st.write(f"- Nombre de pixels inondés : {num_flooded_pixels}")
+            st.write(f"- Nombre de pixels sous le seuil : {num_below_threshold_pixels}")
+
+            # Trouver les contours
             contours = find_contours(flooded_mask)
 
-            # Sélection du colormap pour la visualisation
-            colormap = st.selectbox("Choisissez une palette de couleurs pour le fond", ["Blues", "viridis", "plasma", "cividis"])
-
-            # Visualisation de la carte inondée avec contours
+            # Visualisation
             st.write("### Carte des zones inondées")
-            fig = plot_flooded_area(raster_data, nodata, flooded_mask, contours, transform, cmap=colormap, highlight_color="red")
+            colormap = st.selectbox("Choisissez une palette de couleurs pour le fond", ["Blues", "viridis", "plasma", "cividis"])
+            fig = plot_flooded_area(raster_data, nodata, flooded_mask, below_threshold_mask, contours, cmap=colormap, highlight_color="red")
             st.pyplot(fig)
         except Exception as e:
             st.error(f"Erreur lors de la lecture du fichier : {e}")
 
 if __name__ == "__main__":
     main()
+
 
 
 # Streamlit - Titre de l'application avec deux logos centrés
