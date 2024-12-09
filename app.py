@@ -16,101 +16,87 @@ import streamlit as st
 import rasterio
 import numpy as np
 import matplotlib.pyplot as plt
-from skimage import measure
 
-# Fonction pour charger et lire un fichier TIFF
-def read_tiff(file_path):
-    with rasterio.open(file_path) as src:
-        raster_data = src.read(1)  # Lecture de la première bande
-        transform = src.transform  # Transformation géographique
-        nodata = src.nodata  # Valeur nodata
-        pixel_area = abs(transform[0] * transform[4])  # Surface d'un pixel
-    return raster_data, nodata, pixel_area, transform
+# Fonction pour charger et lire un fichier GeoTIFF
+def charger_tiff(fichier_tiff):
+    try:
+        with rasterio.open(fichier_tiff) as src:
+            data = src.read(1)  # Lire la première bande
+            transform = src.transform  # Transformation géographique
+            crs = src.crs  # Système de coordonnées
+            return data, transform, crs
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
+        return None, None, None
 
-# Fonction pour calculer la surface inondée et générer un masque
-def calculate_flooded_area(raster_data, threshold, nodata, pixel_area):
-    flooded_pixels = np.where((raster_data > threshold) & (raster_data != nodata), 1, 0)
-    num_flooded_pixels = np.sum(flooded_pixels)
-    flooded_area = num_flooded_pixels * pixel_area
-    return flooded_area, flooded_pixels, num_flooded_pixels
+# Afficher la carte avec les zones inondées en bleu semi-transparent
+def afficher_carte_inondation(data_tiff, transform_tiff, inondation_mask, niveau_inondation):
+    # Calcul des limites géographiques
+    extent = (
+        transform_tiff[2],  # Min X
+        transform_tiff[2] + transform_tiff[0] * data_tiff.shape[1],  # Max X
+        transform_tiff[5] + transform_tiff[4] * data_tiff.shape[0],  # Min Y
+        transform_tiff[5]  # Max Y
+    )
 
-# Fonction pour trouver les contours
-def find_contours(mask):
-    contours = measure.find_contours(mask, level=0.5)
-    return contours
-
-# Fonction pour afficher le raster avec les zones colorées et les contours
-def plot_flooded_area(raster_data, nodata, flooded_mask, below_threshold_mask, contours, cmap="Blues", highlight_color="red"):
-    raster_data = np.where(raster_data == nodata, np.nan, raster_data)
-
-    # Création de la figure
+    # Création de la carte
     fig, ax = plt.subplots(figsize=(8, 6))
-    cax = ax.imshow(raster_data, cmap=cmap, interpolation='none')
-
-    # Appliquer le masque des zones sous le seuil (en bleu clair, 20% d'opacité)
-    ax.imshow(np.ma.masked_array(below_threshold_mask, ~below_threshold_mask), cmap="Blues", alpha=0.2)
-
-    # Appliquer le masque des zones inondées (opacité 40%)
-    ax.imshow(np.ma.masked_array(flooded_mask, ~flooded_mask), cmap="autumn", alpha=0.4)
-
-    # Ajouter les contours
-    for contour in contours:
-        ax.plot(contour[:, 1], contour[:, 0], color=highlight_color, linewidth=2)
-
-    ax.set_title('Carte des zones inondées')
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    fig.colorbar(cax, ax=ax, label='Profondeur')
+    ax.imshow(data_tiff, cmap='terrain', extent=extent)
+    ax.imshow(inondation_mask, cmap='Blues', alpha=0.5, extent=extent)
+    ax.set_title(f"Zone inondée pour un niveau de {niveau_inondation} m (en bleu)")
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
     return fig
 
 # Définition de l'application Streamlit
 def main():
-    st.title("Carte des inondations")
-    st.write("Chargez un fichier TIFF pour analyser les zones inondées et les pixels sous le seuil.")
+    st.title("Analyse des zones inondées")
+    st.markdown("## Téléversez un fichier GeoTIFF pour analyser les zones inondées.")
 
-    # Téléchargement du fichier TIFF
-    uploaded_file = st.file_uploader("Choisissez un fichier TIFF", type=["tiff", "tif"])
+    # Téléchargement du fichier GeoTIFF
+    uploaded_tiff_file = st.file_uploader("Choisissez un fichier GeoTIFF (.tif)", type=["tif"])
     
-    if uploaded_file:
-        try:
-            # Lecture du fichier TIFF
-            raster_data, nodata, pixel_area, transform = read_tiff(uploaded_file)
-
-            # Affichage des dimensions et des valeurs min/max
-            st.write("### Informations sur le fichier TIFF")
-            st.write(f"- Dimensions : {raster_data.shape}")
-            st.write(f"- Valeur minimale : {np.nanmin(raster_data)}")
-            st.write(f"- Valeur maximale : {np.nanmax(raster_data)}")
-            st.write(f"- Valeur nodata : {nodata}")
-            st.write(f"- Surface d'un pixel (m²) : {pixel_area:.2f} m²")
-
-            # Sélection du seuil
-            threshold = st.slider("Définir le seuil d'inondation", 
-                                   float(np.nanmin(raster_data)), float(np.nanmax(raster_data)), step=0.1)
+    if uploaded_tiff_file is not None:
+        # Charger les données GeoTIFF
+        data_tiff, transform_tiff, crs_tiff = charger_tiff(uploaded_tiff_file)
+        
+        if data_tiff is not None:
+            # Affichage des informations de base
+            st.write("### Informations sur le fichier GeoTIFF")
+            st.write(f"- Dimensions : {data_tiff.shape}")
+            st.write(f"- Valeurs min : {data_tiff.min()}, max : {data_tiff.max()}")
+            st.write(f"- Système de coordonnées : {crs_tiff}")
             
-            # Calcul des zones inondées et des pixels sous le seuil
-            flooded_area, flooded_mask, num_flooded_pixels = calculate_flooded_area(raster_data, threshold, nodata, pixel_area)
-            below_threshold_mask = np.where((raster_data <= threshold) & (raster_data != nodata), 1, 0)
-            num_below_threshold_pixels = np.sum(below_threshold_mask)
-
-            st.write(f"### Résultats")
-            st.write(f"- Surface inondée : {flooded_area:.2f} m²")
-            st.write(f"- Nombre de pixels inondés : {num_flooded_pixels}")
-            st.write(f"- Nombre de pixels sous le seuil : {num_below_threshold_pixels}")
-
-            # Trouver les contours
-            contours = find_contours(flooded_mask)
-
-            # Visualisation
-            st.write("### Carte des zones inondées")
-            colormap = st.selectbox("Choisissez une palette de couleurs pour le fond", ["Blues", "viridis", "plasma", "cividis"])
-            fig = plot_flooded_area(raster_data, nodata, flooded_mask, below_threshold_mask, contours, cmap=colormap, highlight_color="red")
+            # Visualisation initiale
+            st.write("### Carte d'altitude")
+            extent = (
+                transform_tiff[2],
+                transform_tiff[2] + transform_tiff[0] * data_tiff.shape[1],
+                transform_tiff[5] + transform_tiff[4] * data_tiff.shape[0],
+                transform_tiff[5]
+            )
+            fig, ax = plt.subplots(figsize=(8, 6))
+            cax = ax.imshow(data_tiff, cmap='terrain', extent=extent)
+            fig.colorbar(cax, ax=ax, label="Altitude (m)")
             st.pyplot(fig)
-        except Exception as e:
-            st.error(f"Erreur lors de la lecture du fichier : {e}")
+
+            # Sélection du niveau d'eau
+            niveau_inondation = st.slider("Définir le niveau d'inondation (m)", 
+                                          float(data_tiff.min()), float(data_tiff.max()), step=0.1)
+            
+            if st.button("Calculer et afficher la zone inondée"):
+                # Calcul du masque d'inondation
+                inondation_mask = data_tiff <= niveau_inondation
+                surface_inondee = np.sum(inondation_mask) * (transform_tiff[0] * abs(transform_tiff[4])) / 10_000  # En hectares
+                st.write(f"### Surface inondée : {surface_inondee:.2f} hectares")
+
+                # Afficher la carte avec les zones inondées
+                fig = afficher_carte_inondation(data_tiff, transform_tiff, inondation_mask, niveau_inondation)
+                st.pyplot(fig)
 
 if __name__ == "__main__":
     main()
+
 
 
 
