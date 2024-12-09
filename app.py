@@ -35,7 +35,7 @@ if "flood_data" not in st.session_state:
 # Étape 1 : Téléverser un fichier
 st.markdown("## Téléversez un fichier GeoTIFF et GeoJSON pour les analyses")
 uploaded_tiff_file = st.file_uploader("Téléversez un fichier GeoTIFF (.tif)", type=["tif"])
-uploaded_geojson_file = st.file_uploader("Téléversez un fichier GeoJSON pour les routes 1", type=["geojson"])
+uploaded_geojson_file = st.file_uploader("Téléversez un fichier GeoJSON pour les routes", type=["geojson"], key="geojson_routes")
 
 # Charger les données raster
 def charger_tiff(fichier_tiff):
@@ -111,9 +111,20 @@ if uploaded_tiff_file is not None:
         st.pyplot(fig)
 
 # Affichage final
-if routes_gdf is not None:
-    st.write("### Aperçu des routes chargées :")
-    st.map(routes_gdf)
+# Vérification des colonnes et transformation des coordonnées
+if routes_gdf.crs != "EPSG:4326":
+    routes_gdf = routes_gdf.to_crs(epsg=4326)
+
+# Ajout des colonnes latitude et longitude
+routes_gdf["longitude"] = routes_gdf.geometry.x
+routes_gdf["latitude"] = routes_gdf.geometry.y
+
+# Conversion en DataFrame pour st.map
+routes_df = routes_gdf[["latitude", "longitude"]]
+
+# Affichage de la carte
+st.map(routes_df)
+
 
 
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
