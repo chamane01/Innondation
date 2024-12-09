@@ -191,7 +191,7 @@ else:
 
 
 # Charger les données en fonction de l'option sélectionnée
-def charger_fichier(fichier, is_uploaded=False):
+def charger_fichier(uploaded_file, is_uploaded=False):
     try:
         if is_uploaded:
             if fichier.name.endswith('.xlsx'):
