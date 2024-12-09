@@ -185,6 +185,8 @@ else:
     df = None
 
 
+
+df = charger_fichier(uploaded_file, is_uploaded=True)
 # Charger les données en fonction de l'option sélectionnée
 def charger_fichier(fichier, is_uploaded=False):
     try:
