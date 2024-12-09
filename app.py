@@ -83,13 +83,6 @@ if uploaded_tiff_file is not None:
             st.session_state.flood_data['surface_bleu'] = surface_inondee
             st.write(f"**Surface inondée :** {surface_inondee:.2f} hectares")
 
-            contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
-            ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
-            ax.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], colors='#007FFF', alpha=0.5)
-
-            contour_paths = [Polygon(path.vertices) for collection in contours_inondation.collections for path in collection.get_paths()]
-            zone_inondee = gpd.GeoDataFrame(geometry=[MultiPolygon(contour_paths)], crs="EPSG:32630")
-
             # Afficher la carte de l'inondation
             fig, ax = plt.subplots(figsize=(8, 6))
             ax.imshow(data_tiff, cmap='terrain', extent=extent)
