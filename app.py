@@ -78,11 +78,10 @@ if uploaded_tiff_file is not None:
 
         if st.button("Calculer et afficher la zone inondée"):
             # Calculer la zone inondée
-
-            surface_bleue = calculer_surface_bleue(st.session_state.flood_data['niveau_inondation'])
-            volume_eau = calculer_volume(surface_bleue)
-            st.session_state.flood_data['surface_bleu'] = surface_bleue
-            st.session_state.flood_data['volume_eau'] = volume_eau
+            inondation_mask = data_tiff <= st.session_state.flood_data['niveau_inondation']
+            surface_inondee = np.sum(inondation_mask) * (transform_tiff[0] * transform_tiff[4]) / 10_000  # En hectares
+            st.session_state.flood_data['surface_bleu'] = surface_inondee
+            st.write(f"**Surface inondée :** {surface_inondee:.2f} hectares")
 
             # Afficher la carte de l'inondation
             fig, ax = plt.subplots(figsize=(8, 6))
@@ -91,11 +90,6 @@ if uploaded_tiff_file is not None:
             ax.set_title("Zone inondée (en bleu)")
             fig.colorbar(cax, ax=ax, label="Altitude (m)")
             st.pyplot(fig)
-            
-             # Tracer la zone inondée avec les contours
-            contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
-            ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
-            ax.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], colors='#007FFF', alpha=0.5)
 
 
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
@@ -674,6 +668,3 @@ if st.button("Afficher les polygones"):
         generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=-90)
         afficher_polygones(ax, polygones_dans_emprise)
         st.pyplot(fig)
-
-        
-        
