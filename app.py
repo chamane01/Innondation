@@ -78,10 +78,11 @@ if uploaded_tiff_file is not None:
 
         if st.button("Calculer et afficher la zone inondée"):
             # Calculer la zone inondée
-            inondation_mask = data_tiff <= st.session_state.flood_data['niveau_inondation']
-            surface_inondee = np.sum(inondation_mask) * (transform_tiff[0] * transform_tiff[4]) / 10_000  # En hectares
-            st.session_state.flood_data['surface_bleu'] = surface_inondee
-            st.write(f"**Surface inondée :** {surface_inondee:.2f} hectares")
+
+            surface_bleue = calculer_surface_bleue(st.session_state.flood_data['niveau_inondation'])
+            volume_eau = calculer_volume(surface_bleue)
+            st.session_state.flood_data['surface_bleu'] = surface_bleue
+            st.session_state.flood_data['volume_eau'] = volume_eau
 
             # Afficher la carte de l'inondation
             fig, ax = plt.subplots(figsize=(8, 6))
