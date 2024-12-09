@@ -35,7 +35,7 @@ if 'flood_data' not in st.session_state:
 # Étape 1 : Sélectionner un site ou téléverser un fichier
 st.markdown("## Sélectionner un site ou téléverser un fichier GeoTIFF")
 uploaded_tiff_file = st.file_uploader("Téléversez un fichier GeoTIFF (.tif)", type=["tif"])
-
+uploaded_geojson_file = st.file_uploader("Téléversez un fichier GeoJSON pour les routes", type=["geojson"])
 # Charger les données depuis un fichier GeoTIFF
 def charger_tiff(fichier_tiff):
     try:
@@ -49,7 +49,18 @@ def charger_tiff(fichier_tiff):
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None
 
+def charger_geojson(fichier):
+    try:
+        gdf = gpd.read_file(fichier)
+        return gdf
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
+        return None
 
+# Charger les données du fichier GeoJSON des routes
+routes_gdf = None
+if uploaded_geojson_file is not None:
+    routes_gdf = charger_geojson(uploaded_geojson_file)
 
 
 # Si un fichier GeoTIFF est téléversé
