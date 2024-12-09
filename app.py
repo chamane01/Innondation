@@ -76,7 +76,8 @@ if uploaded_tiff_file is not None:
             "Entrez le niveau d'eau (mètres)", min_value=float(data_tiff.min()), max_value=float(data_tiff.max()), step=0.1
         )
 
-         if st.button("Afficher la carte d'inondation"):
+        if st.button("Afficher la carte d'inondation"):
+             
             surface_bleue = calculer_surface_bleue(st.session_state.flood_data['niveau_inondation'])
             volume_eau = calculer_volume(surface_bleue)
             st.session_state.flood_data['surface_bleu'] = surface_bleue
