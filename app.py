@@ -101,11 +101,11 @@ def interface_inondation():
 
     # Calculer la surface et le volume d'eau
     surface_inondee = calculer_surface_inondee(grid_Z, niveau_inondation, resolution)
-    volume_eau = calculer_volume(grid_Z, niveau_inondation, resolution)
+ 
 
     # Affichage des résultats
     st.write(f"Surface inondée: {surface_inondee:.2f} hectares")
-    st.write(f"Volume d'eau: {volume_eau:.2f} m³")
+   
 
     # Afficher la grille et les contours
     afficher_grille_et_contours(grid_Z, niveau_inondation, resolution, X_min, X_max, Y_min, Y_max)
