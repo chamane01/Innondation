@@ -17,6 +17,8 @@ import rasterio
 import numpy as np
 import matplotlib.pyplot as plt
 from skimage import measure
+from matplotlib.patches import Polygon as MplPolygon
+from matplotlib.collections import PatchCollection
 
 # Fonction pour charger et lire un fichier TIFF
 def read_tiff(file_path):
@@ -33,30 +35,35 @@ def calculate_flooded_area(raster_data, threshold, nodata, pixel_area):
     flooded_pixels = np.where((raster_data > threshold) & (raster_data != nodata), 1, 0)
     num_flooded_pixels = np.sum(flooded_pixels)  # Nombre de pixels inondés
     flooded_area = num_flooded_pixels * pixel_area  # Surface totale inondée
-    return flooded_area, flooded_pixels
+    return flooded_area, num_flooded_pixels, flooded_pixels
 
 # Fonction pour tracer les contours
 def find_contours(mask):
     contours = measure.find_contours(mask, level=0.5)  # Détection des contours
     return contours
 
-# Fonction pour afficher le raster avec des couleurs vives et des contours
-def plot_flooded_area(raster_data, nodata, flooded_mask, contours, cmap="Blues", highlight_color="red"):
+# Fonction pour afficher le raster avec des couleurs vives, contours et zones remplies
+def plot_flooded_area(raster_data, nodata, flooded_mask, contours, transform, cmap="Blues", highlight_color="red"):
     # Remplacer les valeurs nodata par NaN pour les ignorer
     raster_data = np.where(raster_data == nodata, np.nan, raster_data)
 
     # Création de la figure
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(10, 8))
     cax = ax.imshow(raster_data, cmap=cmap, interpolation='none')
 
     # Appliquer le masque avec une couleur vive
-    ax.imshow(np.ma.masked_array(flooded_mask, ~flooded_mask), cmap="autumn", alpha=0.6)
+    ax.imshow(np.ma.masked_array(flooded_mask, ~flooded_mask), cmap="autumn", alpha=0.5)
 
-    # Ajouter les contours
+    # Ajouter les contours et remplir les zones inondées
+    patches = []
     for contour in contours:
-        ax.plot(contour[:, 1], contour[:, 0], color=highlight_color, linewidth=2)
+        coords = [(transform[0] * x + transform[2], transform[4] * y + transform[5]) for y, x in contour]
+        polygon = MplPolygon(coords, closed=True)
+        patches.append(polygon)
+    p = PatchCollection(patches, facecolor="orange", edgecolor=highlight_color, alpha=0.5)
+    ax.add_collection(p)
 
-    ax.set_title('Carte d\'inondation avec surface marquée')
+    ax.set_title('Carte d\'inondation avec surface marquée et contours')
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     fig.colorbar(cax, ax=ax, label='Profondeur')
@@ -88,8 +95,9 @@ def main():
                                    float(np.nanmin(raster_data)), float(np.nanmax(raster_data)), step=0.1)
             
             # Calcul de la surface inondée et génération du masque
-            flooded_area, flooded_mask = calculate_flooded_area(raster_data, threshold, nodata, pixel_area)
-            st.write(f"### Surface inondée : {flooded_area:.2f} m²")
+            flooded_area, num_flooded_pixels, flooded_mask = calculate_flooded_area(raster_data, threshold, nodata, pixel_area)
+            st.write(f"### Nombre de pixels inondés : {num_flooded_pixels}")
+            st.write(f"### Surface inondée totale : {flooded_area:.2f} m²")
 
             # Trouver les contours de la zone inondée
             contours = find_contours(flooded_mask)
@@ -99,7 +107,7 @@ def main():
 
             # Visualisation de la carte inondée avec contours
             st.write("### Carte des zones inondées")
-            fig = plot_flooded_area(raster_data, nodata, flooded_mask, contours, cmap=colormap, highlight_color="red")
+            fig = plot_flooded_area(raster_data, nodata, flooded_mask, contours, transform, cmap=colormap, highlight_color="red")
             st.pyplot(fig)
         except Exception as e:
             st.error(f"Erreur lors de la lecture du fichier : {e}")
