@@ -12,7 +12,6 @@ import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
 import rasterio
 
-
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
 with col1:
@@ -23,6 +22,29 @@ with col3:
     st.write("")  # Cette colonne est laissée vide pour centrer les logos
 
 
+
+# Importer les bibliothèques nécessaires
+import streamlit as st
+import pandas as pd
+import numpy as np
+import geopandas as gpd
+import matplotlib.pyplot as plt
+from scipy.interpolate import griddata
+from shapely.geometry import Polygon, box
+from shapely.geometry import MultiPolygon
+import contextily as ctx
+import ezdxf  # Bibliothèque pour créer des fichiers DXF
+from datetime import datetime
+import rasterio  # Pour gérer les fichiers GeoTIFF
+
+# Streamlit - Titre de l'application avec deux logos centrés
+col1, col2, col3 = st.columns([1, 1, 1])
+with col1:
+    st.image("POPOPO.jpg", width=150)
+with col2:
+    st.image("logo.png", width=150)
+with col3:
+    st.write("")  # Cette colonne est laissée vide pour centrer les logos
 
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
 
@@ -39,96 +61,18 @@ st.markdown("## Sélectionner un site ou téléverser un fichier GeoTIFF")
 uploaded_tiff_file = st.file_uploader("Téléversez un fichier GeoTIFF (.tif)", type=["tif"])
 
 # Charger les données depuis un fichier GeoTIFF
-def charger_fichier_raster(fichier):
+def charger_tiff(fichier_tiff):
     try:
-        with rasterio.open(fichier) as src:
-            # Lire les valeurs de l'altitude (c'est généralement la première bande)
-            altitude_data = src.read(1)  # Assurez-vous que la donnée est dans la première bande
-
-            # Extraire les coordonnées (x, y) des pixels
-            affine_transform = src.transform
-            rows, cols = altitude_data.shape
-            x_coords, y_coords = np.meshgrid(
-                np.arange(0, cols), np.arange(0, rows)
-            )
-
-            # Transformer les coordonnées des pixels en coordonnées géographiques
-            x_geo, y_geo = rasterio.transform.xy(affine_transform, y_coords, x_coords)
-
-            # Créer un DataFrame avec les coordonnées et les altitudes
-            df = pd.DataFrame({
-                'X': x_geo.flatten(),
-                'Y': y_geo.flatten(),
-                'Z': altitude_data.flatten()
-            })
-
-        return df
+        with rasterio.open(fichier_tiff) as src:
+            # Lire les métadonnées et les données raster
+            data = src.read(1)  # Lire la première bande
+            transform = src.transform  # Transformation spatiale
+            crs = src.crs  # Système de coordonnées
+            return data, transform, crs
     except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier raster : {e}")
-        return None
-def calculer_surface_inondee(grid_Z, niveau_inondation, resolution):
-    """
-    Calculer la surface inondée en hectares.
-    :param grid_Z: Matrice interpolée des altitudes.
-    :param niveau_inondation: Niveau d'inondation.
-    :param resolution: Taille de chaque pixel en mètres.
-    :return: Surface inondée en hectares.
-    """
-    inondation_mask = (grid_Z <= niveau_inondation)
-    pixel_area = (resolution ** 2) / 10_000  # Convertir m² en hectares
-    surface_inondee = np.sum(inondation_mask) * pixel_area
-    return surface_inondee
+        st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
+        return None, None, None
 
-def afficher_grille_et_contours(grid_Z, niveau_inondation, resolution, X_min, X_max, Y_min, Y_max):
-    """
-    Afficher la grille interpolée avec les contours de l'inondation.
-    :param grid_Z: Matrice interpolée des altitudes.
-    :param niveau_inondation: Niveau d'inondation.
-    :param resolution: Taille de chaque pixel en mètres.
-    :param X_min, X_max, Y_min, Y_max: Limites de la zone à afficher.
-    """
-    fig, ax = plt.subplots(figsize=(10, 8))
-
-    # Affichage de la grille d'altitude
-    cax = ax.imshow(grid_Z, cmap='terrain', extent=(X_min, X_max, Y_min, Y_max))
-    fig.colorbar(cax, ax=ax, label="Altitude (m)")
-
-    # Création du masque d'inondation
-    inondation_mask = (grid_Z <= niveau_inondation)
-    ax.imshow(inondation_mask, cmap='Blues', alpha=0.5, extent=(X_min, X_max, Y_min, Y_max))
-
-    # Tracer les contours de l'inondation
-    contours_inondation = ax.contour(grid_Z, levels=[niveau_inondation], colors='red', linewidths=1.5)
-    ax.clabel(contours_inondation, inline=True, fontsize=8, fmt='%1.1f m')
-
-def interface_inondation():
-    """
-    Interface Streamlit pour l'interaction de l'utilisateur avec les paramètres d'inondation.
-    """
-    # Chargement des données de la grille (à remplacer par un fichier ou une base de données)
-    # Ici, un exemple de grille fictive
-    X_min, X_max, Y_min, Y_max = 0, 1000, 0, 1000
-    resolution = 30  # Résolution en mètres (à ajuster selon les besoins)
-    grid_X, grid_Y = np.meshgrid(np.linspace(X_min, X_max, int((X_max - X_min) / resolution)),
-                                 np.linspace(Y_min, Y_max, int((Y_max - Y_min) / resolution)))
-    grid_Z = np.random.uniform(0, 50, size=grid_X.shape)  # Exemple de terrain fictif
-
-    # Paramètre de niveau d'inondation
-    niveau_inondation = st.slider("Niveau d'inondation (en mètres)", min_value=0, max_value=1000, value=10)
-
-    # Calculer la surface et le volume d'eau
-    surface_inondee = calculer_surface_inondee(grid_Z, niveau_inondation, resolution)
- 
-
-    # Affichage des résultats
-    st.write(f"Surface inondée: {surface_inondee:.2f} hectares")
-   
-
-    # Afficher la grille et les contours
-    afficher_grille_et_contours(grid_Z, niveau_inondation, resolution, X_min, X_max, Y_min, Y_max)
-
-if __name__ == "__main__":
-    interface_inondation()
 # Si un fichier GeoTIFF est téléversé
 if uploaded_tiff_file is not None:
     data_tiff, transform_tiff, crs_tiff = charger_tiff(uploaded_tiff_file)
@@ -187,7 +131,6 @@ if 'flood_data' not in st.session_state:
 st.markdown("## Sélectionner un site ou téléverser un fichier")
 option_site = st.selectbox("Sélectionnez un site", ("Aucun", "AYAME 1", "AYAME 2"))
 uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
-uploaded_tiff_file = st.file_uploader("Téléversez un fichier TIFF", type=["tiff", "tif"])
 
 # Charger les données en fonction de l'option sélectionnée
 def charger_fichier(fichier, is_uploaded=False):
@@ -204,25 +147,6 @@ def charger_fichier(fichier, is_uploaded=False):
         st.error(f"Erreur lors du chargement du fichier : {e}")
         return None
 
-def charger_fichier(fichier, is_uploaded=False):
-    try:
-        if is_uploaded:
-            if fichier.name.endswith('.xlsx'):
-                df = pd.read_excel(fichier)
-            elif fichier.name.endswith('.txt'):
-                df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
-        else:
-            df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
-        
-        # Vérification du type de df
-        if isinstance(df, pd.DataFrame):
-            return df
-        else:
-            raise ValueError("Les données chargées ne sont pas un DataFrame.")
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier : {e}")
-        return None
-
 if option_site == "AYAME 1":
     df = charger_fichier('AYAME1.txt')
 elif option_site == "AYAME 2":
@@ -233,23 +157,7 @@ else:
     st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
     df = None
 
-# Fonction de traitement selon le type de fichier
-def charger_donnees():
-    if option_site == "AYAME 1":
-        return charger_fichier('AYAME1.txt')
-    elif option_site == "AYAME 2":
-        return charger_fichier('AYAME2.txt')
-    elif uploaded_file is not None:
-        return charger_fichier(uploaded_file, is_uploaded=True)
-    elif uploaded_tiff_file is not None:
-        # Charger les données du fichier TIFF
-        return charger_tiff(uploaded_tiff_file)
-    else:
-        st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
-        return None
 
-# Charger les données du fichier sélectionné
-df = charger_donnees()
 
 
 uploaded_geojson_file = st.file_uploader("Téléversez un fichier GeoJSON pour les routes", type=["geojson"])
@@ -263,22 +171,6 @@ def charger_geojson(fichier):
 
 # Charger les données du fichier GeoJSON des routes
 routes_gdf = None
-if df is None or not isinstance(df, pd.DataFrame):
-    st.error("Le fichier chargé n'est pas valide. Assurez-vous que les données sont correctement formatées.")
-else:
-    if 'X' not in df.columns or 'Y' not in df.columns or 'Z' not in df.columns:
-        st.error("Erreur : colonnes 'X', 'Y' et 'Z' manquantes.")
-if uploaded_tiff_file is not None:
-    image, transform, crs = df
-    # Appliquer la logique de calcul sur l'image (qui représente le niveau d'inondation, par exemple)
-    # Vous pouvez adapter le calcul en fonction des données du fichier TIFF
-    niveau_inondation = st.number_input("Entrez le niveau d'eau (mètres)", min_value=0.0, step=0.1)
-    surface_bleue = np.sum(image <= niveau_inondation) * (transform[0] * transform[4]) / 10000  # Conversion en hectares
-    volume_eau = surface_bleue * niveau_inondation * 10000
-    st.session_state.flood_data['surface_bleu'] = surface_bleue
-    st.session_state.flood_data['volume_eau'] = volume_eau
-    st.write(f"Surface inondée estimée : {surface_bleue:.2f} hectares")
-    
 if uploaded_geojson_file is not None:
     routes_gdf = charger_geojson(uploaded_geojson_file)
 
