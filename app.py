@@ -90,6 +90,11 @@ if uploaded_tiff_file is not None:
             ax.set_title("Zone inondée (en bleu)")
             fig.colorbar(cax, ax=ax, label="Altitude (m)")
             st.pyplot(fig)
+            
+             # Tracer la zone inondée avec les contours
+            contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
+            ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
+            ax.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], colors='#007FFF', alpha=0.5)
 
 
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
