@@ -19,6 +19,8 @@ import matplotlib.pyplot as plt
 from shapely.geometry import Polygon
 from skimage import measure
 import geopandas as gpd
+from matplotlib.patches import Polygon as MplPolygon
+from matplotlib.collections import PatchCollection
 
 # Fonction pour charger et lire un fichier TIFF
 def read_tiff(file_path):
@@ -46,22 +48,27 @@ def extract_polygons(mask, transform):
             polygons.append(polygon)
     return polygons
 
-# Fonction pour afficher les zones inondées
-def plot_flooded_area(raster_data, nodata, flooded_mask, polygons, cmap="Blues"):
+# Fonction pour afficher les zones inondées avec polygones
+def plot_flooded_area_with_polygons(raster_data, nodata, flooded_mask, polygons, cmap="Blues"):
     # Remplacer les valeurs nodata par NaN
     raster_data = np.where(raster_data == nodata, np.nan, raster_data)
 
     # Création de la figure
-    fig, ax = plt.subplots(figsize=(8, 6))
+    fig, ax = plt.subplots(figsize=(10, 8))
     cax = ax.imshow(raster_data, cmap=cmap, interpolation='none')
 
     # Appliquer le masque avec une couleur vive
     ax.imshow(np.ma.masked_array(flooded_mask, ~flooded_mask), cmap="autumn", alpha=0.6)
 
-    # Ajouter les polygones
+    # Ajouter les polygones directement sur la carte
+    patches = []
     for polygon in polygons:
-        x, y = polygon.exterior.xy
-        ax.plot(x, y, color='red', linewidth=2)
+        coords = np.array(polygon.exterior.coords)
+        patches.append(MplPolygon(coords, closed=True))
+
+    # Ajouter une collection de polygones avec une couleur vive et des contours
+    p = PatchCollection(patches, edgecolor="red", facecolor="blue", alpha=0.4, linewidths=1.5)
+    ax.add_collection(p)
 
     ax.set_title('Carte des zones inondées avec polygones')
     ax.set_xlabel('X')
@@ -109,20 +116,16 @@ def main():
             total_flooded_area = calculate_total_flooded_area(polygons)
             st.write(f"### Surface totale inondée : {total_flooded_area:.2f} unités")
 
-            # Affichage des polygones dans une GeoDataFrame
-            gdf = gpd.GeoDataFrame({'geometry': polygons})
-            st.write("### Polygones des zones inondées")
-            st.write(gdf)
-
-            # Visualisation de la carte
-            st.write("### Carte des zones inondées")
-            fig = plot_flooded_area(raster_data, nodata, flooded_mask, polygons, cmap="Blues")
+            # Visualisation de la carte avec polygones
+            st.write("### Carte des zones inondées avec polygones fermés")
+            fig = plot_flooded_area_with_polygons(raster_data, nodata, flooded_mask, polygons, cmap="Blues")
             st.pyplot(fig)
         except Exception as e:
             st.error(f"Erreur lors de la lecture du fichier : {e}")
 
 if __name__ == "__main__":
     main()
+
 
 
 # Streamlit - Titre de l'application avec deux logos centrés
