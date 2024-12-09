@@ -49,20 +49,6 @@ def charger_tiff(fichier_tiff):
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None
 
-# Charger un GeoJSON
-def charger_geojson(fichier):
-    try:
-        gdf = gpd.read_file(fichier)
-        return gdf
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
-        return None
-
-# Traitement GeoJSON
-routes_gdf = None
-if uploaded_geojson_file is not None:
-    routes_gdf = charger_geojson(uploaded_geojson_file)
-
 # Traitement GeoTIFF
 if uploaded_tiff_file is not None:
     data_tiff, transform_tiff, crs_tiff = charger_tiff(uploaded_tiff_file)
@@ -110,20 +96,7 @@ if uploaded_tiff_file is not None:
         ctx.add_basemap(ax, crs=crs_tiff.to_string(), source=ctx.providers.OpenStreetMap.Mapnik)
         st.pyplot(fig)
 
-# Affichage final
-# Vérification des colonnes et transformation des coordonnées
-if routes_gdf.crs != "EPSG:4326":
-    routes_gdf = routes_gdf.to_crs(epsg=4326)
 
-# Ajout des colonnes latitude et longitude
-routes_gdf["longitude"] = routes_gdf.geometry.x
-routes_gdf["latitude"] = routes_gdf.geometry.y
-
-# Conversion en DataFrame pour st.map
-routes_df = routes_gdf[["latitude", "longitude"]]
-
-# Affichage de la carte
-st.map(routes_df)
 
 
 
