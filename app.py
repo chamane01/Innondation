@@ -35,7 +35,6 @@ if "flood_data" not in st.session_state:
 # Téléversement des fichiers GeoTIFF et GeoJSON
 st.markdown("## Téléversez un fichier GeoTIFF et GeoJSON pour les analyses")
 uploaded_tiff_file = st.file_uploader("Téléversez un fichier GeoTIFF (.tif)", type=["tif"])
-uploaded_geojson_file = st.file_uploader("Téléversez un fichier GeoJSON pour les routes", type=["geojson"])
 
 # Fonction pour charger un GeoTIFF
 def charger_tiff(fichier_tiff):
@@ -49,14 +48,6 @@ def charger_tiff(fichier_tiff):
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None
 
-# Fonction pour charger un GeoJSON
-def charger_geojson(fichier_geojson):
-    try:
-        gdf = gpd.read_file(fichier_geojson)
-        return gdf
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
-        return None
 
 # Traitement des données GeoTIFF
 if uploaded_tiff_file is not None:
@@ -103,12 +94,6 @@ if uploaded_tiff_file is not None:
         ctx.add_basemap(ax, crs=crs_tiff.to_string(), source=ctx.providers.OpenStreetMap.Mapnik)
         st.pyplot(fig)
 
-# Traitement des données GeoJSON
-if uploaded_geojson_file is not None:
-    routes_gdf = charger_geojson(uploaded_geojson_file)
-    if routes_gdf is not None:
-        st.write("### Données des routes")
-        st.map(routes_gdf)
 
 # Gestion des bâtiments
 try:
