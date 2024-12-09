@@ -87,15 +87,33 @@ def main():
             if st.button("Calculer et afficher la zone inondée"):
                 # Calcul du masque d'inondation
                 inondation_mask = data_tiff <= niveau_inondation
-                surface_inondee = np.sum(inondation_mask) * (transform_tiff[0] * abs(transform_tiff[4])) / 10_000  # En hectares
-                st.write(f"### Surface inondée : {surface_inondee:.2f} hectares")
+                # Nombre de pixels affectés par l'inondation
+                pixels_inondes = np.sum(inondation_mask)
+                st.write(f"### Nombre de pixels inondés : {pixels_inondes}")
+                
+                # Dimension réelle des pixels
+                pixel_size_x = transform_tiff[0]  # Dimension en X (longitude)
+                pixel_size_y = abs(transform_tiff[4])  # Dimension en Y (latitude)
 
+                st.write(f"### Dimensions du pixel en plan (en coordonnées géographiques) :")
+                st.write(f"- Longueur du pixel en X : {pixel_size_x} m")
+                st.write(f"- Largeur du pixel en Y : {pixel_size_y} m")
+
+                # Surface totale en mètres carrés
+                surface_pixel_m2 = pixel_size_x * pixel_size_y  # en m²
+                # Surface inondée en m²
+                surface_inondee_m2 = pixels_inondes * surface_pixel_m2
+                # Conversion en hectares (1 hectare = 10,000 m²)
+                surface_inondee_hectares = surface_inondee_m2 / 10_000
+                st.write(f"### Surface inondée : {surface_inondee_hectares:.2f} hectares")
+                
                 # Afficher la carte avec les zones inondées
                 fig = afficher_carte_inondation(data_tiff, transform_tiff, inondation_mask, niveau_inondation)
                 st.pyplot(fig)
 
 if __name__ == "__main__":
     main()
+
 
 
 
