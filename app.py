@@ -47,11 +47,11 @@ def plot_flooded_area(raster_data, nodata, flooded_mask, below_threshold_mask, c
     fig, ax = plt.subplots(figsize=(8, 6))
     cax = ax.imshow(raster_data, cmap=cmap, interpolation='none')
 
-    # Appliquer le masque des zones inondées (en bleu clair, 20% d'opacité)
+    # Appliquer le masque des zones sous le seuil (en bleu clair, 20% d'opacité)
     ax.imshow(np.ma.masked_array(below_threshold_mask, ~below_threshold_mask), cmap="Blues", alpha=0.2)
 
-    # Appliquer le masque des zones inondées
-    ax.imshow(np.ma.masked_array(flooded_mask, ~flooded_mask), cmap="autumn", alpha=0.6)
+    # Appliquer le masque des zones inondées (opacité 40%)
+    ax.imshow(np.ma.masked_array(flooded_mask, ~flooded_mask), cmap="autumn", alpha=0.4)
 
     # Ajouter les contours
     for contour in contours:
@@ -111,6 +111,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
