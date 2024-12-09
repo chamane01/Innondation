@@ -49,7 +49,69 @@ def charger_tiff(fichier_tiff):
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None
+def calculer_surface_inondee(grid_Z, niveau_inondation, resolution):
+    """
+    Calculer la surface inondée en hectares.
+    :param grid_Z: Matrice interpolée des altitudes.
+    :param niveau_inondation: Niveau d'inondation.
+    :param resolution: Taille de chaque pixel en mètres.
+    :return: Surface inondée en hectares.
+    """
+    inondation_mask = (grid_Z <= niveau_inondation)
+    pixel_area = (resolution ** 2) / 10_000  # Convertir m² en hectares
+    surface_inondee = np.sum(inondation_mask) * pixel_area
+    return surface_inondee
 
+def afficher_grille_et_contours(grid_Z, niveau_inondation, resolution, X_min, X_max, Y_min, Y_max):
+    """
+    Afficher la grille interpolée avec les contours de l'inondation.
+    :param grid_Z: Matrice interpolée des altitudes.
+    :param niveau_inondation: Niveau d'inondation.
+    :param resolution: Taille de chaque pixel en mètres.
+    :param X_min, X_max, Y_min, Y_max: Limites de la zone à afficher.
+    """
+    fig, ax = plt.subplots(figsize=(10, 8))
+
+    # Affichage de la grille d'altitude
+    cax = ax.imshow(grid_Z, cmap='terrain', extent=(X_min, X_max, Y_min, Y_max))
+    fig.colorbar(cax, ax=ax, label="Altitude (m)")
+
+    # Création du masque d'inondation
+    inondation_mask = (grid_Z <= niveau_inondation)
+    ax.imshow(inondation_mask, cmap='Blues', alpha=0.5, extent=(X_min, X_max, Y_min, Y_max))
+
+    # Tracer les contours de l'inondation
+    contours_inondation = ax.contour(grid_Z, levels=[niveau_inondation], colors='red', linewidths=1.5)
+    ax.clabel(contours_inondation, inline=True, fontsize=8, fmt='%1.1f m')
+
+def interface_inondation():
+    """
+    Interface Streamlit pour l'interaction de l'utilisateur avec les paramètres d'inondation.
+    """
+    # Chargement des données de la grille (à remplacer par un fichier ou une base de données)
+    # Ici, un exemple de grille fictive
+    X_min, X_max, Y_min, Y_max = 0, 1000, 0, 1000
+    resolution = 30  # Résolution en mètres (à ajuster selon les besoins)
+    grid_X, grid_Y = np.meshgrid(np.linspace(X_min, X_max, int((X_max - X_min) / resolution)),
+                                 np.linspace(Y_min, Y_max, int((Y_max - Y_min) / resolution)))
+    grid_Z = np.random.uniform(0, 50, size=grid_X.shape)  # Exemple de terrain fictif
+
+    # Paramètre de niveau d'inondation
+    niveau_inondation = st.slider("Niveau d'inondation (en mètres)", min_value=0, max_value=50, value=10)
+
+    # Calculer la surface et le volume d'eau
+    surface_inondee = calculer_surface_inondee(grid_Z, niveau_inondation, resolution)
+    volume_eau = calculer_volume(grid_Z, niveau_inondation, resolution)
+
+    # Affichage des résultats
+    st.write(f"Surface inondée: {surface_inondee:.2f} hectares")
+    st.write(f"Volume d'eau: {volume_eau:.2f} m³")
+
+    # Afficher la grille et les contours
+    afficher_grille_et_contours(grid_Z, niveau_inondation, resolution, X_min, X_max, Y_min, Y_max)
+
+if __name__ == "__main__":
+    interface_inondation()
 # Si un fichier GeoTIFF est téléversé
 if uploaded_tiff_file is not None:
     data_tiff, transform_tiff, crs_tiff = charger_tiff(uploaded_tiff_file)
