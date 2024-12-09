@@ -18,7 +18,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from shapely.geometry import Polygon
 from skimage import measure
-import geopandas as gpd
 from matplotlib.patches import Polygon as MplPolygon
 from matplotlib.collections import PatchCollection
 
@@ -48,7 +47,7 @@ def extract_polygons(mask, transform):
             polygons.append(polygon)
     return polygons
 
-# Fonction pour afficher les zones inondées avec polygones
+# Fonction pour afficher la carte avec les zones inondées et leurs contours
 def plot_flooded_area_with_polygons(raster_data, nodata, flooded_mask, polygons, cmap="Blues"):
     # Remplacer les valeurs nodata par NaN
     raster_data = np.where(raster_data == nodata, np.nan, raster_data)
@@ -58,7 +57,7 @@ def plot_flooded_area_with_polygons(raster_data, nodata, flooded_mask, polygons,
     cax = ax.imshow(raster_data, cmap=cmap, interpolation='none')
 
     # Appliquer le masque avec une couleur vive
-    ax.imshow(np.ma.masked_array(flooded_mask, ~flooded_mask), cmap="autumn", alpha=0.6)
+    ax.imshow(np.ma.masked_array(flooded_mask, ~flooded_mask), cmap="autumn", alpha=0.5)
 
     # Ajouter les polygones directement sur la carte
     patches = []
@@ -66,11 +65,16 @@ def plot_flooded_area_with_polygons(raster_data, nodata, flooded_mask, polygons,
         coords = np.array(polygon.exterior.coords)
         patches.append(MplPolygon(coords, closed=True))
 
-    # Ajouter une collection de polygones avec une couleur vive et des contours
-    p = PatchCollection(patches, edgecolor="red", facecolor="blue", alpha=0.4, linewidths=1.5)
+    # Ajouter une collection de polygones avec une couleur vive pour la surface
+    p = PatchCollection(patches, edgecolor="black", facecolor="blue", alpha=0.3, linewidths=1.5)
     ax.add_collection(p)
 
-    ax.set_title('Carte des zones inondées avec polygones')
+    # Tracer les contours des polygones
+    for polygon in polygons:
+        coords = np.array(polygon.exterior.coords)
+        ax.plot(coords[:, 0], coords[:, 1], color="red", linewidth=1)
+
+    ax.set_title('Carte des zones inondées avec contours')
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     fig.colorbar(cax, ax=ax, label='Profondeur')
@@ -83,7 +87,7 @@ def calculate_total_flooded_area(polygons):
 
 # Définition de l'application Streamlit
 def main():
-    st.title("Carte d'inondation avec polygones fermés")
+    st.title("Carte d'inondation avec contours et surface inondée")
     st.write("Chargez un fichier TIFF contenant des données raster pour afficher la carte, tracer les polygones fermés et calculer la surface inondée.")
 
     # Téléchargement du fichier TIFF
@@ -116,8 +120,8 @@ def main():
             total_flooded_area = calculate_total_flooded_area(polygons)
             st.write(f"### Surface totale inondée : {total_flooded_area:.2f} unités")
 
-            # Visualisation de la carte avec polygones
-            st.write("### Carte des zones inondées avec polygones fermés")
+            # Visualisation de la carte avec polygones et contours
+            st.write("### Carte des zones inondées avec contours et surface")
             fig = plot_flooded_area_with_polygons(raster_data, nodata, flooded_mask, polygons, cmap="Blues")
             st.pyplot(fig)
         except Exception as e:
