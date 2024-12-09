@@ -187,16 +187,24 @@ def charger_fichier(fichier, is_uploaded=False):
         st.error(f"Erreur lors du chargement du fichier : {e}")
         return None
 
-def charger_tiff(fichier):
+def charger_fichier(fichier, is_uploaded=False):
     try:
-        with rasterio.open(fichier) as src:
-            image = src.read(1)  # Lire la première bande
-            transform = src.transform  # Transformée géographique
-            crs = src.crs  # Système de projection
-        return image, transform, crs
+        if is_uploaded:
+            if fichier.name.endswith('.xlsx'):
+                df = pd.read_excel(fichier)
+            elif fichier.name.endswith('.txt'):
+                df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
+        else:
+            df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
+        
+        # Vérification du type de df
+        if isinstance(df, pd.DataFrame):
+            return df
+        else:
+            raise ValueError("Les données chargées ne sont pas un DataFrame.")
     except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier TIFF : {e}")
-        return None, None, None
+        st.error(f"Erreur lors du chargement du fichier : {e}")
+        return None
 
 if option_site == "AYAME 1":
     df = charger_fichier('AYAME1.txt')
@@ -238,7 +246,11 @@ def charger_geojson(fichier):
 
 # Charger les données du fichier GeoJSON des routes
 routes_gdf = None
-
+if df is None or not isinstance(df, pd.DataFrame):
+    st.error("Le fichier chargé n'est pas valide. Assurez-vous que les données sont correctement formatées.")
+else:
+    if 'X' not in df.columns or 'Y' not in df.columns or 'Z' not in df.columns:
+        st.error("Erreur : colonnes 'X', 'Y' et 'Z' manquantes.")
 if uploaded_tiff_file is not None:
     image, transform, crs = df
     # Appliquer la logique de calcul sur l'image (qui représente le niveau d'inondation, par exemple)
