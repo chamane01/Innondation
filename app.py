@@ -12,6 +12,7 @@ import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
 import rasterio
 
+
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
 with col1:
@@ -38,17 +39,33 @@ st.markdown("## Sélectionner un site ou téléverser un fichier GeoTIFF")
 uploaded_tiff_file = st.file_uploader("Téléversez un fichier GeoTIFF (.tif)", type=["tif"])
 
 # Charger les données depuis un fichier GeoTIFF
-def charger_tiff(fichier_tiff):
+def charger_fichier_raster(fichier):
     try:
-        with rasterio.open(fichier_tiff) as src:
-            # Lire les métadonnées et les données raster
-            data = src.read(1)  # Lire la première bande
-            transform = src.transform  # Transformation spatiale
-            crs = src.crs  # Système de coordonnées
-            return data, transform, crs
+        with rasterio.open(fichier) as src:
+            # Lire les valeurs de l'altitude (c'est généralement la première bande)
+            altitude_data = src.read(1)  # Assurez-vous que la donnée est dans la première bande
+
+            # Extraire les coordonnées (x, y) des pixels
+            affine_transform = src.transform
+            rows, cols = altitude_data.shape
+            x_coords, y_coords = np.meshgrid(
+                np.arange(0, cols), np.arange(0, rows)
+            )
+
+            # Transformer les coordonnées des pixels en coordonnées géographiques
+            x_geo, y_geo = rasterio.transform.xy(affine_transform, y_coords, x_coords)
+
+            # Créer un DataFrame avec les coordonnées et les altitudes
+            df = pd.DataFrame({
+                'X': x_geo.flatten(),
+                'Y': y_geo.flatten(),
+                'Z': altitude_data.flatten()
+            })
+
+        return df
     except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
-        return None, None, None
+        st.error(f"Erreur lors du chargement du fichier raster : {e}")
+        return None
 def calculer_surface_inondee(grid_Z, niveau_inondation, resolution):
     """
     Calculer la surface inondée en hectares.
