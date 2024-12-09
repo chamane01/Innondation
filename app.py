@@ -16,6 +16,7 @@ import streamlit as st
 import rasterio
 import numpy as np
 import matplotlib.pyplot as plt
+from skimage import measure
 
 # Fonction pour charger et lire un fichier TIFF
 def read_tiff(file_path):
@@ -24,9 +25,9 @@ def read_tiff(file_path):
         transform = src.transform  # Transformation géographique
         nodata = src.nodata  # Valeur nodata
         pixel_area = abs(transform[0] * transform[4])  # Surface d'un pixel
-    return raster_data, nodata, pixel_area
+    return raster_data, nodata, pixel_area, transform
 
-# Fonction pour calculer la surface inondée
+# Fonction pour calculer la surface inondée et générer un masque
 def calculate_flooded_area(raster_data, threshold, nodata, pixel_area):
     # Identifier les pixels inondés
     flooded_pixels = np.where((raster_data > threshold) & (raster_data != nodata), 1, 0)
@@ -34,19 +35,28 @@ def calculate_flooded_area(raster_data, threshold, nodata, pixel_area):
     flooded_area = num_flooded_pixels * pixel_area  # Surface totale inondée
     return flooded_area, flooded_pixels
 
-# Fonction pour afficher le raster avec matplotlib
-def plot_raster(raster_data, nodata, cmap="Blues", mask=None):
+# Fonction pour tracer les contours
+def find_contours(mask):
+    contours = measure.find_contours(mask, level=0.5)  # Détection des contours
+    return contours
+
+# Fonction pour afficher le raster avec des couleurs vives et des contours
+def plot_flooded_area(raster_data, nodata, flooded_mask, contours, cmap="Blues", highlight_color="red"):
     # Remplacer les valeurs nodata par NaN pour les ignorer
     raster_data = np.where(raster_data == nodata, np.nan, raster_data)
-    
-    # Appliquer un masque si fourni
-    if mask is not None:
-        raster_data = np.ma.masked_array(raster_data, mask=~mask)
 
     # Création de la figure
     fig, ax = plt.subplots(figsize=(8, 6))
     cax = ax.imshow(raster_data, cmap=cmap, interpolation='none')
-    ax.set_title('Carte de profondeur ou d\'inondation')
+
+    # Appliquer le masque avec une couleur vive
+    ax.imshow(np.ma.masked_array(flooded_mask, ~flooded_mask), cmap="autumn", alpha=0.6)
+
+    # Ajouter les contours
+    for contour in contours:
+        ax.plot(contour[:, 1], contour[:, 0], color=highlight_color, linewidth=2)
+
+    ax.set_title('Carte d\'inondation avec surface marquée')
     ax.set_xlabel('X')
     ax.set_ylabel('Y')
     fig.colorbar(cax, ax=ax, label='Profondeur')
@@ -54,8 +64,8 @@ def plot_raster(raster_data, nodata, cmap="Blues", mask=None):
 
 # Définition de l'application Streamlit
 def main():
-    st.title("Carte d'inondation et calcul de surface")
-    st.write("Chargez un fichier TIFF contenant des données raster pour afficher la carte et calculer la surface inondée.")
+    st.title("Carte d'inondation avec surface marquée et contours")
+    st.write("Chargez un fichier TIFF contenant des données raster pour afficher la carte, calculer la surface inondée et tracer les contours.")
 
     # Téléchargement du fichier TIFF
     uploaded_file = st.file_uploader("Choisissez un fichier TIFF", type=["tiff", "tif"])
@@ -63,7 +73,7 @@ def main():
     if uploaded_file:
         # Lecture du fichier TIFF
         try:
-            raster_data, nodata, pixel_area = read_tiff(uploaded_file)
+            raster_data, nodata, pixel_area, transform = read_tiff(uploaded_file)
             
             # Affichage des dimensions et des valeurs min/max
             st.write("### Informations sur le fichier TIFF")
@@ -77,22 +87,26 @@ def main():
             threshold = st.slider("Définir le seuil de profondeur (niveau d'eau)", 
                                    float(np.nanmin(raster_data)), float(np.nanmax(raster_data)), step=0.1)
             
-            # Calcul de la surface inondée
-            flooded_area, flooded_pixels = calculate_flooded_area(raster_data, threshold, nodata, pixel_area)
+            # Calcul de la surface inondée et génération du masque
+            flooded_area, flooded_mask = calculate_flooded_area(raster_data, threshold, nodata, pixel_area)
             st.write(f"### Surface inondée : {flooded_area:.2f} m²")
 
-            # Sélection du colormap pour la visualisation
-            colormap = st.selectbox("Choisissez une palette de couleurs", ["Blues", "viridis", "plasma", "cividis"])
+            # Trouver les contours de la zone inondée
+            contours = find_contours(flooded_mask)
 
-            # Visualisation de la carte inondée
-            st.write("### Carte inondée")
-            fig = plot_raster(raster_data, nodata, cmap=colormap, mask=flooded_pixels.astype(bool))
+            # Sélection du colormap pour la visualisation
+            colormap = st.selectbox("Choisissez une palette de couleurs pour le fond", ["Blues", "viridis", "plasma", "cividis"])
+
+            # Visualisation de la carte inondée avec contours
+            st.write("### Carte des zones inondées")
+            fig = plot_flooded_area(raster_data, nodata, flooded_mask, contours, cmap=colormap, highlight_color="red")
             st.pyplot(fig)
         except Exception as e:
             st.error(f"Erreur lors de la lecture du fichier : {e}")
 
 if __name__ == "__main__":
     main()
+
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
