@@ -161,6 +161,9 @@ if 'flood_data' not in st.session_state:
         'volume_eau': None,
         'niveau_inondation': 0.0
     }
+
+
+df = charger_fichier(uploaded_file, is_uploaded=True)
 option_site = st.selectbox("Sélectionnez un site", ("Aucun", "AYAME 1", "AYAME 2"))
 
 uploaded_file = st.file_uploader("Téléversez un fichier", type=["txt", "xlsx", "tif"])
@@ -186,7 +189,7 @@ else:
 
 
 
-df = charger_fichier(uploaded_file, is_uploaded=True)
+
 # Charger les données en fonction de l'option sélectionnée
 def charger_fichier(fichier, is_uploaded=False):
     try:
