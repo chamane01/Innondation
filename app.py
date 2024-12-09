@@ -170,14 +170,17 @@ else:
     st.error("Aucun site sélectionné. Veuillez faire un choix.")
 # Étape 1 : Sélectionner un site ou téléverser un fichier
 if option_site == "AYAME 1":
+    st.write("Chargement du site AYAME 1")
     df = charger_fichier('AYAME1.txt')
 elif option_site == "AYAME 2":
+    st.write("Chargement du site AYAME 2")
     df = charger_fichier('AYAME2.txt')
-elif uploaded_file is not None:
-    if uploaded_file.name.endswith(".tif"):
-        df = charger_tiff(uploaded_file)
-    else:
-        df = charger_fichier(uploaded_file, is_uploaded=True)
+elif uploaded_file:  # Vérifie que `uploaded_file` n'est pas None
+    st.write(f"Chargement d'un fichier téléversé : {uploaded_file.name}")
+    df = charger_fichier(uploaded_file, is_uploaded=True)
+else:
+    st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
+    df = None
 
 
 # Charger les données en fonction de l'option sélectionnée
