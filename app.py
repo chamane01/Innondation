@@ -48,14 +48,6 @@ def charger_tiff(fichier_tiff):
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None
 
-def calculer_surface_bleue(niveau_inondation):
-    """
-    Calcule la surface inondée en fonction du niveau d'inondation.
-    """
-    # Exemple de calcul (à ajuster selon votre logique)
-    surface_inondee = niveau_inondation * 100  # Exemple fictif
-    return surface_inondee
-
 # Si un fichier GeoTIFF est téléversé
 if uploaded_tiff_file is not None:
     data_tiff, transform_tiff, crs_tiff = charger_tiff(uploaded_tiff_file)
@@ -80,76 +72,24 @@ if uploaded_tiff_file is not None:
         st.pyplot(fig)
 
         # Niveau d'eau et analyse
-        st.session_state.flood_data['niveau_inondation'] = niveau_inondation
-        if 'flood_data' not in st.session_state:
-            st.session_state.flood_data = {'niveau_inondation': 0}
+        st.session_state.flood_data['niveau_inondation'] = st.number_input(
+            "Entrez le niveau d'eau (mètres)", min_value=float(data_tiff.min()), max_value=float(data_tiff.max()), step=0.1
+        )
 
-        st.set_page_config(page_title="Simulation d'Inondation", layout="wide")
-        st.title("Simulation de l'impact d'une inondation")
-    
+        if st.button("Calculer et afficher la zone inondée"):
+            # Calculer la zone inondée
+            inondation_mask = data_tiff <= st.session_state.flood_data['niveau_inondation']
+            surface_inondee = np.sum(inondation_mask) * (transform_tiff[0] * transform_tiff[4]) / 10_000  # En hectares
+            st.session_state.flood_data['surface_bleu'] = surface_inondee
+            st.write(f"**Surface inondée :** {surface_inondee:.2f} hectares")
 
-        if st.button("Afficher la carte d'inondation"):
-            # Exemple d'utilisation de calculer_surface_bleue
-            surface_bleue = calculer_surface_bleue(st.session_state.flood_data['niveau_inondation'])
-            st.write(f"Surface inondée estimée : {surface_bleue} m²")
-            # Simuler des points de niveau topographique
-            points_topo = np.random.uniform(size=(100, 3))  # Exemple de points aléatoires
-            points_topo[:, 0] *= 100
-            points_topo[:, 1] *= 100
-            points_topo[:, 2] *= 10 # Altitude entre 0 et 10
-            # Interpolation des données pour créer une grille
-            grid_X, grid_Y = np.meshgrid(np.linspace(0, 100, 500), np.linspace(0, 100, 500))
-            grid_Z = griddata(points_topo[:, :2], points_topo[:, 2], (grid_X, grid_Y), method='linear')
-
-            
-    
-    
-    
-    
-
-    
-    
-
-    
-    
-    
-    # Création de la figure matplotlib
-    fig, ax = plt.subplots(figsize=(10, 8))
-
-    # Tracer la topographie
-    c = ax.contourf(grid_X, grid_Y, grid_Z, cmap="terrain", alpha=0.6)
-    plt.colorbar(c, ax=ax, label="Altitude (m)")
-
-    # Tracer la zone inondée
-    contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[niveau_inondation], colors='red', linewidths=1)
-    ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
-    ax.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, niveau_inondation], colors='#007FFF', alpha=0.5)
-
-    # Transformer les contours en polygones pour analyser les bâtiments
-    contour_paths = [Polygon(path.vertices) for collection in contours_inondation.collections for path in collection.get_paths()]
-    zone_inondee = gpd.GeoDataFrame(geometry=contour_paths)
-
-    # Vérifier les bâtiments impactés
-    batiments_inondes = gpd.sjoin(batiments, zone_inondee, how="inner", predicate="intersects")
-
-    # Afficher les bâtiments impactés dans Streamlit
-    st.subheader("Bâtiments impactés par l'inondation")
-    if not batiments_inondes.empty:
-        st.write(batiments_inondes)
-    else:
-        st.info("Aucun bâtiment n'est impacté par le niveau d'inondation donné.")
-
-    # Tracer les bâtiments sur la carte
-    for _, row in batiments.iterrows():
-        x, y = row.geometry.exterior.xy
-        ax.plot(x, y, color="black", linewidth=0.5)
-    for _, row in batiments_inondes.iterrows():
-        x, y = row.geometry.exterior.xy
-        ax.fill(x, y, color="red", alpha=0.5)
-
-    # Afficher la figure dans Streamlit
-    st.pyplot(fig)
-            
+            # Afficher la carte de l'inondation
+            fig, ax = plt.subplots(figsize=(8, 6))
+            ax.imshow(data_tiff, cmap='terrain', extent=extent)
+            ax.imshow(inondation_mask, cmap='Blues', alpha=0.5, extent=extent)
+            ax.set_title("Zone inondée (en bleu)")
+            fig.colorbar(cax, ax=ax, label="Altitude (m)")
+            st.pyplot(fig)
 
 
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
@@ -162,108 +102,37 @@ if 'flood_data' not in st.session_state:
         'niveau_inondation': 0.0
     }
 
-
-df = charger_fichier(uploaded_file, is_uploaded=True)
+# Étape 1 : Sélectionner un site ou téléverser un fichier
+st.markdown("## Sélectionner un site ou téléverser un fichier")
 option_site = st.selectbox("Sélectionnez un site", ("Aucun", "AYAME 1", "AYAME 2"))
-
-uploaded_file = st.file_uploader("Téléversez un fichier", type=["txt", "xlsx", "tif"])
-
-# Ajouter une vérification
-
-
-
-
+uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
 
 # Charger les données en fonction de l'option sélectionnée
-def charger_fichier(uploaded_file=None, is_uploaded=False, option_site=None):
-    """
-    Fonction pour charger un fichier en fonction du site sélectionné ou d'un fichier téléversé.
-    """
+def charger_fichier(fichier, is_uploaded=False):
     try:
-        if option_site:
-            st.write(f"Site sélectionné : {option_site}")
-
-            if option_site == "AYAME 1":
-                st.write("Chargement du site AYAME 1")
-                df = charger_fichier('AYAME1.txt')
-
-            elif option_site == "AYAME 2":
-                st.write("Chargement du site AYAME 2")
-                df = charger_fichier('AYAME2.txt')
-
-            else:
-                st.error("Aucun site valide sélectionné. Veuillez faire un choix.")
-                df = None
-
-        elif uploaded_file:  # Vérifie que `uploaded_file` n'est pas None
-            st.write(f"Chargement d'un fichier téléversé : {uploaded_file.name}")
-            df = pd.read_csv(uploaded_file)  # Exemple : lecture d'un fichier CSV téléversé
-
+        if is_uploaded:
+            if fichier.name.endswith('.xlsx'):
+                df = pd.read_excel(fichier)
+            elif fichier.name.endswith('.txt'):
+                df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
         else:
-            st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
-            df = None
-
+            df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
         return df
-
-    except FileNotFoundError as e:
-        st.error(f"Fichier introuvable : {e}")
-        return None
-
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier : {e}")
         return None
-    
-        
+
+if option_site == "AYAME 1":
+    df = charger_fichier('AYAME1.txt')
+elif option_site == "AYAME 2":
+    df = charger_fichier('AYAME2.txt')
+elif uploaded_file is not None:
+    df = charger_fichier(uploaded_file, is_uploaded=True)
+else:
+    st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
+    df = None
 
 
-    
-
-    
-# Étape 1 : Sélectionner un site ou téléverser un fichier
-
-
-    
-    
-
-    
-    
-
-    
-    
-    
-        
-        
-    
-        
-        
-
-def charger_tiff(fichier_tiff):
-    """Charge un fichier TIFF et extrait les données X, Y, Z."""
-    try:
-        with rasterio.open(fichier_tiff) as src:
-            data = src.read(1)  # Lire la première bande (altitude)
-            transform = src.transform
-
-            # Extraire les coordonnées X, Y et les valeurs Z
-            rows, cols = np.meshgrid(
-                np.arange(data.shape[1]),
-                np.arange(data.shape[0])
-            )
-            xs, ys = rasterio.transform.xy(transform, cols, rows)
-            xs, ys = np.array(xs).flatten(), np.array(ys).flatten()
-            zs = data.flatten()
-
-            # Filtrer les pixels avec des valeurs nulles ou invalides
-            valid_mask = zs != src.nodata
-            df = pd.DataFrame({
-                "X": xs[valid_mask],
-                "Y": ys[valid_mask],
-                "Z": zs[valid_mask]
-            })
-            return df
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier TIFF : {e}")
-        return None
 
 
 uploaded_geojson_file = st.file_uploader("Téléversez un fichier GeoJSON pour les routes", type=["geojson"])
@@ -799,3 +668,6 @@ if st.button("Afficher les polygones"):
         generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=-90)
         afficher_polygones(ax, polygones_dans_emprise)
         st.pyplot(fig)
+
+        
+        
