@@ -97,7 +97,7 @@ def interface_inondation():
     grid_Z = np.random.uniform(0, 50, size=grid_X.shape)  # Exemple de terrain fictif
 
     # Paramètre de niveau d'inondation
-    niveau_inondation = st.slider("Niveau d'inondation (en mètres)", min_value=0, max_value=50, value=10)
+    niveau_inondation = st.slider("Niveau d'inondation (en mètres)", min_value=0, max_value=1000, value=10)
 
     # Calculer la surface et le volume d'eau
     surface_inondee = calculer_surface_inondee(grid_Z, niveau_inondation, resolution)
