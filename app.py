@@ -163,6 +163,8 @@ if 'flood_data' not in st.session_state:
     }
 option_site = st.selectbox("Sélectionnez un site", ("Aucun", "AYAME 1", "AYAME 2"))
 
+uploaded_file = st.file_uploader("Téléversez un fichier", type=["txt", "xlsx", "tif"])
+
 # Ajouter une vérification
 if option_site:
     st.write(f"Site sélectionné : {option_site}")
@@ -207,7 +209,7 @@ def charger_fichier(fichier, is_uploaded=False):
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier : {e}")
         return None
-uploaded_file = st.file_uploader("Téléversez un fichier", type=["txt", "xlsx", "tif"])
+
 def charger_tiff(fichier_tiff):
     """Charge un fichier TIFF et extrait les données X, Y, Z."""
     try:
