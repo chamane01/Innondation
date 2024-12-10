@@ -13,7 +13,7 @@ import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
 import rasterio
 
-import streamlit as st 
+import streamlit as st
 import numpy as np
 import rasterio
 import folium
@@ -21,6 +21,7 @@ from streamlit_folium import st_folium
 from matplotlib.colors import ListedColormap
 import matplotlib.pyplot as plt
 import os
+from geopy.distance import geodesic
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -41,6 +42,27 @@ def calculer_taille_pixel(transform):
     pixel_height = -transform[4]  # Hauteur d'un pixel (dy, négatif car les Y diminuent vers le haut)
     return pixel_width, pixel_height
 
+# Fonction pour calculer la taille réelle d'un pixel en mètres
+def calculer_taille_reelle_pixel(bounds_tiff, pixel_width, pixel_height):
+    # Prendre deux points aux coins de la carte
+    point1 = (bounds_tiff[1], bounds_tiff[0])  # coin inférieur gauche (lat, lon)
+    point2 = (bounds_tiff[1], bounds_tiff[2])  # coin inférieur droit (lat, lon)
+    
+    # Calculer la distance réelle entre ces deux points (en mètres)
+    distance_x = geodesic(point1, point2).meters  # Distance en x (longitude)
+    
+    # Répéter pour la dimension y (latitude)
+    point1 = (bounds_tiff[1], bounds_tiff[0])  # coin inférieur gauche
+    point2 = (bounds_tiff[3], bounds_tiff[0])  # coin supérieur gauche (lat, lon)
+    
+    distance_y = geodesic(point1, point2).meters  # Distance en y (latitude)
+    
+    # Calculer la taille réelle d'un pixel
+    taille_reelle_x = distance_x / abs(pixel_width)
+    taille_reelle_y = distance_y / abs(pixel_height)
+    
+    return taille_reelle_x, taille_reelle_y
+
 # Fonction pour calculer le nombre de pixels dans les zones inondées
 def calculer_pixels_inondes(data, niveau_inondation):
     inondation_mask = data <= niveau_inondation
@@ -48,8 +70,8 @@ def calculer_pixels_inondes(data, niveau_inondation):
     return nombre_pixels_inondes
 
 # Fonction pour calculer la surface totale inondée
-def calculer_surface_totale_inondee(nombre_pixels_inondes, pixel_width, pixel_height):
-    surface_pixel = pixel_width * pixel_height
+def calculer_surface_totale_inondee(nombre_pixels_inondes, taille_reelle_x, taille_reelle_y):
+    surface_pixel = taille_reelle_x * taille_reelle_y
     return nombre_pixels_inondes * surface_pixel
 
 # Fonction pour générer une carte de profondeur et sauvegarder comme image temporaire
@@ -131,6 +153,10 @@ def main():
             pixel_width, pixel_height = calculer_taille_pixel(transform_tiff)
             st.write(f"Taille d'un pixel : {pixel_width:.2f} unités en largeur x {pixel_height:.2f} unités en hauteur.")
 
+            # Calcul de la taille réelle d'un pixel en mètres
+            taille_reelle_x, taille_reelle_y = calculer_taille_reelle_pixel(bounds_tiff, pixel_width, pixel_height)
+            st.write(f"Taille réelle d'un pixel : {taille_reelle_x:.2f} m x {taille_reelle_y:.2f} m.")
+
             niveau_inondation = st.slider(
                 "Choisissez le niveau d'inondation",
                 float(data_tiff.min()),
@@ -142,16 +168,17 @@ def main():
 
             if niveau_inondation:
                 nombre_pixels_inondes = calculer_pixels_inondes(data_tiff, niveau_inondation)
-                surface_totale_inondee = calculer_surface_totale_inondee(nombre_pixels_inondes, pixel_width, pixel_height)
+                surface_totale_inondee = calculer_surface_totale_inondee(nombre_pixels_inondes, taille_reelle_x, taille_reelle_y)
 
                 st.write(f"Nombre de pixels inondés : {nombre_pixels_inondes}")
-                st.write(f"Surface totale inondée : {surface_totale_inondee:.2f} unités².")
+                st.write(f"Surface totale inondée : {surface_totale_inondee:.2f} m².")
 
             m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation)
             st_folium(m, width=700, height=500, key="osm_map")
 
 if __name__ == "__main__":
     main()
+
 
 
 
