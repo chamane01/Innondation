@@ -36,6 +36,7 @@ def charger_tiff(fichier_tiff):
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None, None
 
+
 # Fonction pour générer une carte de profondeur et sauvegarder comme image temporaire
 def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
@@ -51,6 +52,7 @@ def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     # Sauvegarder l'image
     plt.savefig(output_path, format='png', bbox_inches='tight')
     plt.close(fig)
+
 
 # Fonction pour créer une carte Folium avec superposition
 def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
@@ -135,34 +137,7 @@ def generer_carte_combinee(data_tiff, bounds_tiff, niveau_inondation, output_pat
     plt.savefig(output_path, format='png', bbox_inches='tight')
     plt.close(fig)
 
-    
-    # Si un niveau d'inondation est défini, superposer les zones inondées
-    if niveau_inondation is not None:
-        inondation_mask = data_tiff <= niveau_inondation
-        zone_inondee = np.zeros_like(data_tiff, dtype=np.uint8)
-        zone_inondee[inondation_mask] = 255
 
-        # Générer une image temporaire pour les zones inondées
-        flood_map_path = "temp_flood_map.png"
-        fig, ax = plt.subplots(figsize=(8, 6))
-        extent = [lon_min, lon_max, lat_min, lat_max]
-        ax.imshow(zone_inondee, cmap=ListedColormap(['none', 'magenta']), extent=extent, alpha=0.5)
-        plt.axis('off')
-        plt.savefig(flood_map_path, format='png', bbox_inches='tight', transparent=True)
-        plt.close(fig)
-
-        flood_overlay = folium.raster_layers.ImageOverlay(
-            image=flood_map_path,
-            bounds=[[lat_min, lon_min], [lat_max, lon_max]],
-            opacity=0.6,
-            interactive=True
-        )
-        flood_overlay.add_to(m)
-
-    folium.LayerControl().add_to(m)
-    return m
-
-# Interface principale Streamlit
 # Interface principale Streamlit
 def main():
     st.title("Analyse des zones inondées")
@@ -210,6 +185,7 @@ def main():
                 os.remove("temp_depth_map.png")
             if os.path.exists("temp_flood_map.png"):
                 os.remove("temp_flood_map.png")
+
 
 if __name__ == "__main__":
     main()
