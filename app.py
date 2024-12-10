@@ -97,6 +97,9 @@ def main():
                 m = create_map(bounds_tiff, data_tiff, transform_tiff)
 
                 # Superposition du masque d'inondation
+                lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
+                lat_max, lon_max = bounds_tiff[3], bounds_tiff[2]
+
                 inondation_mask_overlay = raster_layers.ImageOverlay(
                     image=inondation_mask.astype(np.uint8) * 255,  # Assurez-vous que l'image est en valeurs 0-255
                     bounds=[[lat_min, lon_min], [lat_max, lon_max]],
