@@ -20,8 +20,8 @@ import folium
 from streamlit_folium import st_folium
 from geopy.distance import geodesic
 import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap
-from folium.plugins import MeasureControl
+from matplotlib.colors import ListedColormap  # Importation pour la carte inondée
+from folium.plugins import MeasureControl  # Importation de l'outil de mesure
 import geopandas as gpd  # Pour lire les fichiers GeoJSON
 
 # Fonction pour charger un fichier TIFF
@@ -72,18 +72,32 @@ def calculer_taille_unite(bounds_tiff, largeur_pixels, hauteur_pixels):
     taille_unite = (taille_unite_x + taille_unite_y) / 2
     return taille_unite
 
-# Fonction pour calculer la taille réelle d'une unité (pixel) sur la carte
-def calculer_pixels_inondes(data_tiff, niveau_inondation):
-    # Compter les pixels qui sont inférieurs ou égaux au niveau d'inondation
-    pixels_inondes = (data_tiff <= niveau_inondation)
-    nombre_pixels_inondes = np.sum(pixels_inondes)
+# Fonction pour mesurer la distance réelle (en mètres) sur la carte
+def mesurer_distance(bounds_tiff):
+    # Mesurer la distance sur la largeur (longitude)
+    point1 = (bounds_tiff[1], bounds_tiff[0])  # Coin inférieur gauche (lat, lon)
+    point2 = (bounds_tiff[1], bounds_tiff[2])  # Coin inférieur droit (lat, lon)
+    distance_x = geodesic(point1, point2).meters  # Distance en x (longitude)
+
+    # Mesurer la distance sur la hauteur (latitude)
+    point1 = (bounds_tiff[1], bounds_tiff[0])  # Coin inférieur gauche (lat, lon)
+    point2 = (bounds_tiff[3], bounds_tiff[0])  # Coin supérieur gauche (lat, lon)
+    distance_y = geodesic(point1, point2).meters  # Distance en y (latitude)
+
+    return distance_x, distance_y
+
+# Fonction pour calculer les unités inondées
+def calculer_pixels_inondes(data, niveau_inondation):
+    inondation_mask = data <= niveau_inondation
+    nombre_pixels_inondes = np.sum(inondation_mask)
     return nombre_pixels_inondes
 
-# Fonction pour calculer la surface inondée en mètres carrés et hectares
+# Fonction pour calculer la surface inondée en m² et hectares
 def calculer_surface_inondee(nombre_pixels_inondes, taille_unite):
-    surface_totale_inondee_m2 = nombre_pixels_inondes * (taille_unite ** 2)  # Surface en m²
-    surface_totale_inondee_ha = surface_totale_inondee_m2 / 10000  # Conversion en hectares
-    return surface_totale_inondee_m2, surface_totale_inondee_ha
+    surface_pixel = taille_unite ** 2  # Surface d'un pixel en m²
+    surface_totale_m2 = nombre_pixels_inondes * surface_pixel  # Surface totale inondée en m²
+    surface_totale_hectares = surface_totale_m2 / 10000  # Conversion en hectares
+    return surface_totale_m2, surface_totale_hectares
 
 # Fonction pour générer une carte de profondeur et sauvegarder comme image temporaire
 def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
@@ -101,8 +115,7 @@ def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     plt.close(fig)
 
 # Fonction pour créer une carte Folium avec superposition
-def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_data_routes=None, geojson_data_polygon=None, 
-                    style_routes=None, style_polygon=None, opacity_tiff=0.7, opacity_flood=0.6, opacity_routes=1.0, opacity_polygon=0.5):
+def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_data_routes=None, geojson_data_polygon=None):
     try:
         lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
         lat_max, lon_max = bounds_tiff[3], bounds_tiff[2]
@@ -116,7 +129,7 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_data
         img_overlay = folium.raster_layers.ImageOverlay(
             image=depth_map_path,
             bounds=[[lat_min, lon_min], [lat_max, lon_max]],
-            opacity=opacity_tiff,
+            opacity=0.7,
             interactive=True
         )
         img_overlay.add_to(m)
@@ -129,7 +142,7 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_data
             flood_map_path = "temp_flood_map.png"
             fig, ax = plt.subplots(figsize=(8, 6))
             extent = [lon_min, lon_max, lat_min, lat_max]
-            ax.imshow(zone_inondee, cmap=ListedColormap(['none', 'magenta']), extent=extent, alpha=opacity_flood)
+            ax.imshow(zone_inondee, cmap=ListedColormap(['none', 'magenta']), extent=extent, alpha=0.5)
             plt.axis('off')
             plt.savefig(flood_map_path, format='png', bbox_inches='tight', transparent=True)
             plt.close(fig)
@@ -137,7 +150,7 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_data
             flood_overlay = folium.raster_layers.ImageOverlay(
                 image=flood_map_path,
                 bounds=[[lat_min, lon_min], [lat_max, lon_max]],
-                opacity=opacity_flood,
+                opacity=0.6,
                 interactive=True
             )
             flood_overlay.add_to(m)
@@ -146,15 +159,20 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_data
         measure_control = MeasureControl(primary_length_unit='meters', secondary_length_unit='kilometers', primary_area_unit='sqmeters', secondary_area_unit='hectares')
         measure_control.add_to(m)
 
-        # Si des données GeoJSON de routes sont fournies, les ajouter à la carte avec style
+        # Si des données GeoJSON de routes sont fournies, les ajouter à la carte
         if geojson_data_routes is not None:
-            folium.GeoJson(geojson_data_routes, style_function=style_routes, opacity=opacity_routes).add_to(m)
+            folium.GeoJson(geojson_data_routes).add_to(m)
 
         # Si des données GeoJSON de polygonale sont fournies, les ajouter à la carte avec style
         if geojson_data_polygon is not None:
             folium.GeoJson(
                 geojson_data_polygon,
-                style_function=style_polygon
+                style_function=lambda feature: {
+                    'fillColor': 'transparent',  # Remplissage transparent
+                    'color': 'white',            # Contours blancs
+                    'weight': 2,                 # Poids des contours
+                    'fillOpacity': 0            # Opacité du remplissage
+                }
             ).add_to(m)
 
         folium.LayerControl().add_to(m)
@@ -212,30 +230,12 @@ def main():
                 st.write(f"Surface totale inondée : {surface_totale_inondee_m2:.2f} m².")
                 st.write(f"Surface totale inondée : {surface_totale_inondee_ha:.2f} hectares.")
 
-            # Style dynamique pour les couches GeoJSON
-            style_routes = lambda feature: {
-                'color': 'blue',  # Vous pouvez personnaliser ici la couleur
-                'weight': 3,
-                'opacity': 1.0
-            }
-
-            style_polygon = lambda feature: {
-                'fillColor': 'transparent',  # Remplissage transparent
-                'color': 'white',            # Contours blancs
-                'weight': 2,                 # Poids des contours
-                'fillOpacity': 0,            # Opacité du remplissage
-                'opacity': 0.5              # Opacité des contours
-            }
-
             # Créer la carte avec les données GeoTIFF et GeoJSON
-            m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, geojson_data_routes, geojson_data_polygon,
-                                style_routes, style_polygon)
+            m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, geojson_data_routes, geojson_data_polygon)
             st_folium(m, width=700, height=500, key="osm_map")
 
 if __name__ == "__main__":
     main()
-
-
 
 
 
