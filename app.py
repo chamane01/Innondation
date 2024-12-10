@@ -117,32 +117,19 @@ def main():
                                     ["Blues", "Reds", "Greens", "YlOrRd", "Purples"])
 
             if st.button("Calculer et afficher la zone inondée"):
-                # Calcul du masque d'inondation
-                inondation_mask = data_tiff <= niveau_inondation
-                surface_inondee_plan_ha = np.sum(inondation_mask) * surface_pixel_ha  # En hectares
-                surface_inondee_reel_m2 = np.sum(inondation_mask) * surface_pixel_m2  # En mètres carrés
-                
-                st.write(f"### Surface inondée (plan) : {surface_inondee_plan_ha:.2f} hectares")
-                st.write(f"### Surface inondée (réelle) : {surface_inondee_reel_m2:.2f} m²")
+            # Calculer la zone inondée
+            inondation_mask = data_tiff <= st.session_state.flood_data['niveau_inondation']
+            surface_inondee = np.sum(inondation_mask) * (transform_tiff[0] * transform_tiff[4]) / 10_000  # En hectares
+            st.session_state.flood_data['surface_bleu'] = surface_inondee
+            st.write(f"**Surface inondée :** {surface_inondee:.2f} hectares")
 
-                # Afficher la carte avec les zones inondées
-                st.write("### Carte avec la zone inondée affichée")
-                m = create_map(bounds_tiff, data_tiff, transform_tiff, opacity=opacity)
-
-                # Superposition du masque d'inondation avec la couleur choisie
-                lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
-                lat_max, lon_max = bounds_tiff[3], bounds_tiff[2]
-
-                inondation_mask_overlay = raster_layers.ImageOverlay(
-                    image=inondation_mask.astype(np.uint8) * 255,  # Assurez-vous que l'image est en valeurs 0-255
-                    bounds=[[lat_min, lon_min], [lat_max, lon_max]],
-                    opacity=0.6,
-                    colormap=colormap  # Application de la couleur choisie
-                )
-                inondation_mask_overlay.add_to(m)
-                
-                # Afficher la carte
-                st_folium(m, width=700, height=500)
+            # Afficher la carte de l'inondation
+            fig, ax = plt.subplots(figsize=(8, 6))
+            ax.imshow(data_tiff, cmap='terrain', extent=extent)
+            ax.imshow(inondation_mask, cmap='Blues', alpha=0.5, extent=extent)
+            ax.set_title("Zone inondée (en bleu)")
+            fig.colorbar(cax, ax=ax, label="Altitude (m)")
+            st.pyplot(fig)
 
 if __name__ == "__main__":
     main()
