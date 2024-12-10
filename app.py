@@ -18,9 +18,8 @@ import rasterio
 import folium
 from streamlit_folium import st_folium
 from matplotlib.colors import ListedColormap
-from matplotlib.patches import Patch
 import matplotlib.pyplot as plt
-import io
+import os
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -35,27 +34,23 @@ def charger_tiff(fichier_tiff):
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None, None
 
-# Fonction pour générer une carte de profondeur (image en mémoire)
-def generer_image_profondeur(data_tiff, bounds_tiff):
+# Fonction pour générer une carte de profondeur et sauvegarder comme image temporaire
+def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
 
     fig, ax = plt.subplots(figsize=(8, 6))
     im = ax.imshow(data_tiff, cmap='terrain', extent=extent)
-    cbar = fig.colorbar(im, ax=ax, label="Altitude (m)")
+    fig.colorbar(im, ax=ax, label="Altitude (m)")
 
     ax.set_title("Carte de profondeur (terrain)", fontsize=14)
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
 
-    # Sauvegarde l'image dans un buffer
-    buf = io.BytesIO()
-    plt.savefig(buf, format='png', bbox_inches='tight')
+    # Sauvegarder l'image
+    plt.savefig(output_path, format='png', bbox_inches='tight')
     plt.close(fig)
-    buf.seek(0)
 
-    return buf
-
-# Fonction pour générer la carte OSM avec superposition
+# Fonction pour créer une carte Folium avec superposition
 def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
     lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
     lat_max, lon_max = bounds_tiff[3], bounds_tiff[2]
@@ -64,10 +59,13 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
     # Créer une carte Folium
     m = folium.Map(location=center, zoom_start=13, control_scale=True)
 
-    # Superposer la carte de profondeur
-    image_buf = generer_image_profondeur(data_tiff, bounds_tiff)
+    # Générer une image temporaire pour la carte de profondeur
+    depth_map_path = "temp_depth_map.png"
+    generer_image_profondeur(data_tiff, bounds_tiff, depth_map_path)
+
+    # Ajouter la superposition de la carte de profondeur
     img_overlay = folium.raster_layers.ImageOverlay(
-        image=image_buf,
+        image=depth_map_path,
         bounds=[[lat_min, lon_min], [lat_max, lon_max]],
         opacity=0.7,
         interactive=True
@@ -78,19 +76,19 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
     if niveau_inondation is not None:
         inondation_mask = data_tiff <= niveau_inondation
         zone_inondee = np.zeros_like(data_tiff, dtype=np.uint8)
-        zone_inondee[inondation_mask] = 255  # Zone inondée en blanc sur l'image
+        zone_inondee[inondation_mask] = 255
 
+        # Générer une image temporaire pour les zones inondées
+        flood_map_path = "temp_flood_map.png"
         fig, ax = plt.subplots(figsize=(8, 6))
-        ax.imshow(zone_inondee, cmap=ListedColormap(['none', 'magenta']), extent=[lon_min, lon_max, lat_min, lat_max], alpha=0.5)
-        ax.axis('off')
-
-        buf = io.BytesIO()
-        plt.savefig(buf, format='png', bbox_inches='tight', transparent=True)
+        extent = [lon_min, lon_max, lat_min, lat_max]
+        ax.imshow(zone_inondee, cmap=ListedColormap(['none', 'magenta']), extent=extent, alpha=0.5)
+        plt.axis('off')
+        plt.savefig(flood_map_path, format='png', bbox_inches='tight', transparent=True)
         plt.close(fig)
-        buf.seek(0)
 
         flood_overlay = folium.raster_layers.ImageOverlay(
-            image=buf,
+            image=flood_map_path,
             bounds=[[lat_min, lon_min], [lat_max, lon_max]],
             opacity=0.6,
             interactive=True
@@ -105,38 +103,38 @@ def main():
     st.title("Analyse des zones inondées")
     st.markdown("### Téléchargez un fichier GeoTIFF pour analyser les zones inondées.")
 
-    # Téléversement unique du fichier GeoTIFF
     fichier_tiff = st.file_uploader("Téléchargez un fichier GeoTIFF", type=["tif"], key="file_uploader")
 
     if fichier_tiff is not None:
-        # Charger le fichier TIFF
         data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
 
         if data_tiff is not None:
-            # Afficher les informations du fichier
             st.write(f"Dimensions : {data_tiff.shape}")
             st.write(f"Altitude min : {data_tiff.min()}, max : {data_tiff.max()}")
 
-            # Carte de profondeur superposée à OSM
             st.write("### Carte de profondeur avec OSM")
             m = creer_carte_osm(data_tiff, bounds_tiff)
             st_folium(m, width=700, height=500, key="osm_map")
 
-            # Choisir un niveau d'inondation
             niveau_inondation = st.slider(
                 "Choisissez le niveau d'inondation",
                 float(data_tiff.min()),
                 float(data_tiff.max()),
-                float(np.percentile(data_tiff, 50)),  # Par défaut, médiane
+                float(np.percentile(data_tiff, 50)),
                 step=0.1,
                 key="niveau_inondation"
             )
 
-            # Afficher les zones inondées
             if st.button("Afficher la zone inondée", key="btn_zone_inondee"):
                 st.write(f"### Zone inondée pour une altitude de {niveau_inondation:.2f} m")
                 m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=niveau_inondation)
                 st_folium(m, width=700, height=500, key="flood_map")
+
+            # Supprimer les fichiers temporaires après usage
+            if os.path.exists("temp_depth_map.png"):
+                os.remove("temp_depth_map.png")
+            if os.path.exists("temp_flood_map.png"):
+                os.remove("temp_flood_map.png")
 
 if __name__ == "__main__":
     main()
