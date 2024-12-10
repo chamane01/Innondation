@@ -13,119 +13,94 @@ from datetime import datetime
 import rasterio
 
 import streamlit as st
-import rasterio
-import numpy as np
-import matplotlib.pyplot as plt
 import folium
-from folium import raster_layers
-from pyproj import Proj, transform
-from io import BytesIO
+import numpy as np
+import pandas as pd
+from scipy.interpolate import griddata
+from shapely.geometry import Polygon, MultiPolygon
+import geopandas as gpd
+import matplotlib.pyplot as plt
+import contextily as ctx
 
-# Fonction pour charger et lire un fichier GeoTIFF
-def charger_tiff(fichier_tiff):
-    try:
-        with rasterio.open(fichier_tiff) as src:
-            data = src.read(1)  # Lire la première bande
-            transform = src.transform  # Transformation géographique
-            crs = src.crs  # Système de coordonnées
-            return data, transform, crs
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
-        return None, None, None
-
-# Fonction pour afficher un fond de carte OSM
 def afficher_fond_osm(transform_tiff, data_tiff):
-    # Définir les limites géographiques
-    min_x = transform_tiff[2]
-    max_x = transform_tiff[2] + transform_tiff[0] * data_tiff.shape[1]
-    min_y = transform_tiff[5] + transform_tiff[4] * data_tiff.shape[0]
-    max_y = transform_tiff[5]
+    # Chargement des données OSM (OpenStreetMap)
+    lat_min, lat_max = data_tiff.bounds[1], data_tiff.bounds[3]
+    lon_min, lon_max = data_tiff.bounds[0], data_tiff.bounds[2]
 
-    # Coordonnées au format EPSG:4326 (longitude, latitude)
-    projection_utm = Proj(init="epsg:32630")  # UTM 30N
-    projection_wgs84 = Proj(init="epsg:4326")  # WGS 84 (longitude, latitude)
+    # Initialiser la carte avec un fond OpenStreetMap
+    m = folium.Map(location=[(lat_min + lat_max) / 2, (lon_min + lon_max) / 2], zoom_start=10)
+
+    # Ajouter l'image TIFF à la carte
+    raster_layers.ImageOverlay(transform_tiff, bounds=[[lat_min, lon_min], [lat_max, lon_max]], opacity=0.6).add_to(m)
     
-    # Transformation des coordonnées UTM vers WGS84
-    lon_min, lat_min = transform(projection_utm, projection_wgs84, min_x, min_y)
-    lon_max, lat_max = transform(projection_utm, projection_wgs84, max_x, max_y)
-
-    # Créer la carte OSM centrée sur les coordonnées
-    m = folium.Map(location=[(lat_min + lat_max) / 2, (lon_min + lon_max) / 2], zoom_start=13)
-
-    # Ajouter le fond de carte OSM
-    folium.TileLayer('cartodb positron').add_to(m)
-    
-    # Ajouter la couche raster pour le GeoTIFF sur la carte
-    img = BytesIO()
-    plt.imshow(data_tiff, cmap='terrain', extent=(lon_min, lon_max, lat_min, lat_max))
-    plt.axis('off')
-    plt.savefig(img, format='png')
-    img.seek(0)
-
-    # Ajouter le raster en overlay
-    raster_layers.ImageOverlay(img, bounds=[[lat_min, lon_min], [lat_max, lon_max]], opacity=0.6).add_to(m)
-
+    # Retourner la carte folium
     return m
 
-# Afficher la carte avec les zones inondées en bleu semi-transparent
-def afficher_carte_inondation(data_tiff, transform_tiff, inondation_mask, niveau_inondation):
-    # Calcul des limites géographiques
-    extent = (
-        transform_tiff[2],  # Min X
-        transform_tiff[2] + transform_tiff[0] * data_tiff.shape[1],  # Max X
-        transform_tiff[5] + transform_tiff[4] * data_tiff.shape[0],  # Min Y
-        transform_tiff[5]  # Max Y
-    )
-
-    # Création de la carte
-    fig, ax = plt.subplots(figsize=(8, 6))
-    ax.imshow(data_tiff, cmap='terrain', extent=extent)
-    ax.imshow(inondation_mask, cmap='Blues', alpha=0.5, extent=extent)
-    ax.set_title(f"Zone inondée pour un niveau de {niveau_inondation} m (en bleu)")
-    ax.set_xlabel("Longitude")
-    ax.set_ylabel("Latitude")
-    return fig
-
-# Définition de l'application Streamlit
 def main():
-    st.title("Analyse des zones inondées")
-    st.markdown("## Téléversez un fichier GeoTIFF pour analyser les zones inondées.")
+    # Charger le fichier de données
+    df = pd.read_csv("votre_fichier.csv")  # Exemple de lecture d'un fichier CSV
 
-    # Téléchargement du fichier GeoTIFF
-    uploaded_tiff_file = st.file_uploader("Choisissez un fichier GeoTIFF (.tif)", type=["tif"])
-    
-    if uploaded_tiff_file is not None:
-        # Charger les données GeoTIFF
-        data_tiff, transform_tiff, crs_tiff = charger_tiff(uploaded_tiff_file)
-        
-        if data_tiff is not None:
-            # Affichage des informations de base
-            st.write("### Informations sur le fichier GeoTIFF")
-            st.write(f"- Dimensions : {data_tiff.shape}")
-            st.write(f"- Valeurs min : {data_tiff.min()}, max : {data_tiff.max()}")
-            st.write(f"- Système de coordonnées : {crs_tiff}")
-            
-            # Visualisation initiale avec fond OSM
-            st.write("### Carte avec fond OSM")
-            osm_map = afficher_fond_osm(transform_tiff, data_tiff)
-            folium_static(osm_map)
+    if df is not None:
+        st.markdown("---")
 
-            # Sélection du niveau d'eau
-            niveau_inondation = st.slider("Définir le niveau d'inondation (m)", 
-                                          float(data_tiff.min()), float(data_tiff.max()), step=0.1)
-            
-            if st.button("Calculer et afficher la zone inondée"):
-                # Calcul du masque d'inondation
-                inondation_mask = data_tiff <= niveau_inondation
-                surface_inondee = np.sum(inondation_mask) * (transform_tiff[0] * abs(transform_tiff[4])) / 10_000  # En hectares
-                st.write(f"### Surface inondée : {surface_inondee:.2f} hectares")
+        # Vérification des colonnes 'X', 'Y', 'Z'
+        if 'X' not in df.columns or 'Y' not in df.columns or 'Z' not in df.columns:
+            st.error("Erreur : colonnes 'X', 'Y' et 'Z' manquantes.")
+        else:
+            st.session_state.flood_data['niveau_inondation'] = st.number_input("Entrez le niveau d'eau (mètres)", min_value=0.0, step=0.1)
+            interpolation_method = st.selectbox("Méthode d'interpolation", ['linear', 'nearest'])
 
-                # Afficher la carte avec les zones inondées
-                fig = afficher_carte_inondation(data_tiff, transform_tiff, inondation_mask, niveau_inondation)
+            X_min, X_max = df['X'].min(), df['X'].max()
+            Y_min, Y_max = df['Y'].min(), df['Y'].max()
+            resolution = st.number_input("Résolution de la grille", value=300, min_value=100, max_value=1000)
+            grid_X, grid_Y = np.mgrid[X_min:X_max:resolution*1j, Y_min:Y_max:resolution*1j]
+            grid_Z = griddata((df['X'], df['Y']), df['Z'], (grid_X, grid_Y), method=interpolation_method)
+
+            def calculer_surface_bleue(niveau_inondation):
+                return np.sum((grid_Z <= niveau_inondation)) * (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000
+
+            def calculer_volume(surface_bleue):
+                return surface_bleue * st.session_state.flood_data['niveau_inondation'] * 10000
+
+            if st.button("Afficher la carte d'inondation"):
+                surface_bleue = calculer_surface_bleue(st.session_state.flood_data['niveau_inondation'])
+                volume_eau = calculer_volume(surface_bleue)
+                st.session_state.flood_data['surface_bleu'] = surface_bleue
+                st.session_state.flood_data['volume_eau'] = volume_eau
+
+                # Affichage de la carte de fond avec OSM
+                m = afficher_fond_osm(transform_tiff, data_tiff)
+
+                # Afficher la carte interactivement
+                st.write(m)
+
+                # Tracer les contours et zones inondées avec Matplotlib
+                fig, ax = plt.subplots(figsize=(8, 6))
+                ax.set_xlim(X_min, X_max)
+                ax.set_ylim(Y_min, Y_max)
+                ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+                
+                ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
+                ax.set_xticks(np.linspace(X_min, X_max, num=5))
+                ax.set_yticks(np.linspace(Y_min, Y_max, num=5))
+                ax.xaxis.set_tick_params(labeltop=True)
+                ax.yaxis.set_tick_params(labelright=True)
+
+                # Tracer la zone inondée avec les contours
+                contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
+                ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
+                ax.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], colors='#007FFF', alpha=0.5)
+
+                # Transformer les contours en polygones pour analyse (par exemple analyse des bâtiments)
+                contour_paths = [Polygon(path.vertices) for collection in contours_inondation.collections for path in collection.get_paths()]
+                zone_inondee = gpd.GeoDataFrame(geometry=[MultiPolygon(contour_paths)], crs="EPSG:32630")
+                
+                # Afficher la carte Matplotlib
                 st.pyplot(fig)
 
 if __name__ == "__main__":
     main()
+
 
 
 
