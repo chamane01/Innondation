@@ -18,6 +18,7 @@ import rasterio
 import numpy as np
 import folium
 from folium import raster_layers
+from folium.plugins import MeasureControl
 import io
 
 # Fonction pour charger et lire un fichier GeoTIFF
@@ -53,6 +54,9 @@ def create_map(bounds, data_tiff, transform_tiff, opacity=0.6):
     )
     img_overlay.add_to(m)
 
+    # Ajouter l'échelle de la carte
+    m.add_child(folium.plugins.ScaleBar())
+
     return m
 
 # Définition de l'application Streamlit
@@ -85,6 +89,13 @@ def main():
             st.write("Carte avec le fond OSM et les données TIFF")
             st_folium(m, width=700, height=500)
 
+            # Calcul de la surface des pixels réels en mètres carrés
+            surface_pixel_reel_m2 = abs(transform_tiff[0]) * abs(transform_tiff[4])
+            surface_pixel_reel_ha = surface_pixel_reel_m2 / 10_000  # Conversion en hectares
+
+            st.write(f"### Surface d'un pixel réel : {surface_pixel_reel_m2:.2f} m²")
+            st.write(f"### Surface d'un pixel réel : {surface_pixel_reel_ha:.4f} ha")
+
             # Sélection du niveau d'eau
             niveau_inondation = st.slider("Définir le niveau d'inondation (m)", 
                                           float(data_tiff.min()), float(data_tiff.max()), step=0.1)
@@ -96,8 +107,11 @@ def main():
             if st.button("Calculer et afficher la zone inondée"):
                 # Calcul du masque d'inondation
                 inondation_mask = data_tiff <= niveau_inondation
-                surface_inondee = np.sum(inondation_mask) * (transform_tiff[0] * abs(transform_tiff[4])) / 10_000  # En hectares
-                st.write(f"### Surface inondée : {surface_inondee:.2f} hectares")
+                surface_inondee_plan_ha = np.sum(inondation_mask) * surface_pixel_reel_ha  # En hectares
+                surface_inondee_reel_m2 = np.sum(inondation_mask) * surface_pixel_reel_m2  # En mètres carrés
+                
+                st.write(f"### Surface inondée (plan) : {surface_inondee_plan_ha:.2f} hectares")
+                st.write(f"### Surface inondée (réelle) : {surface_inondee_reel_m2:.2f} m²")
 
                 # Afficher la carte avec les zones inondées
                 st.write("### Carte avec la zone inondée affichée")
@@ -120,6 +134,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
