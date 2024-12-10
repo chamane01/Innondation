@@ -13,85 +13,96 @@ from datetime import datetime
 import rasterio
 
 import streamlit as st
+import folium
+from streamlit_folium import st_folium
 import rasterio
-import matplotlib.pyplot as plt
-from shapely.geometry import box
-import geopandas as gpd
-import osmnx as ox
-from rasterio.warp import transform_bounds
+import numpy as np
+from folium import raster_layers, TileLayer
 
-# Fonction pour charger le fichier TIFF
+# Fonction pour charger et lire un fichier GeoTIFF
 def charger_tiff(fichier_tiff):
     try:
         with rasterio.open(fichier_tiff) as src:
             data = src.read(1)  # Lire la première bande
             transform = src.transform
             crs = src.crs
-            bounds = src.bounds  # Emprise originale
-            # Convertir les bounds en EPSG:4326 si nécessaire
-            bounds_4326 = transform_bounds(crs, "EPSG:4326", *bounds)
-            return data, transform, crs, bounds_4326
+            bounds = src.bounds
+            return data, transform, crs, bounds
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None, None
 
-# Fonction pour télécharger et afficher les données OSM
-def afficher_carte_osm(bounds_tiff):
-    # Étendue géographique (bounds_tiff déjà en EPSG:4326)
-    min_lon, min_lat, max_lon, max_lat = bounds_tiff
+# Fonction pour créer une carte centrée sur l’emprise du TIFF
+def create_map(bounds):
+    lat_min, lon_min = bounds[1], bounds[0]  # Coin inférieur gauche
+    lat_max, lon_max = bounds[3], bounds[2]  # Coin supérieur droit
+    center = [(lat_min + lat_max) / 2, (lon_min + lon_max) / 2]
 
-    # Télécharger les données OSM (routes dans cet exemple)
-    try:
-        # Créer une boîte à partir de l'emprise
-        bbox = box(min_lon, min_lat, max_lon, max_lat)
-        gdf = ox.geometries_from_bbox(max_lat, min_lat, max_lon, min_lon, tags={"highway": True})
-        
-        # Créer une figure
-        fig, ax = plt.subplots(figsize=(8, 6))
+    m = folium.Map(location=center, zoom_start=13, control_scale=True)
+    return m
 
-        # Afficher les routes OSM
-        gdf.plot(ax=ax, color="blue", linewidth=0.5, label="Routes OSM")
+# Fonction pour ajouter un overlay (GeoTIFF) sur la carte
+def ajouter_overlay(m, data_tiff, bounds, opacity=0.6):
+    lat_min, lon_min = bounds[1], bounds[0]
+    lat_max, lon_max = bounds[3], bounds[2]
 
-        # Ajouter un cadre correspondant à l'emprise
-        bbox_gdf = gpd.GeoDataFrame({"geometry": [bbox]}, crs="EPSG:4326")
-        bbox_gdf.boundary.plot(ax=ax, color="red", linewidth=2, label="Emprise TIFF")
+    img_overlay = raster_layers.ImageOverlay(
+        image=data_tiff,
+        bounds=[[lat_min, lon_min], [lat_max, lon_max]],
+        opacity=opacity
+    )
+    img_overlay.add_to(m)
 
-        # Configurer les axes
-        ax.set_title("Données OSM dans l'emprise du GeoTIFF")
-        ax.set_xlabel("Longitude")
-        ax.set_ylabel("Latitude")
-        ax.legend()
+# Fonction pour limiter les tuiles OSM à l'emprise du GeoTIFF
+def limiter_osm_emprise(m, bounds):
+    lat_min, lon_min = bounds[1], bounds[0]
+    lat_max, lon_max = bounds[3], bounds[2]
 
-        st.pyplot(fig)
+    # Ajouter une couche OSM limitée à l'emprise
+    osm_limited = TileLayer(tiles='OpenStreetMap', name="OSM limité")
+    osm_limited.add_to(m)
 
-    except Exception as e:
-        st.error(f"Erreur lors de l'extraction des données OSM : {e}")
+    # Ajouter un rectangle pour illustrer l'emprise
+    folium.Rectangle(
+        bounds=[[lat_min, lon_min], [lat_max, lon_max]],
+        color="blue",
+        fill=True,
+        fill_opacity=0.2
+    ).add_to(m)
 
-# Interface Streamlit
+# Application principale
 def main():
-    st.title("Analyse des zones inondées avec carte OSM")
-    st.markdown("### Téléchargez un fichier GeoTIFF pour visualiser l'emprise et les données OSM.")
+    st.title("Analyse des zones inondées")
+    st.markdown("## Téléversez un fichier GeoTIFF pour analyser les zones inondées.")
 
-    # Téléversement du fichier GeoTIFF
-    fichier_tiff = st.file_uploader("Téléchargez un fichier GeoTIFF", type=["tif"])
+    uploaded_tiff_file = st.file_uploader("Choisissez un fichier GeoTIFF (.tif)", type=["tif"])
 
-    if fichier_tiff is not None:
-        # Charger le fichier TIFF
-        data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
+    if uploaded_tiff_file is not None:
+        # Charger les données GeoTIFF
+        data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(uploaded_tiff_file)
 
         if data_tiff is not None:
-            # Afficher les informations de base
-            st.write(f"Dimensions : {data_tiff.shape}")
-            st.write(f"Emprise (EPSG:4326) : {bounds_tiff}")
+            # Afficher les informations
+            st.write("### Informations sur le fichier GeoTIFF")
+            st.write(f"- Dimensions : {data_tiff.shape}")
+            st.write(f"- Valeurs min : {data_tiff.min()}, max : {data_tiff.max()}")
+            st.write(f"- Système de coordonnées : {crs_tiff}")
 
-            # Afficher les données OSM correspondant à l'emprise
-            if st.checkbox("Afficher les données OSM correspondant à l'emprise"):
-                afficher_carte_osm(bounds_tiff)
+            # Créer une carte basée sur l'emprise du TIFF
+            m = create_map(bounds_tiff)
+
+            # Ajouter l’overlay TIFF
+            ajouter_overlay(m, data_tiff, bounds_tiff)
+
+            # Ajouter les données OSM limitées à l'emprise
+            limiter_osm_emprise(m, bounds_tiff)
+
+            # Afficher la carte
+            st.write("### Carte avec overlay GeoTIFF et données OSM limitées")
+            st_folium(m, width=700, height=500)
 
 if __name__ == "__main__":
     main()
-
-
 
 
 
