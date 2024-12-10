@@ -18,13 +18,13 @@ import rasterio
 import numpy as np
 import matplotlib.pyplot as plt
 from rasterio.plot import show
-from shapely.geometry import shape, box, mapping
+import contextily as ctx
+from shapely.geometry import box
 import geopandas as gpd
 from matplotlib.colors import ListedColormap
-import json
 
 # Titre de l'application
-st.title("Carte des zones inondées avec niveaux d'eau (sans GDAL)")
+st.title("Carte des zones inondées avec niveaux d'eau et fond de carte OSM")
 
 # Initialiser session_state pour stocker les données
 if 'flood_data' not in st.session_state:
@@ -44,22 +44,20 @@ if uploaded_tiff is not None:
             transform = src.transform
             crs = src.crs
 
+        # Calculer les limites géographiques du raster
+        bounds = rasterio.transform.array_bounds(elevation.shape[0], elevation.shape[1], transform)
+        raster_bounds = box(*bounds)
+
         # Afficher les informations de base du fichier
         st.write(f"Dimensions: {elevation.shape}")
+        st.write(f"Résolution: {transform[0]} x {transform[4]} (mètres par pixel)")
         st.write(f"Système de coordonnées: {crs}")
 
-        # Étape 2 : Afficher une prévisualisation du raster
-        st.markdown("### Aperçu des altitudes")
-        fig, ax = plt.subplots(figsize=(8, 6))
-        show(elevation, transform=transform, ax=ax, cmap="terrain")
-        ax.set_title("Carte des altitudes")
-        st.pyplot(fig)
-
-        # Étape 3 : Définir le niveau d'eau
+        # Étape 2 : Définir le niveau d'eau
         niveau_eau = st.slider("Niveau d'inondation (mètres)", float(np.min(elevation)), float(np.max(elevation)), step=0.1)
         st.session_state.flood_data['niveau_inondation'] = niveau_eau
 
-        # Étape 4 : Calcul des zones inondées
+        # Étape 3 : Calcul des zones inondées
         zone_inondee = elevation <= niveau_eau
 
         # Calculer la surface inondée
@@ -69,34 +67,30 @@ if uploaded_tiff is not None:
 
         st.write(f"Surface inondée: {surface_inondee:.2f} hectares")
 
-        # Étape 5 : Visualisation des zones inondées
-        st.markdown("### Carte des zones inondées")
-        fig, ax = plt.subplots(figsize=(8, 6))
-        cmap = ListedColormap(["blue", "lightgreen"])
-        show(zone_inondee.astype(int), transform=transform, ax=ax, cmap=cmap)
-        ax.set_title("Zones inondées")
+        # Étape 4 : Visualisation avec fond de carte OSM
+        st.markdown("### Carte des zones inondées avec fond OSM")
+        fig, ax = plt.subplots(figsize=(10, 8))
+
+        # Afficher les zones inondées
+        cmap = ListedColormap(["none", "blue"])
+        show(zone_inondee.astype(int), transform=transform, ax=ax, cmap=cmap, alpha=0.5)
+
+        # Ajouter le fond de carte OSM
+        gdf_bounds = gpd.GeoDataFrame({"geometry": [raster_bounds]}, crs=crs)
+        gdf_bounds = gdf_bounds.to_crs(epsg=3857)  # Conversion au système de coordonnées Web Mercator
+        ax.set_xlim(gdf_bounds.bounds.minx[0], gdf_bounds.bounds.maxx[0])
+        ax.set_ylim(gdf_bounds.bounds.miny[0], gdf_bounds.bounds.maxy[0])
+
+        ctx.add_basemap(ax, crs=gdf_bounds.crs.to_string(), source=ctx.providers.OpenStreetMap.Mapnik)
+
+        ax.set_title("Zones inondées avec fond de carte OSM")
         st.pyplot(fig)
-
-        # Étape 6 : Exporter les zones inondées en GeoJSON
-        if st.button("Exporter les zones inondées en GeoJSON"):
-            mask = zone_inondee.astype(np.uint8)
-            shapes_generator = rasterio.features.shapes(mask, transform=transform)
-            polygons = [shape for shape, value in shapes_generator if value == 1]
-
-            # Créer un GeoJSON
-            features = [{"type": "Feature", "geometry": mapping(polygon), "properties": {}} for polygon in polygons]
-            geojson = {"type": "FeatureCollection", "features": features}
-
-            # Sauvegarder le fichier
-            with open("zones_inondees.geojson", "w") as f:
-                json.dump(geojson, f)
-
-            st.success("Fichier GeoJSON des zones inondées exporté.")
 
     except Exception as e:
         st.error(f"Erreur lors du traitement du fichier GeoTIFF : {e}")
 else:
     st.warning("Veuillez téléverser un fichier GeoTIFF pour commencer.")
+
 
 
 import streamlit as st
