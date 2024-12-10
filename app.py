@@ -16,7 +16,7 @@ import streamlit as st
 import numpy as np
 import rasterio
 import matplotlib.pyplot as plt
-from matplotlib import colors
+from matplotlib.patches import Patch
 
 # Fonction pour charger le fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -33,47 +33,41 @@ def charger_tiff(fichier_tiff):
 
 # Fonction pour afficher la zone inondée
 def afficher_zone_inondee(data_tiff, niveau_inondation, bounds_tiff):
-    # Définir l'étendue géographique (extent)
+    # Étendue géographique (extent)
     extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
 
     # Créer un masque des pixels inondés
     inondation_mask = data_tiff <= niveau_inondation
-    nb_pixels_inondes = np.sum(inondation_mask)  # Nombre de pixels concernés
+    nb_pixels_inondes = np.sum(inondation_mask)
+
+    # Créer une nouvelle couche pour la zone inondée (valeurs 1 pour inondées, 0 sinon)
+    zone_inondee = np.zeros_like(data_tiff, dtype=np.uint8)
+    zone_inondee[inondation_mask] = 1
 
     # Créer la figure
     fig, ax = plt.subplots(figsize=(8, 6))
     
-    # Afficher l'image originale (altitudes)
+    # Afficher l'image de fond (altitudes)
     im = ax.imshow(data_tiff, cmap='terrain', extent=extent)
     cbar = fig.colorbar(im, ax=ax, label="Altitude (m)")
 
-    # Superposer le masque des pixels inondés en magenta
+    # Superposer la couche des zones inondées en magenta
     ax.imshow(
-        inondation_mask,
-        cmap=colors.ListedColormap(['magenta']),
+        zone_inondee,
+        cmap=colors.ListedColormap(['magenta', 'none']),  # Couche magenta
         alpha=0.5,
         extent=extent
     )
 
-    # Ajouter les contours rouges
-    contours = ax.contour(
-        data_tiff,
-        levels=[niveau_inondation],
-        colors='red',
-        linewidths=1.5,
-        extent=extent
-    )
+    # Ajouter une légende manuelle pour les zones inondées
+    legend_elements = [
+        Patch(facecolor='magenta', edgecolor='none', label='Zone inondée'),
+        Patch(facecolor='none', edgecolor='black', label='Contours')
+    ]
+    ax.legend(handles=legend_elements, loc='upper right')
 
-    # Ajouter des labels aux contours
-    ax.clabel(
-        contours,
-        inline=True,
-        fontsize=8,
-        fmt=f"%.2f m"
-    )
-
-    # Ajouter un titre et une légende
-    ax.set_title(f"Zone inondée (magenta) pour une cote de {niveau_inondation:.2f} m")
+    # Titre et axes
+    ax.set_title(f"Zone inondée pour une cote de {niveau_inondation:.2f} m")
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
 
@@ -113,6 +107,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
