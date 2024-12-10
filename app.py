@@ -69,7 +69,7 @@ def afficher_zone_inondee(data_tiff, niveau_inondation, bounds_tiff):
     cbar = fig.colorbar(im, ax=ax, label="Altitude (m)")
 
     # Superposer la couche des zones inondées en magenta
-    cmap = ListedColormap(["none", "magenta"])
+    cmap = ListedColormap(["none", "red"])
     ax.imshow(
         zone_inondee,
         cmap=cmap,
@@ -79,7 +79,7 @@ def afficher_zone_inondee(data_tiff, niveau_inondation, bounds_tiff):
 
     # Ajouter une légende manuelle pour les zones inondées
     legend_elements = [
-        Patch(facecolor='magenta', edgecolor='none', label='Zone inondée (Magenta)')
+        Patch(facecolor='red', edgecolor='none', label='Zone inondée (red)')
     ]
     ax.legend(handles=legend_elements, loc='upper right')
 
