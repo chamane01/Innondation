@@ -141,19 +141,15 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_rout
 
         # Ajouter les routes (GeoJSON) avec style personnalisé
         if geojson_routes is not None:
-            route_layer = folium.GeoJson(geojson_routes, style_function=style_routes, name="Routes")
-            route_layer.add_to(m)
+            folium.GeoJson(geojson_routes, style_function=style_routes).add_to(m)
 
         # Ajouter la polygonale (GeoJSON) avec bord blanc et intérieur transparent
         if geojson_polygonale is not None:
-            polygon_layer = folium.GeoJson(
+            folium.GeoJson(
                 geojson_polygonale,
-                style_function=style_polygonale,
-                name="Polygonale"
-            )
-            polygon_layer.add_to(m)
+                style_function=style_polygonale
+            ).add_to(m)
 
-        # Gestion des couches
         folium.LayerControl().add_to(m)
         return m
     except Exception as e:
