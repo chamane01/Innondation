@@ -20,8 +20,8 @@ import folium
 from streamlit_folium import st_folium
 from geopy.distance import geodesic
 import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap  # Importation pour la carte inondée
-from folium.plugins import MeasureControl  # Importation de l'outil de mesure
+from matplotlib.colors import ListedColormap
+from folium.plugins import MeasureControl
 import geopandas as gpd  # Pour lire les fichiers GeoJSON
 
 # Fonction pour charger un fichier TIFF
@@ -72,19 +72,6 @@ def calculer_taille_unite(bounds_tiff, largeur_pixels, hauteur_pixels):
     taille_unite = (taille_unite_x + taille_unite_y) / 2
     return taille_unite
 
-# Fonction pour calculer les unités inondées
-def calculer_pixels_inondes(data, niveau_inondation):
-    inondation_mask = data <= niveau_inondation
-    nombre_pixels_inondes = np.sum(inondation_mask)
-    return nombre_pixels_inondes
-
-# Fonction pour calculer la surface inondée en m² et hectares
-def calculer_surface_inondee(nombre_pixels_inondes, taille_unite):
-    surface_pixel = taille_unite ** 2  # Surface d'un pixel en m²
-    surface_totale_m2 = nombre_pixels_inondes * surface_pixel  # Surface totale inondée en m²
-    surface_totale_hectares = surface_totale_m2 / 10000  # Conversion en hectares
-    return surface_totale_m2, surface_totale_hectares
-
 # Fonction pour générer une carte de profondeur et sauvegarder comme image temporaire
 def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
@@ -102,7 +89,7 @@ def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
 
 # Fonction pour créer une carte Folium avec superposition
 def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_data_routes=None, geojson_data_polygon=None, 
-                    opacity_tiff=0.7, opacity_flood=0.6, opacity_routes=1.0, opacity_polygon=0.5):
+                    style_routes=None, style_polygon=None, opacity_tiff=0.7, opacity_flood=0.6, opacity_routes=1.0, opacity_polygon=0.5):
     try:
         lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
         lat_max, lon_max = bounds_tiff[3], bounds_tiff[2]
@@ -146,21 +133,15 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_data
         measure_control = MeasureControl(primary_length_unit='meters', secondary_length_unit='kilometers', primary_area_unit='sqmeters', secondary_area_unit='hectares')
         measure_control.add_to(m)
 
-        # Si des données GeoJSON de routes sont fournies, les ajouter à la carte
+        # Si des données GeoJSON de routes sont fournies, les ajouter à la carte avec style
         if geojson_data_routes is not None:
-            folium.GeoJson(geojson_data_routes, opacity=opacity_routes).add_to(m)
+            folium.GeoJson(geojson_data_routes, style_function=style_routes, opacity=opacity_routes).add_to(m)
 
         # Si des données GeoJSON de polygonale sont fournies, les ajouter à la carte avec style
         if geojson_data_polygon is not None:
             folium.GeoJson(
                 geojson_data_polygon,
-                style_function=lambda feature: {
-                    'fillColor': 'transparent',  # Remplissage transparent
-                    'color': 'white',            # Contours blancs
-                    'weight': 2,                 # Poids des contours
-                    'fillOpacity': 0,            # Opacité du remplissage
-                    'opacity': opacity_polygon   # Opacité de la couche polygonale
-                }
+                style_function=style_polygon
             ).add_to(m)
 
         folium.LayerControl().add_to(m)
@@ -186,12 +167,6 @@ def main():
 
     if fichier_geojson_polygon is not None:
         geojson_data_polygon = charger_geojson(fichier_geojson_polygon)
-
-    # Paramètres de style et d'opacité
-    opacity_tiff = st.slider("Opacité de la carte GeoTIFF", 0.0, 1.0, 0.7, 0.05)
-    opacity_flood = st.slider("Opacité de la zone inondée", 0.0, 1.0, 0.6, 0.05)
-    opacity_routes = st.slider("Opacité des routes", 0.0, 1.0, 1.0, 0.05)
-    opacity_polygon = st.slider("Opacité de la polygonale", 0.0, 1.0, 0.5, 0.05)
 
     if fichier_tiff is not None:
         data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
@@ -224,9 +199,24 @@ def main():
                 st.write(f"Surface totale inondée : {surface_totale_inondee_m2:.2f} m².")
                 st.write(f"Surface totale inondée : {surface_totale_inondee_ha:.2f} hectares.")
 
+            # Style dynamique pour les couches GeoJSON
+            style_routes = lambda feature: {
+                'color': 'blue',  # Vous pouvez personnaliser ici la couleur
+                'weight': 3,
+                'opacity': 1.0
+            }
+
+            style_polygon = lambda feature: {
+                'fillColor': 'transparent',  # Remplissage transparent
+                'color': 'white',            # Contours blancs
+                'weight': 2,                 # Poids des contours
+                'fillOpacity': 0,            # Opacité du remplissage
+                'opacity': 0.5              # Opacité des contours
+            }
+
             # Créer la carte avec les données GeoTIFF et GeoJSON
             m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, geojson_data_routes, geojson_data_polygon,
-                                opacity_tiff, opacity_flood, opacity_routes, opacity_polygon)
+                                style_routes, style_polygon)
             st_folium(m, width=700, height=500, key="osm_map")
 
 if __name__ == "__main__":
