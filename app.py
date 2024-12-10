@@ -107,7 +107,10 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
 
 # Fonction pour générer une carte statique combinée
 def generer_carte_combinee(data_tiff, bounds_tiff, niveau_inondation, output_path):
-    extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
+    # Extraire les limites des coordonnées
+    lon_min, lat_min, lon_max, lat_max = bounds_tiff[0], bounds_tiff[1], bounds_tiff[2], bounds_tiff[3]
+
+    extent = [lon_min, lon_max, lat_min, lat_max]
 
     # Masque des zones inondées
     inondation_mask = data_tiff <= niveau_inondation
