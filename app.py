@@ -16,6 +16,10 @@ import streamlit as st
 import rasterio
 import numpy as np
 import matplotlib.pyplot as plt
+import folium
+from folium import raster_layers
+from pyproj import Proj, transform
+from io import BytesIO
 
 # Fonction pour charger et lire un fichier GeoTIFF
 def charger_tiff(fichier_tiff):
@@ -28,6 +32,40 @@ def charger_tiff(fichier_tiff):
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None
+
+# Fonction pour afficher un fond de carte OSM
+def afficher_fond_osm(transform_tiff, data_tiff):
+    # Définir les limites géographiques
+    min_x = transform_tiff[2]
+    max_x = transform_tiff[2] + transform_tiff[0] * data_tiff.shape[1]
+    min_y = transform_tiff[5] + transform_tiff[4] * data_tiff.shape[0]
+    max_y = transform_tiff[5]
+
+    # Coordonnées au format EPSG:4326 (longitude, latitude)
+    projection_utm = Proj(init="epsg:32630")  # UTM 30N
+    projection_wgs84 = Proj(init="epsg:4326")  # WGS 84 (longitude, latitude)
+    
+    # Transformation des coordonnées UTM vers WGS84
+    lon_min, lat_min = transform(projection_utm, projection_wgs84, min_x, min_y)
+    lon_max, lat_max = transform(projection_utm, projection_wgs84, max_x, max_y)
+
+    # Créer la carte OSM centrée sur les coordonnées
+    m = folium.Map(location=[(lat_min + lat_max) / 2, (lon_min + lon_max) / 2], zoom_start=13)
+
+    # Ajouter le fond de carte OSM
+    folium.TileLayer('cartodb positron').add_to(m)
+    
+    # Ajouter la couche raster pour le GeoTIFF sur la carte
+    img = BytesIO()
+    plt.imshow(data_tiff, cmap='terrain', extent=(lon_min, lon_max, lat_min, lat_max))
+    plt.axis('off')
+    plt.savefig(img, format='png')
+    img.seek(0)
+
+    # Ajouter le raster en overlay
+    raster_layers.ImageOverlay(img, bounds=[[lat_min, lon_min], [lat_max, lon_max]], opacity=0.6).add_to(m)
+
+    return m
 
 # Afficher la carte avec les zones inondées en bleu semi-transparent
 def afficher_carte_inondation(data_tiff, transform_tiff, inondation_mask, niveau_inondation):
@@ -67,18 +105,10 @@ def main():
             st.write(f"- Valeurs min : {data_tiff.min()}, max : {data_tiff.max()}")
             st.write(f"- Système de coordonnées : {crs_tiff}")
             
-            # Visualisation initiale
-            st.write("### Carte d'altitude")
-            extent = (
-                transform_tiff[2],
-                transform_tiff[2] + transform_tiff[0] * data_tiff.shape[1],
-                transform_tiff[5] + transform_tiff[4] * data_tiff.shape[0],
-                transform_tiff[5]
-            )
-            fig, ax = plt.subplots(figsize=(8, 6))
-            cax = ax.imshow(data_tiff, cmap='terrain', extent=extent)
-            fig.colorbar(cax, ax=ax, label="Altitude (m)")
-            st.pyplot(fig)
+            # Visualisation initiale avec fond OSM
+            st.write("### Carte avec fond OSM")
+            osm_map = afficher_fond_osm(transform_tiff, data_tiff)
+            folium_static(osm_map)
 
             # Sélection du niveau d'eau
             niveau_inondation = st.slider("Définir le niveau d'inondation (m)", 
