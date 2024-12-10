@@ -12,7 +12,7 @@ import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
 import rasterio
 
-from streamlit_folium import st_folium  # Importation de st_folium
+from streamlit_folium import st_folium
 import streamlit as st
 import rasterio
 import numpy as np
@@ -54,15 +54,15 @@ def create_map(bounds, data_tiff, transform_tiff, opacity=0.6):
     )
     img_overlay.add_to(m)
 
-    # Ajouter l'outil de mesure à la carte pour afficher l'échelle
-    measure_control = MeasureControl(primary_length_unit='meters', secondary_length_unit='kilometers',
-                                     primary_area_unit='sqmeters', secondary_area_unit='hectares')
-    # Personnalisation de la couleur de l'écriture de la mesure en noir
+    # Ajouter l'outil de mesure à la carte avec des options de personnalisation
+    measure_control = MeasureControl(
+        primary_length_unit='meters', 
+        secondary_length_unit='kilometers',
+        primary_area_unit='sqmeters', 
+        secondary_area_unit='hectares',
+        marker_options={'color': 'black', 'weight': 2, 'opacity': 1}
+    )
     measure_control.add_to(m)
-    
-    # Changer la couleur de la légende
-    measure_control._measure_marker_options['color'] = 'black'
-    measure_control._unit_marker_options['color'] = 'black'
 
     return m
 
