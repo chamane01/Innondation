@@ -105,7 +105,8 @@ def main():
     st.title("Analyse des zones inondées")
     st.markdown("### Téléchargez un fichier GeoTIFF pour analyser les zones inondées.")
 
-    fichier_tiff = st.file_uploader("Téléchargez un fichier GeoTIFF", type=["tif"])
+    # Téléversement unique du fichier GeoTIFF
+    fichier_tiff = st.file_uploader("Téléchargez un fichier GeoTIFF", type=["tif"], key="file_uploader")
 
     if fichier_tiff is not None:
         # Charger le fichier TIFF
@@ -119,7 +120,7 @@ def main():
             # Carte de profondeur superposée à OSM
             st.write("### Carte de profondeur avec OSM")
             m = creer_carte_osm(data_tiff, bounds_tiff)
-            st_folium(m, width=700, height=500)
+            st_folium(m, width=700, height=500, key="osm_map")
 
             # Choisir un niveau d'inondation
             niveau_inondation = st.slider(
@@ -127,14 +128,15 @@ def main():
                 float(data_tiff.min()),
                 float(data_tiff.max()),
                 float(np.percentile(data_tiff, 50)),  # Par défaut, médiane
-                step=0.1
+                step=0.1,
+                key="niveau_inondation"
             )
 
             # Afficher les zones inondées
-            if st.button("Afficher la zone inondée"):
+            if st.button("Afficher la zone inondée", key="btn_zone_inondee"):
                 st.write(f"### Zone inondée pour une altitude de {niveau_inondation:.2f} m")
                 m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=niveau_inondation)
-                st_folium(m, width=700, height=500)
+                st_folium(m, width=700, height=500, key="flood_map")
 
 if __name__ == "__main__":
     main()
