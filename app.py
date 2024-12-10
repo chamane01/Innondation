@@ -1,3 +1,4 @@
+
 # Importer les bibliothèques nécessaires
 import streamlit as st
 import pandas as pd
@@ -21,10 +22,6 @@ from matplotlib.colors import ListedColormap
 import matplotlib.pyplot as plt
 import os
 
-from pyproj import Proj, transform
-
-
-
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
     try:
@@ -37,31 +34,7 @@ def charger_tiff(fichier_tiff):
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None, None
-def calculer_taille_pixel(bounds, dimensions, crs):
-    lon_min, lat_min, lon_max, lat_max = bounds
-    height, width = dimensions
 
-    if crs.is_geographic:
-        # Conversion des degrés en mètres via une projection locale
-        proj = Proj(proj='utm', zone=33, ellps='WGS84')  # Exemple avec UTM Zone 33
-        x_min, y_min = proj(lon_min, lat_min)
-        x_max, y_max = proj(lon_max, lat_max)
-    else:
-        # Si les coordonnées sont déjà en mètres
-        x_min, y_min, x_max, y_max = lon_min, lat_min, lon_max, lat_max
-
-    # Taille du pixel en mètres
-    pixel_width = (x_max - x_min) / width
-    pixel_height = (y_max - y_min) / height
-
-    return pixel_width, pixel_height
-
-# Exemple d'utilisation
-data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff("votre_fichier.tif")
-height, width = data_tiff.shape
-pixel_width, pixel_height = calculer_taille_pixel(bounds_tiff, (height, width), crs_tiff)
-
-st.write(f"Taille d'un pixel : {pixel_width:.2f} m x {pixel_height:.2f} m")
 # Fonction pour générer une carte de profondeur et sauvegarder comme image temporaire
 def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
@@ -77,8 +50,6 @@ def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     # Sauvegarder l'image
     plt.savefig(output_path, format='png', bbox_inches='tight')
     plt.close(fig)
-
-
 
 # Fonction pour créer une carte Folium avec superposition
 def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
@@ -101,8 +72,6 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
         interactive=True
     )
     img_overlay.add_to(m)
-
-    
 
     # Si un niveau d'inondation est défini, superposer les zones inondées
     if niveau_inondation is not None:
@@ -135,28 +104,38 @@ def main():
     st.title("Analyse des zones inondées")
     st.markdown("### Téléchargez un fichier GeoTIFF pour analyser les zones inondées.")
 
-    # Téléversement du fichier GeoTIFF
-    fichier_tiff = st.file_uploader("Téléchargez un fichier GeoTIFF", type=["tif"])
+    fichier_tiff = st.file_uploader("Téléchargez un fichier GeoTIFF", type=["tif"], key="file_uploader")
 
     if fichier_tiff is not None:
-        # Charger le fichier TIFF
         data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
 
         if data_tiff is not None:
-            # Afficher les informations de base
             st.write(f"Dimensions : {data_tiff.shape}")
             st.write(f"Altitude min : {data_tiff.min()}, max : {data_tiff.max()}")
 
-            # Calcul de la taille des pixels
-            try:
-                height, width = data_tiff.shape
-                pixel_width, pixel_height = calculer_taille_pixel(bounds_tiff, (height, width), crs_tiff)
-                st.write(f"Taille d'un pixel : {pixel_width:.2f} m x {pixel_height:.2f} m")
-            except Exception as e:
-                st.error(f"Erreur lors du calcul de la taille des pixels : {e}")
+            st.write("### Carte de profondeur avec OSM")
+            m = creer_carte_osm(data_tiff, bounds_tiff)
+            st_folium(m, width=700, height=500, key="osm_map")
 
-        else:
-            st.error("Impossible de lire le fichier GeoTIFF. Veuillez vérifier son format ou son contenu.")
+            niveau_inondation = st.slider(
+                "Choisissez le niveau d'inondation",
+                float(data_tiff.min()),
+                float(data_tiff.max()),
+                float(np.percentile(data_tiff, 50)),
+                step=0.1,
+                key="niveau_inondation"
+            )
+
+            if st.button("Afficher la zone inondée", key="btn_zone_inondee"):
+                st.write(f"### Zone inondée pour une altitude de {niveau_inondation:.2f} m")
+                m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=niveau_inondation)
+                st_folium(m, width=700, height=500, key="flood_map")
+
+            # Supprimer les fichiers temporaires après usage
+            if os.path.exists("temp_depth_map.png"):
+                os.remove("temp_depth_map.png")
+            if os.path.exists("temp_flood_map.png"):
+                os.remove("temp_flood_map.png")
 
 if __name__ == "__main__":
     main()
