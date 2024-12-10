@@ -17,9 +17,7 @@ import streamlit as st
 import numpy as np
 import rasterio
 import folium
-from folium.plugins import Draw
 from streamlit_folium import st_folium
-import geopandas as gpd
 from geopy.distance import geodesic
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap  # Importation pour la carte inondée
@@ -36,20 +34,6 @@ def charger_tiff(fichier_tiff):
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None, None
-
-# Fonction pour charger un fichier GeoJSON
-def charger_geojson(fichier_geojson):
-    try:
-        # Lire le fichier GeoJSON avec geopandas
-        gdf = gpd.read_file(fichier_geojson)
-        
-        # Convertir les données géospatiales en format JSON natif
-        geojson_data = gdf.to_json()  # Ceci produit un format JSON standard
-        
-        return geojson_data
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
-        return None
 
 # Fonction pour calculer la taille d'un pixel
 def calculer_taille_pixel(transform):
@@ -100,7 +84,7 @@ def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     plt.close(fig)
 
 # Fonction pour créer une carte Folium avec superposition
-def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_data=None):
+def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
     try:
         lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
         lat_max, lon_max = bounds_tiff[3], bounds_tiff[2]
@@ -140,18 +124,6 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_data
             )
             flood_overlay.add_to(m)
 
-        # Ajouter le fichier GeoJSON (si disponible)
-        if geojson_data is not None:
-            folium.GeoJson(geojson_data, name="Routes").add_to(m)
-
-        # Ajouter les outils de dessin à la carte
-        draw = Draw(
-            draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4}},
-                          'polygon': {'shapeOptions': {'color': 'red', 'weight': 4}},
-                          'circle': {'shapeOptions': {'color': 'green', 'weight': 4}},
-                          'marker': {'icon': folium.Icon(color='darkblue')}})
-        draw.add_to(m)
-
         folium.LayerControl().add_to(m)
         return m
     except Exception as e:
@@ -161,14 +133,9 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_data
 # Interface principale Streamlit
 def main():
     st.title("Analyse des zones inondées")
-    st.markdown("### Téléchargez un fichier GeoTIFF et un fichier GeoJSON pour analyser les zones inondées.")
+    st.markdown("### Téléchargez un fichier GeoTIFF pour analyser les zones inondées.")
 
-    fichier_tiff = st.file_uploader("Téléchargez un fichier GeoTIFF", type=["tif"], key="file_uploader_tiff")
-    fichier_geojson = st.file_uploader("Téléchargez un fichier GeoJSON de routes", type=["geojson"], key="file_uploader_geojson")
-
-    geojson_data = None
-    if fichier_geojson is not None:
-        geojson_data = charger_geojson(fichier_geojson)
+    fichier_tiff = st.file_uploader("Téléchargez un fichier GeoTIFF", type=["tif"], key="file_uploader")
 
     if fichier_tiff is not None:
         data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
@@ -210,16 +177,11 @@ def main():
                 st.write(f"Surface totale inondée : {surface_totale_inondee_m2:.2f} m².")
                 st.write(f"Surface totale inondée : {surface_totale_inondee_ha:.2f} hectares.")
 
-            m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, geojson_data)
-            if m:
-                st_folium(m, width=700, height=500, key="osm_map")
+            m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation)
+            st_folium(m, width=700, height=500, key="osm_map")
 
 if __name__ == "__main__":
     main()
-
-
-
-
 
 
 
