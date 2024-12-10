@@ -32,7 +32,23 @@ def charger_tiff(fichier_tiff):
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None, None
 
-# Fonction pour afficher la zone inondée
+# Fonction pour afficher la carte de profondeur
+def afficher_carte_profondeur(data_tiff, bounds_tiff):
+    # Étendue géographique (extent)
+    extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
+
+    # Créer la figure
+    fig, ax = plt.subplots(figsize=(8, 6))
+    im = ax.imshow(data_tiff, cmap='terrain', extent=extent)
+    cbar = fig.colorbar(im, ax=ax, label="Altitude (m)")
+
+    # Titre et axes
+    ax.set_title("Carte de profondeur (terrain)", fontsize=14)
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    st.pyplot(fig)
+
+# Fonction pour afficher la zone inondée en magenta
 def afficher_zone_inondee(data_tiff, niveau_inondation, bounds_tiff):
     # Étendue géographique (extent)
     extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
@@ -93,6 +109,10 @@ def main():
             st.write(f"Dimensions : {data_tiff.shape}")
             st.write(f"Altitude min : {data_tiff.min()}, max : {data_tiff.max()}")
 
+            # Afficher la carte de profondeur
+            if st.checkbox("Afficher la carte de profondeur"):
+                afficher_carte_profondeur(data_tiff, bounds_tiff)
+
             # Sélectionner le niveau d'inondation
             niveau_inondation = st.slider(
                 "Choisissez le niveau d'inondation",
@@ -108,6 +128,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
