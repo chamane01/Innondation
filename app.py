@@ -13,14 +13,16 @@ import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
 import rasterio
 
-import streamlit as st 
+import streamlit as st
 import numpy as np
 import rasterio
 import folium
+from folium.plugins import Draw
 from streamlit_folium import st_folium
 from matplotlib.colors import ListedColormap
 import matplotlib.pyplot as plt
 import os
+from shapely.geometry import Polygon
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -41,17 +43,6 @@ def calculer_taille_pixel(transform):
     pixel_height = -transform[4]  # Hauteur d'un pixel (dy, négatif car les Y diminuent vers le haut)
     return pixel_width, pixel_height
 
-# Fonction pour calculer le nombre de pixels dans les zones inondées
-def calculer_pixels_inondes(data, niveau_inondation):
-    inondation_mask = data <= niveau_inondation
-    nombre_pixels_inondes = np.sum(inondation_mask)
-    return nombre_pixels_inondes
-
-# Fonction pour calculer la surface totale inondée
-def calculer_surface_totale_inondee(nombre_pixels_inondes, pixel_width, pixel_height):
-    surface_pixel = pixel_width * pixel_height
-    return nombre_pixels_inondes * surface_pixel
-
 # Fonction pour générer une carte de profondeur et sauvegarder comme image temporaire
 def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
@@ -64,6 +55,7 @@ def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
 
+    # Sauvegarder l'image
     plt.savefig(output_path, format='png', bbox_inches='tight')
     plt.close(fig)
 
@@ -74,11 +66,14 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
         lat_max, lon_max = bounds_tiff[3], bounds_tiff[2]
         center = [(lat_min + lat_max) / 2, (lon_min + lon_max) / 2]
 
+        # Créer une carte Folium
         m = folium.Map(location=center, zoom_start=13, control_scale=True)
 
+        # Générer une image temporaire pour la carte de profondeur
         depth_map_path = "temp_depth_map.png"
         generer_image_profondeur(data_tiff, bounds_tiff, depth_map_path)
 
+        # Ajouter la superposition de la carte de profondeur
         img_overlay = folium.raster_layers.ImageOverlay(
             image=depth_map_path,
             bounds=[[lat_min, lon_min], [lat_max, lon_max]],
@@ -87,11 +82,13 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
         )
         img_overlay.add_to(m)
 
+        # Gestion du niveau d'inondation si défini
         if niveau_inondation is not None:
             inondation_mask = data_tiff <= niveau_inondation
             zone_inondee = np.zeros_like(data_tiff, dtype=np.uint8)
             zone_inondee[inondation_mask] = 255
 
+            # Générer une image temporaire pour les zones inondées
             flood_map_path = "temp_flood_map.png"
             fig, ax = plt.subplots(figsize=(8, 6))
             extent = [lon_min, lon_max, lat_min, lat_max]
@@ -108,11 +105,44 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
             )
             flood_overlay.add_to(m)
 
+        # Ajouter l'outil de dessin pour créer des polygones
+        draw = Draw(export=True)
+        draw.add_to(m)
+
         folium.LayerControl().add_to(m)
         return m
     except Exception as e:
         st.error(f"Erreur lors de la création de la carte : {e}")
         return None
+
+# Fonction pour générer une carte statique combinée
+def generer_carte_combinee(data_tiff, bounds_tiff, niveau_inondation, output_path):
+    lon_min, lat_min, lon_max, lat_max = bounds_tiff[0], bounds_tiff[1], bounds_tiff[2], bounds_tiff[3]
+
+    extent = [lon_min, lon_max, lat_min, lat_max]
+
+    # Masque des zones inondées
+    inondation_mask = data_tiff <= niveau_inondation
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    # Afficher la carte de profondeur
+    im = ax.imshow(data_tiff, cmap='terrain', extent=extent)
+    cbar = fig.colorbar(im, ax=ax, label="Altitude (m)")
+
+    # Superposer les zones inondées
+    zone_inondee = np.zeros_like(data_tiff, dtype=np.uint8)
+    zone_inondee[inondation_mask] = 1
+    ax.imshow(zone_inondee, cmap=ListedColormap(["none", "magenta"]), extent=extent, alpha=0.5)
+
+    # Ajouter des titres et des axes
+    ax.set_title("Carte combinée : Profondeur et Zones inondées", fontsize=14)
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+
+    # Sauvegarder l'image
+    plt.savefig(output_path, format='png', bbox_inches='tight')
+    plt.close(fig)
 
 # Interface principale Streamlit
 def main():
@@ -128,8 +158,9 @@ def main():
             st.write(f"Dimensions : {data_tiff.shape}")
             st.write(f"Altitude min : {data_tiff.min()}, max : {data_tiff.max()}")
 
-            pixel_width, pixel_height = calculer_taille_pixel(transform_tiff)
-            st.write(f"Taille d'un pixel : {pixel_width:.2f} unités en largeur x {pixel_height:.2f} unités en hauteur.")
+            st.write("### Carte de profondeur avec OSM")
+            m = creer_carte_osm(data_tiff, bounds_tiff)
+            st_folium(m, width=700, height=500, key="osm_map")
 
             niveau_inondation = st.slider(
                 "Choisissez le niveau d'inondation",
@@ -140,15 +171,30 @@ def main():
                 key="niveau_inondation"
             )
 
-            if niveau_inondation:
-                nombre_pixels_inondes = calculer_pixels_inondes(data_tiff, niveau_inondation)
-                surface_totale_inondee = calculer_surface_totale_inondee(nombre_pixels_inondes, pixel_width, pixel_height)
+            if st.button("Afficher la zone inondée", key="btn_zone_inondee"):
+                st.write(f"### Zone inondée pour une altitude de {niveau_inondation:.2f} m")
+                m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=niveau_inondation)
+                st_folium(m, width=700, height=500, key="flood_map")
 
-                st.write(f"Nombre de pixels inondés : {nombre_pixels_inondes}")
-                st.write(f"Surface totale inondée : {surface_totale_inondee:.2f} unités².")
+                # Calculer et afficher la taille d'un pixel
+                pixel_width, pixel_height = calculer_taille_pixel(transform_tiff)
+                st.write(f"Taille d'un pixel : {pixel_width:.2f} unités en largeur x {pixel_height:.2f} unités en hauteur.")
 
-            m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation)
-            st_folium(m, width=700, height=500, key="osm_map")
+            # Bouton pour créer une carte statique
+            if st.button("Créer une carte statique", key="btn_carte_statique"):
+                carte_statique_path = "carte_combinee.png"
+                generer_carte_combinee(data_tiff, bounds_tiff, niveau_inondation, carte_statique_path)
+                st.image(carte_statique_path, caption="Carte statique combinée", use_column_width=True)
+
+                # Supprimer l'image après affichage
+                if os.path.exists(carte_statique_path):
+                    os.remove(carte_statique_path)
+
+            # Supprimer les fichiers temporaires après usage
+            if os.path.exists("temp_depth_map.png"):
+                os.remove("temp_depth_map.png")
+            if os.path.exists("temp_flood_map.png"):
+                os.remove("temp_flood_map.png")
 
 if __name__ == "__main__":
     main()
