@@ -57,7 +57,12 @@ def create_map(bounds, data_tiff, transform_tiff, opacity=0.6):
     # Ajouter l'outil de mesure à la carte pour afficher l'échelle
     measure_control = MeasureControl(primary_length_unit='meters', secondary_length_unit='kilometers',
                                      primary_area_unit='sqmeters', secondary_area_unit='hectares')
+    # Personnalisation de la couleur de l'écriture de la mesure en noir
     measure_control.add_to(m)
+    
+    # Changer la couleur de la légende
+    measure_control._measure_marker_options['color'] = 'black'
+    measure_control._unit_marker_options['color'] = 'black'
 
     return m
 
@@ -136,6 +141,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
