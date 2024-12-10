@@ -13,7 +13,6 @@ from datetime import datetime
 import rasterio
 
 
-
 import streamlit as st
 import rasterio
 import numpy as np
@@ -60,8 +59,14 @@ def create_map(bounds_tiff, data_tiff, transform_tiff, opacity=0.6):
         zindex=1
     ).add_to(m)
 
-    # Ajouter le fond de carte OpenStreetMap
-    ctx.add_basemap(m, crs='EPSG:3857', source=ctx.providers.Stamen.Terrain)
+    # Ajouter le fond de carte OpenStreetMap en utilisant l'URL de tuiles de Stamen
+    folium.TileLayer(
+        tiles="https://{s}.tile.stamen.com/terrain/{z}/{x}/{y}.png",
+        attr="Map tiles by Stamen Design, under CC BY 3.0. Data by OpenStreetMap, under ODbL",
+        name="Stamen Terrain",
+        overlay=False,
+        control=True
+    ).add_to(m)
 
     return m
 
@@ -129,6 +134,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
