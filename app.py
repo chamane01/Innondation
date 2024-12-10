@@ -12,28 +12,6 @@ import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
 import rasterio
 
-from streamlit_folium import st_folium
-import streamlit as st
-import rasterio
-import numpy as np
-import folium
-from folium import raster_layers
-from folium.plugins import MeasureControl
-import io
-
-# Fonction pour charger et lire un fichier GeoTIFF
-def charger_tiff(fichier_tiff):
-    try:
-        with rasterio.open(fichier_tiff) as src:
-            data = src.read(1)  # Lire la première bande
-            transform = src.transform  # Transformation géographique
-            crs = src.crs  # Système de coordonnées
-            bounds = src.bounds  # (xmin, ymin, xmax, ymax)
-            return data, transform, crs, bounds
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
-        return None, None, None, None
-
 # Fonction pour calculer la surface d'un pixel
 def calcul_surface_pixel(transform_tiff):
     # Extraire les informations de transformation
@@ -45,39 +23,7 @@ def calcul_surface_pixel(transform_tiff):
     surface_pixel_ha = surface_pixel_m2 / 10000  # Conversion en hectares
     return surface_pixel_m2, surface_pixel_ha
 
-# Fonction pour créer une carte Folium avec l'emprise du TIFF
-def create_map(bounds, data_tiff, transform_tiff, opacity=0.6):
-    lat_min, lon_min = bounds[1], bounds[0]  # Coin inférieur gauche
-    lat_max, lon_max = bounds[3], bounds[2]  # Coin supérieur droit
-
-    # Créer la carte centrée sur le centre de l'emprise du TIFF
-    map_center = [(lat_max + lat_min) / 2, (lon_max + lon_min) / 2]
-    m = folium.Map(location=map_center, zoom_start=13)
-
-    # Ajouter la carte OpenStreetMap
-    folium.TileLayer('OpenStreetMap').add_to(m)
-
-    # Ajouter l'image raster du fichier TIFF sur la carte avec une opacité ajustable
-    img_overlay = raster_layers.ImageOverlay(
-        image=data_tiff,
-        bounds=[[lat_min, lon_min], [lat_max, lon_max]],
-        opacity=opacity  # Opacité ajustée
-    )
-    img_overlay.add_to(m)
-
-    # Ajouter l'outil de mesure à la carte avec des options de personnalisation
-    measure_control = MeasureControl(
-        primary_length_unit='meters', 
-        secondary_length_unit='kilometers',
-        primary_area_unit='sqmeters', 
-        secondary_area_unit='hectares',
-        marker_options={'color': 'black', 'weight': 2, 'opacity': 1}
-    )
-    measure_control.add_to(m)
-
-    return m
-
-# Définition de l'application Streamlit
+# Fonction pour l'application Streamlit
 def main():
     st.title("Analyse des zones inondées")
     st.markdown("## Téléversez un fichier GeoTIFF pour analyser les zones inondées.")
@@ -96,6 +42,12 @@ def main():
             st.write(f"- Valeurs min : {data_tiff.min()}, max : {data_tiff.max()}")
             st.write(f"- Système de coordonnées : {crs_tiff}")
             
+            # Calcul de la surface d'un pixel
+            surface_pixel_m2, surface_pixel_ha = calcul_surface_pixel(transform_tiff)  # S'assurer que cette ligne est appelée
+
+            # Affichage des surfaces des pixels
+            st.write(f"### Surface d'un pixel réel : {surface_pixel_m2:.2f} m²")
+            st.write(f"### Surface d'un pixel réel : {surface_pixel_ha:.4f} ha")
             
             # Choisir l'opacité du TIFF
             opacity = st.slider("Opacité de l'image TIFF", 0.0, 1.0, 0.6, 0.1)
@@ -146,6 +98,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
