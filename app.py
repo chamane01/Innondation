@@ -20,7 +20,7 @@ import folium
 from streamlit_folium import st_folium
 from geopy.distance import geodesic
 import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap
+from matplotlib.colors import ListedColormap  # Ajouter cette ligne pour l'importation
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -55,6 +55,34 @@ def mesurer_distance(bounds_tiff):
 
     return distance_x, distance_y
 
+# Fonction pour calculer la surface inondée
+def calculer_surface_inondee(nombre_pixels_inondes, taille_unite):
+    surface_totale = nombre_pixels_inondes * (taille_unite ** 2)  # Surface en unités carrées
+    surface_totale_m2 = surface_totale * (taille_unite ** 2)  # Surface en m²
+    surface_totale_hectares = surface_totale_m2 / 10000  # Conversion en hectares
+    return surface_totale_m2, surface_totale_hectares
+
+# Fonction pour calculer les unités inondées
+def calculer_pixels_inondes(data, niveau_inondation):
+    inondation_mask = data <= niveau_inondation
+    nombre_pixels_inondes = np.sum(inondation_mask)
+    return nombre_pixels_inondes
+
+# Fonction pour générer une carte de profondeur et sauvegarder comme image temporaire
+def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
+    extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    im = ax.imshow(data_tiff, cmap='terrain', extent=extent)
+    fig.colorbar(im, ax=ax, label="Altitude (m)")
+
+    ax.set_title("Carte de profondeur (terrain)", fontsize=14)
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+
+    plt.savefig(output_path, format='png', bbox_inches='tight')
+    plt.close(fig)
+
 # Fonction pour créer une carte Folium avec superposition
 def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
     try:
@@ -64,8 +92,37 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
 
         m = folium.Map(location=center, zoom_start=13, control_scale=True)
 
-        # Code pour superposer les cartes à la carte OSM ici
-        # (comme dans le code précédent...)
+        depth_map_path = "temp_depth_map.png"
+        generer_image_profondeur(data_tiff, bounds_tiff, depth_map_path)
+
+        img_overlay = folium.raster_layers.ImageOverlay(
+            image=depth_map_path,
+            bounds=[[lat_min, lon_min], [lat_max, lon_max]],
+            opacity=0.7,
+            interactive=True
+        )
+        img_overlay.add_to(m)
+
+        if niveau_inondation is not None:
+            inondation_mask = data_tiff <= niveau_inondation
+            zone_inondee = np.zeros_like(data_tiff, dtype=np.uint8)
+            zone_inondee[inondation_mask] = 255
+
+            flood_map_path = "temp_flood_map.png"
+            fig, ax = plt.subplots(figsize=(8, 6))
+            extent = [lon_min, lon_max, lat_min, lat_max]
+            ax.imshow(zone_inondee, cmap=ListedColormap(['none', 'magenta']), extent=extent, alpha=0.5)
+            plt.axis('off')
+            plt.savefig(flood_map_path, format='png', bbox_inches='tight', transparent=True)
+            plt.close(fig)
+
+            flood_overlay = folium.raster_layers.ImageOverlay(
+                image=flood_map_path,
+                bounds=[[lat_min, lon_min], [lat_max, lon_max]],
+                opacity=0.6,
+                interactive=True
+            )
+            flood_overlay.add_to(m)
 
         folium.LayerControl().add_to(m)
         return m
@@ -95,28 +152,36 @@ def main():
             st.write(f"Distance réelle de la carte : {distance_x:.2f} m en largeur x {distance_y:.2f} m en hauteur.")
 
             # Taille d'une unité sur la carte (en mètres)
-            carte_largeur = data_tiff.shape[1]  # Largeur de l'image (nombre de pixels en x)
-            carte_hauteur = data_tiff.shape[0]  # Hauteur de l'image (nombre de pixels en y)
-
-            # Taille de l'unité (mètre) pour un pixel
+            carte_largeur = 1201  # Exemple de taille de la carte
+            carte_hauteur = 1201  # Exemple de taille de la carte
             taille_unite_x = distance_x / carte_largeur
             taille_unite_y = distance_y / carte_hauteur
-            taille_unite = (taille_unite_x + taille_unite_y) / 2  # Moyenne des tailles en x et y
+            taille_unite = (taille_unite_x + taille_unite_y) / 2  # Moyenne des tailles
 
             st.write(f"Taille d'une unité sur la carte : {taille_unite:.2f} m.")
 
-            # Afficher le nombre de pixels sur la largeur de l'image
-            st.write(f"Nombre de pixels sur la largeur de l'image : {carte_largeur}")
+            niveau_inondation = st.slider(
+                "Choisissez le niveau d'inondation",
+                float(data_tiff.min()),
+                float(data_tiff.max()),
+                float(np.percentile(data_tiff, 50)),
+                step=0.1,
+                key="niveau_inondation"
+            )
 
-            # Vous pouvez également afficher des informations supplémentaires ici
-            # comme le calcul de la surface inondée ou la création de la carte, etc.
+            if niveau_inondation:
+                nombre_pixels_inondes = calculer_pixels_inondes(data_tiff, niveau_inondation)
+                surface_totale_inondee_m2, surface_totale_inondee_ha = calculer_surface_inondee(nombre_pixels_inondes, taille_unite)
 
-            m = creer_carte_osm(data_tiff, bounds_tiff)
+                st.write(f"Nombre de pixels inondés : {nombre_pixels_inondes}")
+                st.write(f"Surface totale inondée : {surface_totale_inondee_m2:.2f} m².")
+                st.write(f"Surface totale inondée : {surface_totale_inondee_ha:.2f} hectares.")
+
+            m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation)
             st_folium(m, width=700, height=500, key="osm_map")
 
 if __name__ == "__main__":
     main()
-
 
 
 
