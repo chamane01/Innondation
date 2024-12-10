@@ -18,6 +18,7 @@ import folium
 from folium import raster_layers, plugins
 from streamlit_folium import st_folium
 import rasterio
+import matplotlib.pyplot as plt
 
 # Fonction pour charger et lire un fichier GeoTIFF
 def charger_tiff(fichier_tiff):
@@ -103,7 +104,7 @@ def main():
             st.write("### Carte d'altitude avec outils de mesure")
             st_folium(m, width=700, height=500)
 
-            # Ajout du bouton pour afficher les zones inondées après un niveau d'inondation
+            # Ajout du slider pour choisir le niveau d'inondation
             st.write("### Zone inondée")
             niveau_inondation = st.slider(
                 "Sélectionnez le niveau d'inondation",
@@ -113,12 +114,27 @@ def main():
                 step=0.1
             )
 
-            if st.button("Afficher la zone inondée"):
-                # Créer la carte d'altitude et afficher les zones inondées
-                m_inondation = create_map(bounds_tiff, data_tiff, transform_tiff, opacity=opacity, zoom_start=13)
-                afficher_inondation(m_inondation, data_tiff, niveau_inondation, bounds_tiff)
-                st.write(f"### Zones inondées pour le niveau d'inondation {niveau_inondation:.2f}")
-                st_folium(m_inondation, width=700, height=500)
+            if 'flood_data' not in st.session_state:
+                st.session_state.flood_data = {
+                    'niveau_inondation': niveau_inondation
+                }
+
+            # Calculer et afficher la surface inondée
+            if st.button("Calculer et afficher la zone inondée"):
+                # Calculer la zone inondée
+                inondation_mask = data_tiff <= st.session_state.flood_data['niveau_inondation']
+                surface_inondee = np.sum(inondation_mask) * (transform_tiff[0] * transform_tiff[4]) / 10_000  # En hectares
+                st.session_state.flood_data['surface_bleu'] = surface_inondee
+                st.write(f"**Surface inondée :** {surface_inondee:.2f} hectares")
+
+                # Afficher la carte de l'inondation avec matplotlib
+                fig, ax = plt.subplots(figsize=(8, 6))
+                extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]  # Définir l'extent
+                ax.imshow(data_tiff, cmap='terrain', extent=extent)
+                ax.imshow(inondation_mask, cmap='Blues', alpha=0.5, extent=extent)
+                ax.set_title("Zone inondée (en bleu)")
+                fig.colorbar(ax.imshow(data_tiff, cmap='terrain', extent=extent), ax=ax, label="Altitude (m)")
+                st.pyplot(fig)
 
 if __name__ == "__main__":
     main()
