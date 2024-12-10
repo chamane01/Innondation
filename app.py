@@ -10,6 +10,146 @@ from shapely.geometry import MultiPolygon
 import contextily as ctx
 import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
+import rasterio
+
+import streamlit as st
+import numpy as np
+import folium
+from folium import raster_layers, plugins
+from streamlit_folium import st_folium
+import rasterio
+import matplotlib.pyplot as plt
+
+# Fonction pour charger et lire un fichier GeoTIFF
+def charger_tiff(fichier_tiff):
+    try:
+        with rasterio.open(fichier_tiff) as src:
+            data = src.read(1)  # Lire la première bande
+            transform = src.transform  # Transformation géographique
+            crs = src.crs  # Système de coordonnées
+            bounds = src.bounds  # (xmin, ymin, xmax, ymax)
+            return data, transform, crs, bounds
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
+        return None, None, None, None
+
+# Fonction pour créer une carte Folium avec l'emprise du TIFF
+def create_map(bounds, data_tiff, transform_tiff, opacity=0.6, zoom_start=13):
+    lat_min, lon_min = bounds[1], bounds[0]  # Coin inférieur gauche
+    lat_max, lon_max = bounds[3], bounds[2]  # Coin supérieur droit
+
+    # Créer la carte centrée sur l'emprise du TIFF avec un zoom fixe
+    map_center = [(lat_max + lat_min) / 2, (lon_max + lon_min) / 2]
+    m = folium.Map(location=map_center, zoom_start=zoom_start, control_scale=True, 
+                   prefer_canvas=True)  # Permet de désactiver certaines interactions
+
+    # Ajouter la carte OpenStreetMap
+    folium.TileLayer('OpenStreetMap').add_to(m)
+
+    # Ajouter l'image raster du fichier TIFF sur la carte avec une opacité ajustable
+    img_overlay = raster_layers.ImageOverlay(
+        image=data_tiff,
+        bounds=[[lat_min, lon_min], [lat_max, lon_max]],
+        opacity=opacity,  # Opacité ajustée
+        colormap='YlGnBu'  # Utilisation d'une palette de couleurs pour l'affichage de la profondeur
+    )
+    img_overlay.add_to(m)
+
+    return m
+
+# Fonction pour superposer la zone inondée en bleu
+def afficher_inondation(m, data_tiff, niveau_inondation, bounds_tiff):
+    lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
+    lat_max, lon_max = bounds_tiff[3], bounds_tiff[2]
+
+    # Créer le masque d'inondation
+    inondation_mask = data_tiff <= niveau_inondation
+    
+    # Appliquer le masque à la carte en bleu
+    inondation_mask_overlay = raster_layers.ImageOverlay(
+        image=inondation_mask.astype(np.uint8) * 255,  # Convertir en valeurs 0-255
+        bounds=[[lat_min, lon_min], [lat_max, lon_max]],
+        opacity=0.6,
+        colormap='Blues'  # Appliquer la couleur bleue pour les zones inondées
+    )
+    inondation_mask_overlay.add_to(m)
+
+# Définition de l'application Streamlit
+def main():
+    st.title("Analyse des zones inondées")
+    st.markdown("## Téléversez un fichier GeoTIFF pour analyser les zones inondées.")
+
+    # Téléchargement du fichier TIFF
+    uploaded_tiff_file = st.file_uploader("Choisissez un fichier GeoTIFF (.tif)", type=["tif"])
+
+    if uploaded_tiff_file is not None:
+        # Charger les données GeoTIFF
+        data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(uploaded_tiff_file)
+
+        if data_tiff is not None:
+            # Affichage des informations de base
+            st.write("### Informations sur le fichier GeoTIFF")
+            st.write(f"- Dimensions : {data_tiff.shape}")
+            st.write(f"- Valeurs min : {data_tiff.min()}, max : {data_tiff.max()}")
+            st.write(f"- Système de coordonnées : {crs_tiff}")
+
+            # Créer la carte de base avec la profondeur
+            opacity = st.slider("Opacité de l'image TIFF", 0.0, 1.0, 0.6, 0.1)
+            m = create_map(bounds_tiff, data_tiff, transform_tiff, opacity=opacity)
+
+            # Ajouter l'outil de mesure
+            plugins.MeasureControl(primary_length_unit='meters').add_to(m)
+
+            # Affichage de la carte d'altitude
+            st.write("### Carte d'altitude avec outils de mesure")
+            st_folium(m, width=700, height=500)
+
+            # Ajout du slider pour choisir le niveau d'inondation
+            st.write("### Zone inondée")
+            niveau_inondation = st.slider(
+                "Sélectionnez le niveau d'inondation",
+                min_value=float(data_tiff.min()),
+                max_value=float(data_tiff.max()),
+                value=float(np.percentile(data_tiff, 50)),  # Par défaut, la valeur médiane
+                step=0.1
+            )
+
+            if 'flood_data' not in st.session_state:
+                st.session_state.flood_data = {
+                    'niveau_inondation': niveau_inondation
+                }
+
+            # Calculer et afficher la surface inondée
+            if st.button("Calculer et afficher la zone inondée"):
+                # Calculer la zone inondée
+                inondation_mask = data_tiff <= st.session_state.flood_data['niveau_inondation']
+                surface_inondee = np.sum(inondation_mask) * (transform_tiff[0] * transform_tiff[4]) / 10_000  # En hectares
+                st.session_state.flood_data['surface_bleu'] = surface_inondee
+                st.write(f"**Surface inondée :** {surface_inondee:.2f} hectares")
+
+                # Afficher la carte de l'inondation avec matplotlib
+                fig, ax = plt.subplots(figsize=(8, 6))
+                extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]  # Définir l'extent
+                ax.imshow(data_tiff, cmap='terrain', extent=extent)
+                ax.imshow(inondation_mask, cmap='Blues', alpha=0.5, extent=extent)
+                ax.set_title("Zone inondée (en bleu)")
+                fig.colorbar(ax.imshow(data_tiff, cmap='terrain', extent=extent), ax=ax, label="Altitude (m)")
+                st.pyplot(fig)
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Streamlit - Titre de l'application avec deux logos centrés
 col1, col2, col3 = st.columns([1, 1, 1])
@@ -19,6 +159,77 @@ with col2:
     st.image("logo.png", width=150)
 with col3:
     st.write("")  # Cette colonne est laissée vide pour centrer les logos
+
+st.title("Carte des zones inondées avec niveaux d'eau et surface")
+
+# Initialiser session_state pour stocker les données d'inondation
+if 'flood_data' not in st.session_state:
+    st.session_state.flood_data = {
+        'surface_bleu': None,  
+        'volume_eau': None,
+        'niveau_inondation': 0.0
+    }
+
+# Étape 1 : Sélectionner un site ou téléverser un fichier
+st.markdown("## Sélectionner un site ou téléverser un fichier GeoTIFF")
+uploaded_tiff_file = st.file_uploader("Téléversez un fichier GeoTIFF (.tif)", type=["tif"])
+
+# Charger les données depuis un fichier GeoTIFF
+def charger_tiff(fichier_tiff):
+    try:
+        with rasterio.open(fichier_tiff) as src:
+            # Lire les métadonnées et les données raster
+            data = src.read(1)  # Lire la première bande
+            transform = src.transform  # Transformation spatiale
+            crs = src.crs  # Système de coordonnées
+            return data, transform, crs
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
+        return None, None, None
+
+# Si un fichier GeoTIFF est téléversé
+if uploaded_tiff_file is not None:
+    data_tiff, transform_tiff, crs_tiff = charger_tiff(uploaded_tiff_file)
+
+    if data_tiff is not None:
+        st.write("**Informations sur le fichier GeoTIFF :**")
+        st.write(f"Dimensions : {data_tiff.shape}")
+        st.write(f"Valeurs min : {data_tiff.min()}, max : {data_tiff.max()}")
+        st.write(f"Système de coordonnées : {crs_tiff}")
+
+        # Afficher les données raster sous forme d'image
+        fig, ax = plt.subplots(figsize=(8, 6))
+        extent = (
+            transform_tiff[2],  # Min X
+            transform_tiff[2] + transform_tiff[0] * data_tiff.shape[1],  # Max X
+            transform_tiff[5] + transform_tiff[4] * data_tiff.shape[0],  # Min Y
+            transform_tiff[5]  # Max Y
+        )
+        cax = ax.imshow(data_tiff, cmap='terrain', extent=extent)
+        fig.colorbar(cax, ax=ax, label="Altitude (m)")
+        ax.set_title("Carte d'altitude (GeoTIFF)")
+        st.pyplot(fig)
+
+        # Niveau d'eau et analyse
+        st.session_state.flood_data['niveau_inondation'] = st.number_input(
+            "Entrez le niveau d'eau (mètres)", min_value=float(data_tiff.min()), max_value=float(data_tiff.max()), step=0.1
+        )
+
+        if st.button("Calculer et afficher la zone inondée"):
+            # Calculer la zone inondée
+            inondation_mask = data_tiff <= st.session_state.flood_data['niveau_inondation']
+            surface_inondee = np.sum(inondation_mask) * (transform_tiff[0] * transform_tiff[4]) / 10_000  # En hectares
+            st.session_state.flood_data['surface_bleu'] = surface_inondee
+            st.write(f"**Surface inondée :** {surface_inondee:.2f} hectares")
+
+            # Afficher la carte de l'inondation
+            fig, ax = plt.subplots(figsize=(8, 6))
+            ax.imshow(data_tiff, cmap='terrain', extent=extent)
+            ax.imshow(inondation_mask, cmap='Blues', alpha=0.5, extent=extent)
+            ax.set_title("Zone inondée (en bleu)")
+            fig.colorbar(cax, ax=ax, label="Altitude (m)")
+            st.pyplot(fig)
+
 
 st.title("Carte des zones inondées avec niveaux d'eau et surface")
 
@@ -59,6 +270,23 @@ elif uploaded_file is not None:
 else:
     st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
     df = None
+
+
+
+
+uploaded_geojson_file = st.file_uploader("Téléversez un fichier GeoJSON pour les routes", type=["geojson"])
+def charger_geojson(fichier):
+    try:
+        gdf = gpd.read_file(fichier)
+        return gdf
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
+        return None
+
+# Charger les données du fichier GeoJSON des routes
+routes_gdf = None
+if uploaded_geojson_file is not None:
+    routes_gdf = charger_geojson(uploaded_geojson_file)
 
 # Charger et filtrer les bâtiments dans l'emprise de la carte
 try:
@@ -156,6 +384,15 @@ if df is not None:
                 ax.legend()
             else:
                 st.write("Aucun bâtiment à analyser dans cette zone.")
+
+            if routes_gdf is not None:
+                routes_gdf = routes_gdf.to_crs(epsg=32630)  # Reprojeter les données si nécessaire
+                routes_gdf.plot(ax=ax, color='orange', linewidth=2, label="Routes")
+                st.write(f"**Nombre de routes affichées :** {len(routes_gdf)}")
+
+            
+
+            
 
             st.pyplot(fig)
 
