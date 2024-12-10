@@ -16,6 +16,8 @@ import streamlit as st
 import rasterio
 import numpy as np
 import matplotlib.pyplot as plt
+import folium
+from folium import plugins
 
 # Fonction pour charger et lire un fichier GeoTIFF
 def charger_tiff(fichier_tiff):
@@ -24,10 +26,36 @@ def charger_tiff(fichier_tiff):
             data = src.read(1)  # Lire la première bande
             transform = src.transform  # Transformation géographique
             crs = src.crs  # Système de coordonnées
-            return data, transform, crs
+            bounds = src.bounds  # Limites de l'image
+            return data, transform, crs, bounds
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
-        return None, None, None
+        return None, None, None, None
+
+# Fonction pour créer la carte avec le fond OSM
+def create_map(bounds, data, pixel_size_x, pixel_size_y):
+    # Extraire les coordonnées de l'image (généralement dans le système de coordonnées EPSG:4326)
+    lat_min = bounds[1]
+    lon_min = bounds[0]
+    lat_max = bounds[3]
+    lon_max = bounds[2]
+
+    # Créer une carte Folium centrée sur l'image
+    m = folium.Map(location=[(lat_min + lat_max) / 2, (lon_min + lon_max) / 2], zoom_start=12, tiles='OpenStreetMap')
+
+    # Ajouter un carré représentant l'emprise du fichier GeoTIFF
+    folium.Rectangle(
+        bounds=[[lat_min, lon_min], [lat_max, lon_max]], 
+        color='blue', 
+        weight=2, 
+        fill=True, 
+        fill_opacity=0.2
+    ).add_to(m)
+
+    # Optionnel : Ajouter un plugin de zoom
+    plugins.Fullscreen(position="topright").add_to(m)
+
+    return m
 
 # Fonction principale de l'application
 def main():
@@ -39,7 +67,7 @@ def main():
     
     if uploaded_tiff_file is not None:
         # Charger les données GeoTIFF
-        data_tiff, transform_tiff, crs_tiff = charger_tiff(uploaded_tiff_file)
+        data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(uploaded_tiff_file)
         
         if data_tiff is not None:
             # Affichage des informations de base
@@ -65,10 +93,10 @@ def main():
             st.write(f"- Largeur totale (en X) : {width_in_meters} mètres")
             st.write(f"- Hauteur totale (en Y) : {height_in_meters} mètres")
 
-            fig, ax = plt.subplots(figsize=(8, 6))
-            ax.set_xlim(X_min, X_max)
-            ax.set_ylim(Y_min, Y_max)
-            ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+            # Créer une carte Folium avec le fond OSM
+            st.write("### Carte d'altitude avec fond OpenStreetMap")
+            map_osm = create_map(bounds_tiff, data_tiff, pixel_size_x, pixel_size_y)
+            st.markdown(map_osm._repr_html_(), unsafe_allow_html=True)
 
             # Afficher la carte avec les zones inondées
             st.write("### Carte d'altitude")
@@ -79,6 +107,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
