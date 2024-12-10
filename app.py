@@ -22,6 +22,7 @@ from geopy.distance import geodesic
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap  # Importation pour la carte inondée
 from folium.plugins import MeasureControl  # Importation de l'outil de mesure
+import geopandas as gpd  # Pour lire les fichiers GeoJSON
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -35,6 +36,15 @@ def charger_tiff(fichier_tiff):
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None, None
+
+# Fonction pour charger un fichier GeoJSON
+def charger_geojson(fichier_geojson):
+    try:
+        gdf = gpd.read_file(fichier_geojson)  # Utilisation de Geopandas pour lire le GeoJSON
+        return gdf
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
+        return None
 
 # Fonction pour calculer la taille d'un pixel
 def calculer_taille_pixel(transform):
@@ -85,7 +95,7 @@ def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     plt.close(fig)
 
 # Fonction pour créer une carte Folium avec superposition
-def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
+def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_data=None):
     try:
         lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
         lat_max, lon_max = bounds_tiff[3], bounds_tiff[2]
@@ -129,6 +139,10 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
         measure_control = MeasureControl(primary_length_unit='meters', secondary_length_unit='kilometers', primary_area_unit='sqmeters', secondary_area_unit='hectares')
         measure_control.add_to(m)
 
+        # Si des données GeoJSON sont fournies, les ajouter à la carte
+        if geojson_data is not None:
+            folium.GeoJson(geojson_data).add_to(m)
+
         folium.LayerControl().add_to(m)
         return m
     except Exception as e:
@@ -141,6 +155,11 @@ def main():
     st.markdown("### Téléchargez un fichier GeoTIFF pour analyser les zones inondées.")
 
     fichier_tiff = st.file_uploader("Téléchargez un fichier GeoTIFF", type=["tif"], key="file_uploader")
+    fichier_geojson = st.file_uploader("Téléchargez un fichier GeoJSON (routes)", type=["geojson"], key="geojson_uploader")
+
+    geojson_data = None
+    if fichier_geojson is not None:
+        geojson_data = charger_geojson(fichier_geojson)
 
     if fichier_tiff is not None:
         data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
@@ -182,7 +201,8 @@ def main():
                 st.write(f"Surface totale inondée : {surface_totale_inondee_m2:.2f} m².")
                 st.write(f"Surface totale inondée : {surface_totale_inondee_ha:.2f} hectares.")
 
-            m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation)
+            # Créer la carte avec les données GeoTIFF et GeoJSON
+            m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, geojson_data)
             st_folium(m, width=700, height=500, key="osm_map")
 
 if __name__ == "__main__":
