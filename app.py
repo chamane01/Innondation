@@ -19,12 +19,6 @@ import rasterio
 import folium
 from streamlit_folium import st_folium
 from matplotlib.colors import ListedColormap
-import matplotlib.pyplot as pltimport streamlit as st
-import numpy as np
-import rasterio
-import folium
-from streamlit_folium import st_folium
-from matplotlib.colors import ListedColormap
 import matplotlib.pyplot as plt
 import os
 import tempfile  # Pour gérer les fichiers temporaires
