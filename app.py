@@ -48,7 +48,8 @@ def create_map(bounds, data_tiff, transform_tiff, opacity=0.6):
     img_overlay = raster_layers.ImageOverlay(
         image=data_tiff,
         bounds=[[lat_min, lon_min], [lat_max, lon_max]],
-        opacity=opacity  # Opacité ajustée
+        opacity=opacity,  # Opacité ajustée
+        colormap='YlGnBu'  # Utilisation d'une palette de couleurs pour l'affichage de la profondeur
     )
     img_overlay.add_to(m)
 
@@ -62,12 +63,12 @@ def afficher_inondation(m, data_tiff, niveau_inondation, bounds_tiff):
     # Créer le masque d'inondation
     inondation_mask = data_tiff <= niveau_inondation
     
-    # Appliquer le masque à la carte
+    # Appliquer le masque à la carte en bleu
     inondation_mask_overlay = raster_layers.ImageOverlay(
         image=inondation_mask.astype(np.uint8) * 255,  # Convertir en valeurs 0-255
         bounds=[[lat_min, lon_min], [lat_max, lon_max]],
         opacity=0.6,
-        colormap='Blues'  # Appliquer la couleur bleue
+        colormap='Blues'  # Appliquer la couleur bleue pour les zones inondées
     )
     inondation_mask_overlay.add_to(m)
 
@@ -90,11 +91,11 @@ def main():
             st.write(f"- Valeurs min : {data_tiff.min()}, max : {data_tiff.max()}")
             st.write(f"- Système de coordonnées : {crs_tiff}")
 
-            # Créer la carte de base
+            # Créer la carte de base avec la profondeur
             opacity = st.slider("Opacité de l'image TIFF", 0.0, 1.0, 0.6, 0.1)
             m = create_map(bounds_tiff, data_tiff, transform_tiff, opacity=opacity)
 
-            # Ajout de la fonction de mesure
+            # Ajouter l'outil de mesure
             plugins.MeasureControl(primary_length_unit='meters').add_to(m)
 
             # Affichage de la carte
