@@ -95,7 +95,7 @@ def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     plt.close(fig)
 
 # Fonction pour créer une carte Folium avec superposition
-def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_data=None):
+def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_routes=None, geojson_polygonale=None, style_routes=None, style_polygonale=None):
     try:
         lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
         lat_max, lon_max = bounds_tiff[3], bounds_tiff[2]
@@ -139,9 +139,16 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_data
         measure_control = MeasureControl(primary_length_unit='meters', secondary_length_unit='kilometers', primary_area_unit='sqmeters', secondary_area_unit='hectares')
         measure_control.add_to(m)
 
-        # Si des données GeoJSON sont fournies, les ajouter à la carte
-        if geojson_data is not None:
-            folium.GeoJson(geojson_data).add_to(m)
+        # Ajouter les routes (GeoJSON) avec style personnalisé
+        if geojson_routes is not None:
+            folium.GeoJson(geojson_routes, style_function=style_routes).add_to(m)
+
+        # Ajouter la polygonale (GeoJSON) avec bord blanc et intérieur transparent
+        if geojson_polygonale is not None:
+            folium.GeoJson(
+                geojson_polygonale,
+                style_function=style_polygonale
+            ).add_to(m)
 
         folium.LayerControl().add_to(m)
         return m
@@ -155,11 +162,15 @@ def main():
     st.markdown("### Téléchargez un fichier GeoTIFF pour analyser les zones inondées.")
 
     fichier_tiff = st.file_uploader("Téléchargez un fichier GeoTIFF", type=["tif"], key="file_uploader")
-    fichier_geojson = st.file_uploader("Téléchargez un fichier GeoJSON (routes)", type=["geojson"], key="geojson_uploader")
+    fichier_geojson_routes = st.file_uploader("Téléchargez un fichier GeoJSON (routes)", type=["geojson"], key="geojson_routes_uploader")
+    fichier_geojson_polygonale = st.file_uploader("Téléchargez un fichier GeoJSON (polygonale)", type=["geojson"], key="geojson_polygonale_uploader")
 
-    geojson_data = None
-    if fichier_geojson is not None:
-        geojson_data = charger_geojson(fichier_geojson)
+    geojson_routes = None
+    geojson_polygonale = None
+    if fichier_geojson_routes is not None:
+        geojson_routes = charger_geojson(fichier_geojson_routes)
+    if fichier_geojson_polygonale is not None:
+        geojson_polygonale = charger_geojson(fichier_geojson_polygonale)
 
     if fichier_tiff is not None:
         data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
@@ -198,15 +209,38 @@ def main():
                 surface_totale_inondee_m2, surface_totale_inondee_ha = calculer_surface_inondee(nombre_pixels_inondes, taille_unite)
 
                 st.write(f"Nombre de pixels inondés : {nombre_pixels_inondes}")
-                st.write(f"Surface totale inondée : {surface_totale_inondee_m2:.2f} m².")
-                st.write(f"Surface totale inondée : {surface_totale_inondee_ha:.2f} hectares.")
+                st.write(f"Surface totale inondée : {surface_totale_inondee_m2:.2f} m² ({surface_totale_inondee_ha:.2f} hectares)")
 
-            # Créer la carte avec les données GeoTIFF et GeoJSON
-            m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, geojson_data)
-            st_folium(m, width=700, height=500, key="osm_map")
+            # Créer la carte avec les paramètres personnalisés
+            style_routes = lambda feature: {
+                'color': 'blue',
+                'weight': 2,
+                'opacity': 0.6
+            }
+
+            style_polygonale = lambda feature: {
+                'fillColor': 'none',
+                'color': 'white',
+                'weight': 3,
+                'opacity': 1,
+                'fillOpacity': 0
+            }
+
+            carte = creer_carte_osm(
+                data_tiff,
+                bounds_tiff,
+                niveau_inondation,
+                geojson_routes,
+                geojson_polygonale,
+                style_routes,
+                style_polygonale
+            )
+            if carte:
+                st_folium(carte, width=800, height=600)
 
 if __name__ == "__main__":
     main()
+
 
 
 
