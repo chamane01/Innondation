@@ -180,6 +180,17 @@ def main():
                 generer_carte_combinee(data_tiff, bounds_tiff, niveau_inondation, carte_statique_path)
                 st.image(carte_statique_path, caption="Carte statique combinée", use_column_width=True)
 
+                
+                # Calculer et afficher la taille d'un pixel
+                pixel_width, pixel_height = calculer_taille_pixel(transform_tiff)
+                st.write(f"Taille d'un pixel : {pixel_width:.2f} unités en largeur x {pixel_height:.2f} unités en hauteur.")
+
+                
+            
+            
+            
+            
+
                 # Supprimer l'image après affichage
                 if os.path.exists(carte_statique_path):
                     os.remove(carte_statique_path)
