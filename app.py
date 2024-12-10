@@ -14,8 +14,6 @@ import rasterio
 
 import streamlit as st
 import rasterio
-import numpy as np
-import matplotlib.pyplot as plt
 import folium
 from folium import plugins
 
@@ -33,8 +31,8 @@ def charger_tiff(fichier_tiff):
         return None, None, None, None
 
 # Fonction pour créer la carte avec le fond OSM
-def create_map(bounds, data, pixel_size_x, pixel_size_y):
-    # Extraire les coordonnées de l'image (généralement dans le système de coordonnées EPSG:4326)
+def create_map(bounds):
+    # Extraire les coordonnées de l'image
     lat_min = bounds[1]
     lon_min = bounds[0]
     lat_max = bounds[3]
@@ -76,37 +74,15 @@ def main():
             st.write(f"- Valeurs min : {data_tiff.min()}, max : {data_tiff.max()}")
             st.write(f"- Système de coordonnées : {crs_tiff}")
             
-            # Calcul de la taille réelle d'un pixel
-            pixel_size_x = abs(transform_tiff[0])  # Taille réelle d'un pixel en X (longitude)
-            pixel_size_y = abs(transform_tiff[4])  # Taille réelle d'un pixel en Y (latitude)
-
-            # Affichage des dimensions réelles
-            st.write(f"### Dimensions réelles des pixels (en coordonnées projetées) :")
-            st.write(f"- Longueur du pixel en X : {pixel_size_x} mètres")
-            st.write(f"- Largeur du pixel en Y : {pixel_size_y} mètres")
-
-            # Calcul de l'emprise de l'image
-            width_in_meters = pixel_size_x * data_tiff.shape[1]  # Largeur totale de l'image
-            height_in_meters = pixel_size_y * data_tiff.shape[0]  # Hauteur totale de l'image
-
-            st.write(f"### Dimensions totales de l'image :")
-            st.write(f"- Largeur totale (en X) : {width_in_meters} mètres")
-            st.write(f"- Hauteur totale (en Y) : {height_in_meters} mètres")
-
-            # Créer une carte Folium avec le fond OSM
+            # Afficher la carte avec le fond OSM
             st.write("### Carte d'altitude avec fond OpenStreetMap")
-            map_osm = create_map(bounds_tiff, data_tiff, pixel_size_x, pixel_size_y)
-            st.markdown(map_osm._repr_html_(), unsafe_allow_html=True)
+            map_osm = create_map(bounds_tiff)
+            folium_static(map_osm)
 
-            # Afficher la carte avec les zones inondées
-            st.write("### Carte d'altitude")
-            fig, ax = plt.subplots(figsize=(8, 6))
-            cax = ax.imshow(data_tiff, cmap='terrain', extent=(0, width_in_meters, 0, height_in_meters))
-            fig.colorbar(cax, ax=ax, label="Altitude (m)")
-            st.pyplot(fig)
-
+# Exécuter l'application Streamlit
 if __name__ == "__main__":
     main()
+
 
 
 
