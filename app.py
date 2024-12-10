@@ -18,10 +18,8 @@ import numpy as np
 import rasterio
 import folium
 from streamlit_folium import st_folium
-from matplotlib.colors import ListedColormap
-import matplotlib.pyplot as plt
-import os
 from geopy.distance import geodesic
+import matplotlib.pyplot as plt
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -42,38 +40,32 @@ def calculer_taille_pixel(transform):
     pixel_height = -transform[4]  # Hauteur d'un pixel (dy, négatif car les Y diminuent vers le haut)
     return pixel_width, pixel_height
 
-# Fonction pour calculer la taille réelle d'un pixel en mètres
-def calculer_taille_reelle_pixel(bounds_tiff, pixel_width, pixel_height):
-    # Prendre deux points aux coins de la carte
-    point1 = (bounds_tiff[1], bounds_tiff[0])  # coin inférieur gauche (lat, lon)
-    point2 = (bounds_tiff[1], bounds_tiff[2])  # coin inférieur droit (lat, lon)
-    
-    # Calculer la distance réelle entre ces deux points (en mètres)
+# Fonction pour mesurer la distance réelle (en mètres) sur la carte
+def mesurer_distance(bounds_tiff):
+    # Mesurer la distance sur la largeur (longitude)
+    point1 = (bounds_tiff[1], bounds_tiff[0])  # Coin inférieur gauche (lat, lon)
+    point2 = (bounds_tiff[1], bounds_tiff[2])  # Coin inférieur droit (lat, lon)
     distance_x = geodesic(point1, point2).meters  # Distance en x (longitude)
-    
-    # Répéter pour la dimension y (latitude)
-    point1 = (bounds_tiff[1], bounds_tiff[0])  # coin inférieur gauche
-    point2 = (bounds_tiff[3], bounds_tiff[0])  # coin supérieur gauche (lat, lon)
-    
-    distance_y = geodesic(point1, point2).meters  # Distance en y (latitude)
-    
-    # Calculer la taille réelle d'un pixel
-    taille_reelle_x = distance_x / abs(pixel_width)
-    taille_reelle_y = distance_y / abs(pixel_height)
-    
-    return taille_reelle_x, taille_reelle_y
 
-# Fonction pour calculer le nombre de pixels dans les zones inondées
+    # Mesurer la distance sur la hauteur (latitude)
+    point1 = (bounds_tiff[1], bounds_tiff[0])  # Coin inférieur gauche (lat, lon)
+    point2 = (bounds_tiff[3], bounds_tiff[0])  # Coin supérieur gauche (lat, lon)
+    distance_y = geodesic(point1, point2).meters  # Distance en y (latitude)
+
+    return distance_x, distance_y
+
+# Fonction pour calculer la surface inondée
+def calculer_surface_inondee(nombre_pixels_inondes, taille_unite):
+    surface_totale = nombre_pixels_inondes * (taille_unite ** 2)  # Surface en unités carrées
+    surface_totale_m2 = surface_totale * (taille_unite ** 2)  # Surface en m²
+    surface_totale_hectares = surface_totale_m2 / 10000  # Conversion en hectares
+    return surface_totale_m2, surface_totale_hectares
+
+# Fonction pour calculer les unités inondées
 def calculer_pixels_inondes(data, niveau_inondation):
     inondation_mask = data <= niveau_inondation
     nombre_pixels_inondes = np.sum(inondation_mask)
     return nombre_pixels_inondes
-
-# Fonction pour calculer la surface totale inondée
-def calculer_surface_totale_inondee(nombre_pixels_inondes, taille_reelle_x, taille_reelle_y):
-    surface_pixel = taille_reelle_x * taille_reelle_y
-    surface_totale = nombre_pixels_inondes * surface_pixel
-    return surface_totale, surface_totale / 10000  # Conversion en hectares
 
 # Fonction pour générer une carte de profondeur et sauvegarder comme image temporaire
 def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
@@ -154,9 +146,18 @@ def main():
             pixel_width, pixel_height = calculer_taille_pixel(transform_tiff)
             st.write(f"Taille d'un pixel : {pixel_width:.2f} unités en largeur x {pixel_height:.2f} unités en hauteur.")
 
-            # Calcul de la taille réelle d'un pixel en mètres
-            taille_reelle_x, taille_reelle_y = calculer_taille_reelle_pixel(bounds_tiff, pixel_width, pixel_height)
-            st.write(f"Taille réelle d'un pixel : {taille_reelle_x:.2f} m x {taille_reelle_y:.2f} m.")
+            # Mesurer la distance réelle de la carte
+            distance_x, distance_y = mesurer_distance(bounds_tiff)
+            st.write(f"Distance réelle de la carte : {distance_x:.2f} m en largeur x {distance_y:.2f} m en hauteur.")
+
+            # Taille d'une unité sur la carte (en mètres)
+            carte_largeur = 1201  # Exemple de taille de la carte
+            carte_hauteur = 1201  # Exemple de taille de la carte
+            taille_unite_x = distance_x / carte_largeur
+            taille_unite_y = distance_y / carte_hauteur
+            taille_unite = (taille_unite_x + taille_unite_y) / 2  # Moyenne des tailles
+
+            st.write(f"Taille d'une unité sur la carte : {taille_unite:.2f} m.")
 
             niveau_inondation = st.slider(
                 "Choisissez le niveau d'inondation",
@@ -169,7 +170,7 @@ def main():
 
             if niveau_inondation:
                 nombre_pixels_inondes = calculer_pixels_inondes(data_tiff, niveau_inondation)
-                surface_totale_inondee_m2, surface_totale_inondee_ha = calculer_surface_totale_inondee(nombre_pixels_inondes, taille_reelle_x, taille_reelle_y)
+                surface_totale_inondee_m2, surface_totale_inondee_ha = calculer_surface_inondee(nombre_pixels_inondes, taille_unite)
 
                 st.write(f"Nombre de pixels inondés : {nombre_pixels_inondes}")
                 st.write(f"Surface totale inondée : {surface_totale_inondee_m2:.2f} m².")
