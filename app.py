@@ -17,6 +17,8 @@ import rasterio
 import numpy as np
 import folium
 from folium import raster_layers
+from streamlit_folium import st_folium
+
 import io
 
 # Fonction pour charger et lire un fichier GeoTIFF
