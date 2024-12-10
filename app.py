@@ -16,6 +16,7 @@ import streamlit as st
 import numpy as np
 import rasterio
 import matplotlib.pyplot as plt
+from matplotlib import colors
 
 # Fonction pour charger le fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -43,21 +44,40 @@ def afficher_zone_inondee(data_tiff, niveau_inondation, bounds_tiff):
     fig, ax = plt.subplots(figsize=(8, 6))
     
     # Afficher l'image originale (altitudes)
-    ax.imshow(data_tiff, cmap='terrain', extent=extent)
+    im = ax.imshow(data_tiff, cmap='terrain', extent=extent)
+    cbar = fig.colorbar(im, ax=ax, label="Altitude (m)")
 
-    # Superposer le masque des pixels inondés
+    # Superposer le masque des pixels inondés en magenta
     ax.imshow(
         inondation_mask,
-        cmap='cool',  # Magenta-like color
-        alpha=0.5,  # Transparence des zones inondées
+        cmap=colors.ListedColormap(['magenta']),
+        alpha=0.5,
         extent=extent
     )
 
+    # Ajouter les contours rouges
+    contours = ax.contour(
+        data_tiff,
+        levels=[niveau_inondation],
+        colors='red',
+        linewidths=1.5,
+        extent=extent
+    )
+
+    # Ajouter des labels aux contours
+    ax.clabel(
+        contours,
+        inline=True,
+        fontsize=8,
+        fmt=f"%.2f m"
+    )
+
     # Ajouter un titre et une légende
-    ax.set_title("Zone inondée (pixels magenta)")
+    ax.set_title(f"Zone inondée (magenta) pour une cote de {niveau_inondation:.2f} m")
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
 
+    # Afficher le nombre de pixels inondés
     st.write(f"**Nombre de pixels inondés :** {nb_pixels_inondes}")
     st.pyplot(fig)
 
@@ -93,6 +113,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
