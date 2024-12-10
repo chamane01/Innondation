@@ -17,6 +17,8 @@ import numpy as np
 import folium
 from folium import raster_layers
 from folium.plugins import MeasureControl
+from streamlit_folium import st_folium
+
 
 # Fonction pour charger et lire un fichier GeoTIFF
 def charger_tiff(fichier_tiff):
