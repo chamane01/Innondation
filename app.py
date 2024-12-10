@@ -16,9 +16,7 @@ import streamlit as st
 import numpy as np
 import folium
 from folium import raster_layers
-from folium.plugins import MeasureControl
-from streamlit_folium import st_folium
-
+from streamlit_folium import st_folium  # Assurez-vous d'importer cette fonction
 
 # Fonction pour charger et lire un fichier GeoTIFF
 def charger_tiff(fichier_tiff):
@@ -53,16 +51,6 @@ def create_map(bounds, data_tiff, transform_tiff, opacity=0.6):
     )
     img_overlay.add_to(m)
 
-    # Ajouter l'outil de mesure à la carte
-    measure_control = MeasureControl(
-        primary_length_unit='meters', 
-        secondary_length_unit='kilometers',
-        primary_area_unit='sqmeters', 
-        secondary_area_unit='hectares',
-        marker_options={'color': 'black', 'weight': 2, 'opacity': 1}
-    )
-    measure_control.add_to(m)
-
     return m
 
 # Définition de l'application Streamlit
@@ -94,41 +82,9 @@ def main():
             st.write("### Carte d'altitude")
             st_folium(m, width=700, height=500)
 
-            # Sélection du niveau d'eau
-            niveau_inondation = st.slider("Définir le niveau d'inondation (m)", 
-                                          float(data_tiff.min()), float(data_tiff.max()), step=0.1)
-            
-            # Sélection de la couleur du masque d'inondation
-            colormap = st.selectbox("Choisissez la couleur du masque d'inondation", 
-                                    ["Blues", "Reds", "Greens", "YlOrRd", "Purples"])
-
-            if st.button("Calculer et afficher la zone inondée"):
-                # Calcul du masque d'inondation
-                inondation_mask = data_tiff <= niveau_inondation
-                surface_inondee_plan_ha = np.sum(inondation_mask) * surface_pixel_ha  # En hectares
-                surface_inondee_reel_m2 = np.sum(inondation_mask) * surface_pixel_m2  # En mètres carrés
-                
-                st.write(f"### Surface inondée (plan) : {surface_inondee_plan_ha:.2f} hectares")
-                st.write(f"### Surface inondée (réelle) : {surface_inondee_reel_m2:.2f} m²")
-
-                # Superposition du masque d'inondation avec la couleur choisie
-                lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
-                lat_max, lon_max = bounds_tiff[3], bounds_tiff[2]
-
-                inondation_mask_overlay = raster_layers.ImageOverlay(
-                    image=inondation_mask.astype(np.uint8) * 255,  # Assurez-vous que l'image est en valeurs 0-255
-                    bounds=[[lat_min, lon_min], [lat_max, lon_max]],
-                    opacity=0.6,
-                    colormap=colormap  # Application de la couleur choisie
-                )
-                inondation_mask_overlay.add_to(m)
-                
-                # Afficher la carte avec la zone inondée superposée
-                st.write("### Carte avec la zone inondée affichée")
-                st_folium(m, width=700, height=500)
-
 if __name__ == "__main__":
     main()
+
 
 
 
