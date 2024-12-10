@@ -77,7 +77,7 @@ def main():
     st.title("Analyse des zones inondées")
     st.markdown("## Téléversez un fichier GeoTIFF pour analyser les zones inondées.")
 
-    # Téléchargement du fichier GeoTIFF
+    # Téléchargement du fichier TIFF
     uploaded_tiff_file = st.file_uploader("Choisissez un fichier GeoTIFF (.tif)", type=["tif"])
 
     if uploaded_tiff_file is not None:
@@ -113,7 +113,7 @@ def main():
             )
 
             if st.button("Afficher la zone inondée"):
-                # Afficher la carte avec la zone inondée en bleu
+                # Créer la carte d'altitude et afficher les zones inondées
                 m_inondation = create_map(bounds_tiff, data_tiff, transform_tiff, opacity=opacity)
                 afficher_inondation(m_inondation, data_tiff, niveau_inondation, bounds_tiff)
                 st.write(f"### Zones inondées pour le niveau d'inondation {niveau_inondation:.2f}")
@@ -121,6 +121,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
