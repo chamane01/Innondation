@@ -16,8 +16,7 @@ import streamlit as st
 import folium
 from streamlit_folium import st_folium
 import rasterio
-import numpy as np
-from folium import raster_layers, TileLayer
+from folium import Rectangle
 
 # Fonction pour charger et lire un fichier GeoTIFF
 def charger_tiff(fichier_tiff):
@@ -32,35 +31,14 @@ def charger_tiff(fichier_tiff):
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None, None
 
-# Fonction pour créer une carte centrée sur l’emprise du TIFF
-def create_map(bounds):
-    lat_min, lon_min = bounds[1], bounds[0]  # Coin inférieur gauche
-    lat_max, lon_max = bounds[3], bounds[2]  # Coin supérieur droit
+# Fonction pour créer une carte centrée sur une emprise donnée
+def create_osm_map(bounds):
+    lat_min, lon_min = bounds[1], bounds[0]
+    lat_max, lon_max = bounds[3], bounds[2]
     center = [(lat_min + lat_max) / 2, (lon_min + lon_max) / 2]
 
+    # Créer une carte Folium centrée sur l'emprise
     m = folium.Map(location=center, zoom_start=13, control_scale=True)
-    return m
-
-# Fonction pour ajouter un overlay (GeoTIFF) sur la carte
-def ajouter_overlay(m, data_tiff, bounds, opacity=0.6):
-    lat_min, lon_min = bounds[1], bounds[0]
-    lat_max, lon_max = bounds[3], bounds[2]
-
-    img_overlay = raster_layers.ImageOverlay(
-        image=data_tiff,
-        bounds=[[lat_min, lon_min], [lat_max, lon_max]],
-        opacity=opacity
-    )
-    img_overlay.add_to(m)
-
-# Fonction pour limiter les tuiles OSM à l'emprise du GeoTIFF
-def limiter_osm_emprise(m, bounds):
-    lat_min, lon_min = bounds[1], bounds[0]
-    lat_max, lon_max = bounds[3], bounds[2]
-
-    # Ajouter une couche OSM limitée à l'emprise
-    osm_limited = TileLayer(tiles='OpenStreetMap', name="OSM limité")
-    osm_limited.add_to(m)
 
     # Ajouter un rectangle pour illustrer l'emprise
     folium.Rectangle(
@@ -70,10 +48,12 @@ def limiter_osm_emprise(m, bounds):
         fill_opacity=0.2
     ).add_to(m)
 
+    return m
+
 # Application principale
 def main():
     st.title("Analyse des zones inondées")
-    st.markdown("## Téléversez un fichier GeoTIFF pour analyser les zones inondées.")
+    st.markdown("## Téléversez un fichier GeoTIFF pour extraire la carte OSM correspondante.")
 
     uploaded_tiff_file = st.file_uploader("Choisissez un fichier GeoTIFF (.tif)", type=["tif"])
 
@@ -85,21 +65,22 @@ def main():
             # Afficher les informations
             st.write("### Informations sur le fichier GeoTIFF")
             st.write(f"- Dimensions : {data_tiff.shape}")
-            st.write(f"- Valeurs min : {data_tiff.min()}, max : {data_tiff.max()}")
             st.write(f"- Système de coordonnées : {crs_tiff}")
+            st.write(f"- Emprise (bounds) : {bounds_tiff}")
 
-            # Créer une carte basée sur l'emprise du TIFF
-            m = create_map(bounds_tiff)
+            # Créer la carte basée sur l'emprise du TIFF
+            m_osm = create_osm_map(bounds_tiff)
 
-            # Ajouter l’overlay TIFF
-            ajouter_overlay(m, data_tiff, bounds_tiff)
+            # Afficher deux cartes côte à côte
+            col1, col2 = st.columns(2)
 
-            # Ajouter les données OSM limitées à l'emprise
-            limiter_osm_emprise(m, bounds_tiff)
+            with col1:
+                st.write("### Carte GeoTIFF avec emprise")
+                st_folium(m_osm, width=350, height=500)
 
-            # Afficher la carte
-            st.write("### Carte avec overlay GeoTIFF et données OSM limitées")
-            st_folium(m, width=700, height=500)
+            with col2:
+                st.write("### Carte OSM extraite")
+                st_folium(m_osm, width=350, height=500)
 
 if __name__ == "__main__":
     main()
