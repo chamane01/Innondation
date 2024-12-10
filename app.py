@@ -20,7 +20,7 @@ import folium
 from streamlit_folium import st_folium
 from geopy.distance import geodesic
 import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap  # Ajouter cette ligne pour l'importation
+from matplotlib.colors import ListedColormap  # Importation pour la carte inondée
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -55,10 +55,10 @@ def mesurer_distance(bounds_tiff):
 
     return distance_x, distance_y
 
-# Fonction pour calculer la surface inondée
+# Fonction pour calculer la surface inondée en m² et hectares
 def calculer_surface_inondee(nombre_pixels_inondes, taille_unite):
-    surface_totale = nombre_pixels_inondes * (taille_unite ** 2)  # Surface en unités carrées
-    surface_totale_m2 = surface_totale * (taille_unite ** 2)  # Surface en m²
+    surface_pixel = taille_unite ** 2  # Surface d'un pixel en m²
+    surface_totale_m2 = nombre_pixels_inondes * surface_pixel  # Surface totale inondée en m²
     surface_totale_hectares = surface_totale_m2 / 10000  # Conversion en hectares
     return surface_totale_m2, surface_totale_hectares
 
