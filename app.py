@@ -70,6 +70,11 @@ def limiter_osm_emprise(m, bounds):
         fill_opacity=0.2
     ).add_to(m)
 
+# Fonction pour générer une carte de profondeur
+def generer_carte_profondeur(data_tiff):
+    profondeur = np.max(data_tiff) - data_tiff  # Inverser pour avoir une profondeur
+    return profondeur
+
 # Application principale
 def main():
     st.title("Analyse des zones inondées")
@@ -91,18 +96,26 @@ def main():
             # Créer une carte basée sur l'emprise du TIFF
             m = create_map(bounds_tiff)
 
-            # Ajouter l’overlay TIFF
-            ajouter_overlay(m, data_tiff, bounds_tiff)
-
             # Ajouter les données OSM limitées à l'emprise
             limiter_osm_emprise(m, bounds_tiff)
 
             # Afficher la carte
-            st.write("### Carte avec overlay GeoTIFF et données OSM limitées")
+            st.write("### Carte initiale avec données OSM")
             st_folium(m, width=700, height=500)
+
+            # Bouton pour générer la carte de profondeur
+            if st.button("Générer la carte de profondeur"):
+                profondeur = generer_carte_profondeur(data_tiff)
+                
+                # Ajouter un overlay de profondeur sur la carte
+                ajouter_overlay(m, profondeur, bounds_tiff)
+
+                st.write("### Carte avec la profondeur")
+                st_folium(m, width=700, height=500)
 
 if __name__ == "__main__":
     main()
+
 
 
 
