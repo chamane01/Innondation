@@ -72,6 +72,13 @@ def calculer_taille_unite(bounds_tiff, largeur_pixels, hauteur_pixels):
     taille_unite = (taille_unite_x + taille_unite_y) / 2
     return taille_unite
 
+# Fonction pour calculer la taille réelle d'une unité (pixel) sur la carte
+def calculer_pixels_inondes(data_tiff, niveau_inondation):
+    # Compter les pixels qui sont inférieurs ou égaux au niveau d'inondation
+    pixels_inondes = (data_tiff <= niveau_inondation)
+    nombre_pixels_inondes = np.sum(pixels_inondes)
+    return nombre_pixels_inondes
+
 # Fonction pour générer une carte de profondeur et sauvegarder comme image temporaire
 def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
@@ -221,6 +228,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
