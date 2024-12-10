@@ -126,6 +126,32 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
 
         folium.LayerControl().add_to(m)
         return m
+        # Ajouter l'outil de mesure à la carte avec des options de personnalisation
+        measure_control = MeasureControl(
+            primary_length_unit='meters',
+            secondary_length_unit='kilometers',
+            primary_area_unit='sqmeters',
+            secondary_area_unit='hectares',
+            marker_options={'color': 'black', 'weight': 2, 'opacity': 1}
+        )
+        measure_control.add_to(m)
+        return m
+        
+         
+        
+         
+        
+        
+        
+        
+         
+    
+    
+
+   
+            
+    
+
     except Exception as e:
         st.error(f"Erreur lors de la création de la carte : {e}")
         return None
