@@ -16,6 +16,7 @@ import streamlit as st
 import numpy as np
 import rasterio
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
 from matplotlib.patches import Patch
 
 # Fonction pour charger le fichier TIFF
@@ -52,22 +53,22 @@ def afficher_zone_inondee(data_tiff, niveau_inondation, bounds_tiff):
     cbar = fig.colorbar(im, ax=ax, label="Altitude (m)")
 
     # Superposer la couche des zones inondées en magenta
+    cmap = ListedColormap(["none", "magenta"])
     ax.imshow(
         zone_inondee,
-        cmap=colors.ListedColormap(['magenta', 'none']),  # Couche magenta
+        cmap=cmap,
         alpha=0.5,
         extent=extent
     )
 
     # Ajouter une légende manuelle pour les zones inondées
     legend_elements = [
-        Patch(facecolor='magenta', edgecolor='none', label='Zone inondée'),
-        Patch(facecolor='none', edgecolor='black', label='Contours')
+        Patch(facecolor='magenta', edgecolor='none', label='Zone inondée (Magenta)')
     ]
     ax.legend(handles=legend_elements, loc='upper right')
 
     # Titre et axes
-    ax.set_title(f"Zone inondée pour une cote de {niveau_inondation:.2f} m")
+    ax.set_title(f"Zone inondée pour une cote de {niveau_inondation:.2f} m", fontsize=14)
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
 
