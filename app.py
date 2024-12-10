@@ -13,10 +13,12 @@ from datetime import datetime
 import rasterio
 
 import streamlit as st
-import numpy as np
 import rasterio
 import matplotlib.pyplot as plt
-from matplotlib.patches import Rectangle
+from shapely.geometry import box
+import geopandas as gpd
+import osmnx as ox
+from rasterio.warp import transform_bounds
 
 # Fonction pour charger le fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -25,49 +27,50 @@ def charger_tiff(fichier_tiff):
             data = src.read(1)  # Lire la première bande
             transform = src.transform
             crs = src.crs
-            bounds = src.bounds
-            return data, transform, crs, bounds
+            bounds = src.bounds  # Emprise originale
+            # Convertir les bounds en EPSG:4326 si nécessaire
+            bounds_4326 = transform_bounds(crs, "EPSG:4326", *bounds)
+            return data, transform, crs, bounds_4326
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None, None
 
-# Fonction pour afficher la carte OSM avec un cadre correspondant à l'emprise du TIFF
+# Fonction pour télécharger et afficher les données OSM
 def afficher_carte_osm(bounds_tiff):
-    # Étendue géographique (extent)
-    extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
+    # Étendue géographique (bounds_tiff déjà en EPSG:4326)
+    min_lon, min_lat, max_lon, max_lat = bounds_tiff
 
-    # Créer une figure
-    fig, ax = plt.subplots(figsize=(8, 6))
+    # Télécharger les données OSM (routes dans cet exemple)
+    try:
+        # Créer une boîte à partir de l'emprise
+        bbox = box(min_lon, min_lat, max_lon, max_lat)
+        gdf = ox.geometries_from_bbox(max_lat, min_lat, max_lon, min_lon, tags={"highway": True})
+        
+        # Créer une figure
+        fig, ax = plt.subplots(figsize=(8, 6))
 
-    # Créer un rectangle pour l'emprise
-    rect = Rectangle(
-        (extent[0], extent[2]),  # Coin inférieur gauche
-        extent[1] - extent[0],  # Largeur
-        extent[3] - extent[2],  # Hauteur
-        linewidth=2,
-        edgecolor='blue',
-        facecolor='none'
-    )
+        # Afficher les routes OSM
+        gdf.plot(ax=ax, color="blue", linewidth=0.5, label="Routes OSM")
 
-    # Ajouter le rectangle au graphique
-    ax.add_patch(rect)
+        # Ajouter un cadre correspondant à l'emprise
+        bbox_gdf = gpd.GeoDataFrame({"geometry": [bbox]}, crs="EPSG:4326")
+        bbox_gdf.boundary.plot(ax=ax, color="red", linewidth=2, label="Emprise TIFF")
 
-    # Configurer les axes
-    ax.set_xlim(extent[0] - 0.01, extent[1] + 0.01)
-    ax.set_ylim(extent[2] - 0.01, extent[3] + 0.01)
-    ax.set_title("Carte OSM correspondant à l'emprise du GeoTIFF")
-    ax.set_xlabel("Longitude")
-    ax.set_ylabel("Latitude")
+        # Configurer les axes
+        ax.set_title("Données OSM dans l'emprise du GeoTIFF")
+        ax.set_xlabel("Longitude")
+        ax.set_ylabel("Latitude")
+        ax.legend()
 
-    # Ajouter un fond gris pour simuler une carte
-    ax.set_facecolor("lightgrey")
+        st.pyplot(fig)
 
-    st.pyplot(fig)
+    except Exception as e:
+        st.error(f"Erreur lors de l'extraction des données OSM : {e}")
 
 # Interface Streamlit
 def main():
     st.title("Analyse des zones inondées avec carte OSM")
-    st.markdown("### Téléchargez un fichier GeoTIFF pour visualiser l'emprise sur une carte OSM.")
+    st.markdown("### Téléchargez un fichier GeoTIFF pour visualiser l'emprise et les données OSM.")
 
     # Téléversement du fichier GeoTIFF
     fichier_tiff = st.file_uploader("Téléchargez un fichier GeoTIFF", type=["tif"])
@@ -79,14 +82,15 @@ def main():
         if data_tiff is not None:
             # Afficher les informations de base
             st.write(f"Dimensions : {data_tiff.shape}")
-            st.write(f"Altitude min : {data_tiff.min()}, max : {data_tiff.max()}")
+            st.write(f"Emprise (EPSG:4326) : {bounds_tiff}")
 
-            # Afficher la carte OSM correspondant à l'emprise
-            if st.checkbox("Afficher la carte OSM correspondant à l'emprise"):
+            # Afficher les données OSM correspondant à l'emprise
+            if st.checkbox("Afficher les données OSM correspondant à l'emprise"):
                 afficher_carte_osm(bounds_tiff)
 
 if __name__ == "__main__":
     main()
+
 
 
 
