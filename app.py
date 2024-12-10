@@ -79,6 +79,12 @@ def calculer_pixels_inondes(data_tiff, niveau_inondation):
     nombre_pixels_inondes = np.sum(pixels_inondes)
     return nombre_pixels_inondes
 
+# Fonction pour calculer la surface inondée en mètres carrés et hectares
+def calculer_surface_inondee(nombre_pixels_inondes, taille_unite):
+    surface_totale_inondee_m2 = nombre_pixels_inondes * (taille_unite ** 2)  # Surface en m²
+    surface_totale_inondee_ha = surface_totale_inondee_m2 / 10000  # Conversion en hectares
+    return surface_totale_inondee_m2, surface_totale_inondee_ha
+
 # Fonction pour générer une carte de profondeur et sauvegarder comme image temporaire
 def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
@@ -228,6 +234,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
