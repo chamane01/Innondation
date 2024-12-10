@@ -34,7 +34,7 @@ def charger_tiff(fichier_tiff):
         return None, None, None, None
 
 # Fonction pour créer une carte Folium avec l'emprise du TIFF
-def create_map(bounds, data_tiff, transform_tiff):
+def create_map(bounds, data_tiff, transform_tiff, opacity=0.6):
     lat_min, lon_min = bounds[1], bounds[0]  # Coin inférieur gauche
     lat_max, lon_max = bounds[3], bounds[2]  # Coin supérieur droit
 
@@ -45,11 +45,11 @@ def create_map(bounds, data_tiff, transform_tiff):
     # Ajouter la carte OpenStreetMap
     folium.TileLayer('OpenStreetMap').add_to(m)
 
-    # Ajouter l'image raster du fichier TIFF sur la carte
+    # Ajouter l'image raster du fichier TIFF sur la carte avec une opacité ajustable
     img_overlay = raster_layers.ImageOverlay(
         image=data_tiff,
         bounds=[[lat_min, lon_min], [lat_max, lon_max]],
-        opacity=0.6
+        opacity=opacity  # Opacité ajustée
     )
     img_overlay.add_to(m)
 
@@ -74,9 +74,12 @@ def main():
             st.write(f"- Valeurs min : {data_tiff.min()}, max : {data_tiff.max()}")
             st.write(f"- Système de coordonnées : {crs_tiff}")
             
+            # Choisir l'opacité du TIFF
+            opacity = st.slider("Opacité de l'image TIFF", 0.0, 1.0, 0.6, 0.1)
+            
             # Visualisation initiale avec Folium
             st.write("### Carte d'altitude")
-            m = create_map(bounds_tiff, data_tiff, transform_tiff)
+            m = create_map(bounds_tiff, data_tiff, transform_tiff, opacity=opacity)
             
             # Affichage de la carte
             st.write("Carte avec le fond OSM et les données TIFF")
@@ -86,6 +89,10 @@ def main():
             niveau_inondation = st.slider("Définir le niveau d'inondation (m)", 
                                           float(data_tiff.min()), float(data_tiff.max()), step=0.1)
             
+            # Sélection de la couleur du masque d'inondation
+            colormap = st.selectbox("Choisissez la couleur du masque d'inondation", 
+                                    ["Blues", "Reds", "Greens", "YlOrRd", "Purples"])
+
             if st.button("Calculer et afficher la zone inondée"):
                 # Calcul du masque d'inondation
                 inondation_mask = data_tiff <= niveau_inondation
@@ -94,9 +101,9 @@ def main():
 
                 # Afficher la carte avec les zones inondées
                 st.write("### Carte avec la zone inondée affichée")
-                m = create_map(bounds_tiff, data_tiff, transform_tiff)
+                m = create_map(bounds_tiff, data_tiff, transform_tiff, opacity=opacity)
 
-                # Superposition du masque d'inondation
+                # Superposition du masque d'inondation avec la couleur choisie
                 lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
                 lat_max, lon_max = bounds_tiff[3], bounds_tiff[2]
 
@@ -104,7 +111,7 @@ def main():
                     image=inondation_mask.astype(np.uint8) * 255,  # Assurez-vous que l'image est en valeurs 0-255
                     bounds=[[lat_min, lon_min], [lat_max, lon_max]],
                     opacity=0.6,
-                    colormap='Blues'
+                    colormap=colormap  # Application de la couleur choisie
                 )
                 inondation_mask_overlay.add_to(m)
                 
