@@ -43,23 +43,7 @@ def calculer_taille_pixel(transform):
     pixel_height = -transform[4]  # Hauteur d'un pixel (dy, négatif car les Y diminuent vers le haut)
     return pixel_width, pixel_height
 
-# Fonction pour générer une carte de profondeur et sauvegarder comme image temporaire
-def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
-    extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
-
-    fig, ax = plt.subplots(figsize=(8, 6))
-    im = ax.imshow(data_tiff, cmap='terrain', extent=extent)
-    fig.colorbar(im, ax=ax, label="Altitude (m)")
-
-    ax.set_title("Carte de profondeur (terrain)", fontsize=14)
-    ax.set_xlabel("Longitude")
-    ax.set_ylabel("Latitude")
-
-    # Sauvegarder l'image
-    plt.savefig(output_path, format='png', bbox_inches='tight')
-    plt.close(fig)
-
-# Fonction pour créer une carte Folium avec superposition
+# Fonction pour créer une carte Folium avec superposition des zones inondées
 def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
     try:
         lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
@@ -68,19 +52,6 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
 
         # Créer une carte Folium
         m = folium.Map(location=center, zoom_start=13, control_scale=True)
-
-        # Générer une image temporaire pour la carte de profondeur
-        depth_map_path = "temp_depth_map.png"
-        generer_image_profondeur(data_tiff, bounds_tiff, depth_map_path)
-
-        # Ajouter la superposition de la carte de profondeur
-        img_overlay = folium.raster_layers.ImageOverlay(
-            image=depth_map_path,
-            bounds=[[lat_min, lon_min], [lat_max, lon_max]],
-            opacity=0.7,
-            interactive=True
-        )
-        img_overlay.add_to(m)
 
         # Gestion du niveau d'inondation si défini
         if niveau_inondation is not None:
@@ -126,17 +97,13 @@ def generer_carte_combinee(data_tiff, bounds_tiff, niveau_inondation, output_pat
 
     fig, ax = plt.subplots(figsize=(8, 6))
 
-    # Afficher la carte de profondeur
-    im = ax.imshow(data_tiff, cmap='terrain', extent=extent)
-    cbar = fig.colorbar(im, ax=ax, label="Altitude (m)")
-
     # Superposer les zones inondées
     zone_inondee = np.zeros_like(data_tiff, dtype=np.uint8)
     zone_inondee[inondation_mask] = 1
     ax.imshow(zone_inondee, cmap=ListedColormap(["none", "magenta"]), extent=extent, alpha=0.5)
 
     # Ajouter des titres et des axes
-    ax.set_title("Carte combinée : Profondeur et Zones inondées", fontsize=14)
+    ax.set_title("Carte combinée : Zones inondées", fontsize=14)
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
 
@@ -158,7 +125,7 @@ def main():
             st.write(f"Dimensions : {data_tiff.shape}")
             st.write(f"Altitude min : {data_tiff.min()}, max : {data_tiff.max()}")
 
-            st.write("### Carte de profondeur avec OSM")
+            st.write("### Carte des zones inondées avec OSM")
             m = creer_carte_osm(data_tiff, bounds_tiff)
             st_folium(m, width=700, height=500, key="osm_map")
 
@@ -191,8 +158,6 @@ def main():
                     os.remove(carte_statique_path)
 
             # Supprimer les fichiers temporaires après usage
-            if os.path.exists("temp_depth_map.png"):
-                os.remove("temp_depth_map.png")
             if os.path.exists("temp_flood_map.png"):
                 os.remove("temp_flood_map.png")
 
