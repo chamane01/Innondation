@@ -34,6 +34,17 @@ def charger_tiff(fichier_tiff):
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None, None
 
+# Fonction pour calculer la surface d'un pixel
+def calcul_surface_pixel(transform_tiff):
+    # Extraire les informations de transformation
+    pixel_width = transform_tiff[0]  # largeur d'un pixel en coordonnées géographiques
+    pixel_height = transform_tiff[4]  # hauteur d'un pixel en coordonnées géographiques
+    
+    # Calcul de la surface d'un pixel (en m²)
+    surface_pixel_m2 = abs(pixel_width * pixel_height)  # Absolu pour gérer les orientations négatives
+    surface_pixel_ha = surface_pixel_m2 / 10000  # Conversion en hectares
+    return surface_pixel_m2, surface_pixel_ha
+
 # Fonction pour créer une carte Folium avec l'emprise du TIFF
 def create_map(bounds, data_tiff, transform_tiff, opacity=0.6):
     lat_min, lon_min = bounds[1], bounds[0]  # Coin inférieur gauche
@@ -85,6 +96,13 @@ def main():
             st.write(f"- Valeurs min : {data_tiff.min()}, max : {data_tiff.max()}")
             st.write(f"- Système de coordonnées : {crs_tiff}")
             
+            # Calcul de la surface d'un pixel
+            surface_pixel_m2, surface_pixel_ha = calcul_surface_pixel(transform_tiff)
+
+            # Affichage des surfaces des pixels
+            st.write(f"### Surface d'un pixel réel : {surface_pixel_m2:.2f} m²")
+            st.write(f"### Surface d'un pixel réel : {surface_pixel_ha:.4f} ha")
+            
             # Choisir l'opacité du TIFF
             opacity = st.slider("Opacité de l'image TIFF", 0.0, 1.0, 0.6, 0.1)
             
@@ -95,13 +113,6 @@ def main():
             # Affichage de la carte
             st.write("Carte avec le fond OSM et les données TIFF")
             st_folium(m, width=700, height=500)
-
-            # Calcul de la surface des pixels réels en mètres carrés
-            surface_pixel_reel_m2 = abs(transform_tiff[0]) * abs(transform_tiff[4])
-            surface_pixel_reel_ha = surface_pixel_reel_m2 / 10_000  # Conversion en hectares
-
-            st.write(f"### Surface d'un pixel réel : {surface_pixel_reel_m2:.2f} m²")
-            st.write(f"### Surface d'un pixel réel : {surface_pixel_reel_ha:.4f} ha")
 
             # Sélection du niveau d'eau
             niveau_inondation = st.slider("Définir le niveau d'inondation (m)", 
@@ -114,8 +125,8 @@ def main():
             if st.button("Calculer et afficher la zone inondée"):
                 # Calcul du masque d'inondation
                 inondation_mask = data_tiff <= niveau_inondation
-                surface_inondee_plan_ha = np.sum(inondation_mask) * surface_pixel_reel_ha  # En hectares
-                surface_inondee_reel_m2 = np.sum(inondation_mask) * surface_pixel_reel_m2  # En mètres carrés
+                surface_inondee_plan_ha = np.sum(inondation_mask) * surface_pixel_ha  # En hectares
+                surface_inondee_reel_m2 = np.sum(inondation_mask) * surface_pixel_m2  # En mètres carrés
                 
                 st.write(f"### Surface inondée (plan) : {surface_inondee_plan_ha:.2f} hectares")
                 st.write(f"### Surface inondée (réelle) : {surface_inondee_reel_m2:.2f} m²")
@@ -141,7 +152,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 
 
