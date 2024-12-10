@@ -23,31 +23,7 @@ import os
 
 from pyproj import Proj, transform
 
-def calculer_taille_pixel(bounds, dimensions, crs):
-    lon_min, lat_min, lon_max, lat_max = bounds
-    height, width = dimensions
 
-    if crs.is_geographic:
-        # Conversion des degrés en mètres via une projection locale
-        proj = Proj(proj='utm', zone=33, ellps='WGS84')  # Exemple avec UTM Zone 33
-        x_min, y_min = proj(lon_min, lat_min)
-        x_max, y_max = proj(lon_max, lat_max)
-    else:
-        # Si les coordonnées sont déjà en mètres
-        x_min, y_min, x_max, y_max = lon_min, lat_min, lon_max, lat_max
-
-    # Taille du pixel en mètres
-    pixel_width = (x_max - x_min) / width
-    pixel_height = (y_max - y_min) / height
-
-    return pixel_width, pixel_height
-
-# Exemple d'utilisation
-data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff("votre_fichier.tif")
-height, width = data_tiff.shape
-pixel_width, pixel_height = calculer_taille_pixel(bounds_tiff, (height, width), crs_tiff)
-
-st.write(f"Taille d'un pixel : {pixel_width:.2f} m x {pixel_height:.2f} m")
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -78,6 +54,32 @@ def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     plt.savefig(output_path, format='png', bbox_inches='tight')
     plt.close(fig)
 
+def calculer_taille_pixel(bounds, dimensions, crs):
+    lon_min, lat_min, lon_max, lat_max = bounds
+    height, width = dimensions
+
+    if crs.is_geographic:
+        # Conversion des degrés en mètres via une projection locale
+        proj = Proj(proj='utm', zone=33, ellps='WGS84')  # Exemple avec UTM Zone 33
+        x_min, y_min = proj(lon_min, lat_min)
+        x_max, y_max = proj(lon_max, lat_max)
+    else:
+        # Si les coordonnées sont déjà en mètres
+        x_min, y_min, x_max, y_max = lon_min, lat_min, lon_max, lat_max
+
+    # Taille du pixel en mètres
+    pixel_width = (x_max - x_min) / width
+    pixel_height = (y_max - y_min) / height
+
+    return pixel_width, pixel_height
+
+# Exemple d'utilisation
+data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff("votre_fichier.tif")
+height, width = data_tiff.shape
+pixel_width, pixel_height = calculer_taille_pixel(bounds_tiff, (height, width), crs_tiff)
+
+st.write(f"Taille d'un pixel : {pixel_width:.2f} m x {pixel_height:.2f} m")
+
 # Fonction pour créer une carte Folium avec superposition
 def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
     lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
@@ -99,6 +101,8 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
         interactive=True
     )
     img_overlay.add_to(m)
+
+    
 
     # Si un niveau d'inondation est défini, superposer les zones inondées
     if niveau_inondation is not None:
