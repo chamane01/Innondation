@@ -21,6 +21,7 @@ from streamlit_folium import st_folium
 from geopy.distance import geodesic
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap  # Importation pour la carte inondée
+from folium.plugins import MeasureControl  # Importation de l'outil de mesure
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -124,6 +125,10 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
             )
             flood_overlay.add_to(m)
 
+        # Ajouter l'outil de mesure
+        measure_control = MeasureControl(primary_length_unit='meters', secondary_length_unit='kilometers', primary_area_unit='sqmeters', secondary_area_unit='hectares')
+        measure_control.add_to(m)
+
         folium.LayerControl().add_to(m)
         return m
     except Exception as e:
@@ -182,6 +187,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
