@@ -72,7 +72,8 @@ def calculer_pixels_inondes(data, niveau_inondation):
 # Fonction pour calculer la surface totale inondée
 def calculer_surface_totale_inondee(nombre_pixels_inondes, taille_reelle_x, taille_reelle_y):
     surface_pixel = taille_reelle_x * taille_reelle_y
-    return nombre_pixels_inondes * surface_pixel
+    surface_totale = nombre_pixels_inondes * surface_pixel
+    return surface_totale, surface_totale / 10000  # Conversion en hectares
 
 # Fonction pour générer une carte de profondeur et sauvegarder comme image temporaire
 def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
@@ -168,16 +169,18 @@ def main():
 
             if niveau_inondation:
                 nombre_pixels_inondes = calculer_pixels_inondes(data_tiff, niveau_inondation)
-                surface_totale_inondee = calculer_surface_totale_inondee(nombre_pixels_inondes, taille_reelle_x, taille_reelle_y)
+                surface_totale_inondee_m2, surface_totale_inondee_ha = calculer_surface_totale_inondee(nombre_pixels_inondes, taille_reelle_x, taille_reelle_y)
 
                 st.write(f"Nombre de pixels inondés : {nombre_pixels_inondes}")
-                st.write(f"Surface totale inondée : {surface_totale_inondee:.2f} m².")
+                st.write(f"Surface totale inondée : {surface_totale_inondee_m2:.2f} m².")
+                st.write(f"Surface totale inondée : {surface_totale_inondee_ha:.2f} hectares.")
 
             m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation)
             st_folium(m, width=700, height=500, key="osm_map")
 
 if __name__ == "__main__":
     main()
+
 
 
 
