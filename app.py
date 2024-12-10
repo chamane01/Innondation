@@ -37,23 +37,6 @@ def charger_tiff(fichier_tiff):
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None, None
-
-# Fonction pour générer une carte de profondeur et sauvegarder comme image temporaire
-def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
-    extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
-
-    fig, ax = plt.subplots(figsize=(8, 6))
-    im = ax.imshow(data_tiff, cmap='terrain', extent=extent)
-    fig.colorbar(im, ax=ax, label="Altitude (m)")
-
-    ax.set_title("Carte de profondeur (terrain)", fontsize=14)
-    ax.set_xlabel("Longitude")
-    ax.set_ylabel("Latitude")
-
-    # Sauvegarder l'image
-    plt.savefig(output_path, format='png', bbox_inches='tight')
-    plt.close(fig)
-
 def calculer_taille_pixel(bounds, dimensions, crs):
     lon_min, lat_min, lon_max, lat_max = bounds
     height, width = dimensions
@@ -79,6 +62,23 @@ height, width = data_tiff.shape
 pixel_width, pixel_height = calculer_taille_pixel(bounds_tiff, (height, width), crs_tiff)
 
 st.write(f"Taille d'un pixel : {pixel_width:.2f} m x {pixel_height:.2f} m")
+# Fonction pour générer une carte de profondeur et sauvegarder comme image temporaire
+def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
+    extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    im = ax.imshow(data_tiff, cmap='terrain', extent=extent)
+    fig.colorbar(im, ax=ax, label="Altitude (m)")
+
+    ax.set_title("Carte de profondeur (terrain)", fontsize=14)
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+
+    # Sauvegarder l'image
+    plt.savefig(output_path, format='png', bbox_inches='tight')
+    plt.close(fig)
+
+
 
 # Fonction pour créer une carte Folium avec superposition
 def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
