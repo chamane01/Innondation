@@ -13,12 +13,12 @@ from datetime import datetime
 import rasterio
 
 import streamlit as st
-import folium
-from streamlit_folium import st_folium
+import numpy as np
 import rasterio
-from folium import Rectangle
+import matplotlib.pyplot as plt
+from matplotlib.patches import Rectangle
 
-# Fonction pour charger et lire un fichier GeoTIFF
+# Fonction pour charger le fichier TIFF
 def charger_tiff(fichier_tiff):
     try:
         with rasterio.open(fichier_tiff) as src:
@@ -31,59 +31,63 @@ def charger_tiff(fichier_tiff):
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None, None
 
-# Fonction pour créer une carte centrée sur une emprise donnée
-def create_osm_map(bounds):
-    lat_min, lon_min = bounds[1], bounds[0]
-    lat_max, lon_max = bounds[3], bounds[2]
-    center = [(lat_min + lat_max) / 2, (lon_min + lon_max) / 2]
+# Fonction pour afficher la carte OSM avec un cadre correspondant à l'emprise du TIFF
+def afficher_carte_osm(bounds_tiff):
+    # Étendue géographique (extent)
+    extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
 
-    # Créer une carte Folium centrée sur l'emprise
-    m = folium.Map(location=center, zoom_start=13, control_scale=True)
+    # Créer une figure
+    fig, ax = plt.subplots(figsize=(8, 6))
 
-    # Ajouter un rectangle pour illustrer l'emprise
-    folium.Rectangle(
-        bounds=[[lat_min, lon_min], [lat_max, lon_max]],
-        color="blue",
-        fill=True,
-        fill_opacity=0.2
-    ).add_to(m)
+    # Créer un rectangle pour l'emprise
+    rect = Rectangle(
+        (extent[0], extent[2]),  # Coin inférieur gauche
+        extent[1] - extent[0],  # Largeur
+        extent[3] - extent[2],  # Hauteur
+        linewidth=2,
+        edgecolor='blue',
+        facecolor='none'
+    )
 
-    return m
+    # Ajouter le rectangle au graphique
+    ax.add_patch(rect)
 
-# Application principale
+    # Configurer les axes
+    ax.set_xlim(extent[0] - 0.01, extent[1] + 0.01)
+    ax.set_ylim(extent[2] - 0.01, extent[3] + 0.01)
+    ax.set_title("Carte OSM correspondant à l'emprise du GeoTIFF")
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+
+    # Ajouter un fond gris pour simuler une carte
+    ax.set_facecolor("lightgrey")
+
+    st.pyplot(fig)
+
+# Interface Streamlit
 def main():
-    st.title("Analyse des zones inondées")
-    st.markdown("## Téléversez un fichier GeoTIFF pour extraire la carte OSM correspondante.")
+    st.title("Analyse des zones inondées avec carte OSM")
+    st.markdown("### Téléchargez un fichier GeoTIFF pour visualiser l'emprise sur une carte OSM.")
 
-    uploaded_tiff_file = st.file_uploader("Choisissez un fichier GeoTIFF (.tif)", type=["tif"])
+    # Téléversement du fichier GeoTIFF
+    fichier_tiff = st.file_uploader("Téléchargez un fichier GeoTIFF", type=["tif"])
 
-    if uploaded_tiff_file is not None:
-        # Charger les données GeoTIFF
-        data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(uploaded_tiff_file)
+    if fichier_tiff is not None:
+        # Charger le fichier TIFF
+        data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
 
         if data_tiff is not None:
-            # Afficher les informations
-            st.write("### Informations sur le fichier GeoTIFF")
-            st.write(f"- Dimensions : {data_tiff.shape}")
-            st.write(f"- Système de coordonnées : {crs_tiff}")
-            st.write(f"- Emprise (bounds) : {bounds_tiff}")
+            # Afficher les informations de base
+            st.write(f"Dimensions : {data_tiff.shape}")
+            st.write(f"Altitude min : {data_tiff.min()}, max : {data_tiff.max()}")
 
-            # Créer la carte basée sur l'emprise du TIFF
-            m_osm = create_osm_map(bounds_tiff)
-
-            # Afficher deux cartes côte à côte
-            col1, col2 = st.columns(2)
-
-            with col1:
-                st.write("### Carte GeoTIFF avec emprise")
-                st_folium(m_osm, width=350, height=500)
-
-            with col2:
-                st.write("### Carte OSM extraite")
-                st_folium(m_osm, width=350, height=500)
+            # Afficher la carte OSM correspondant à l'emprise
+            if st.checkbox("Afficher la carte OSM correspondant à l'emprise"):
+                afficher_carte_osm(bounds_tiff)
 
 if __name__ == "__main__":
     main()
+
 
 
 
