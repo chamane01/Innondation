@@ -20,6 +20,7 @@ import folium
 from streamlit_folium import st_folium
 from geopy.distance import geodesic
 import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap  # Ajouter cette ligne pour l'importation
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -181,6 +182,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
