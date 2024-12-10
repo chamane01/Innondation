@@ -21,6 +21,34 @@ from matplotlib.colors import ListedColormap
 import matplotlib.pyplot as plt
 import os
 
+from pyproj import Proj, transform
+
+def calculer_taille_pixel(bounds, dimensions, crs):
+    lon_min, lat_min, lon_max, lat_max = bounds
+    height, width = dimensions
+
+    if crs.is_geographic:
+        # Conversion des degrés en mètres via une projection locale
+        proj = Proj(proj='utm', zone=33, ellps='WGS84')  # Exemple avec UTM Zone 33
+        x_min, y_min = proj(lon_min, lat_min)
+        x_max, y_max = proj(lon_max, lat_max)
+    else:
+        # Si les coordonnées sont déjà en mètres
+        x_min, y_min, x_max, y_max = lon_min, lat_min, lon_max, lat_max
+
+    # Taille du pixel en mètres
+    pixel_width = (x_max - x_min) / width
+    pixel_height = (y_max - y_min) / height
+
+    return pixel_width, pixel_height
+
+# Exemple d'utilisation
+data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff("votre_fichier.tif")
+height, width = data_tiff.shape
+pixel_width, pixel_height = calculer_taille_pixel(bounds_tiff, (height, width), crs_tiff)
+
+st.write(f"Taille d'un pixel : {pixel_width:.2f} m x {pixel_height:.2f} m")
+
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
     try:
