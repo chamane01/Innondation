@@ -18,15 +18,22 @@ import rasterio
 import numpy as np
 import matplotlib.pyplot as plt
 from rasterio.plot import show
-import contextily as ctx
-from shapely.geometry import box
+from shapely.geometry import shape, box, mapping
 import geopandas as gpd
-from pyproj import CRS
+from matplotlib.colors import ListedColormap
+import json
 
 # Titre de l'application
-st.title("Carte des zones inondées avec fond de carte OSM")
+st.title("Carte des zones inondées avec niveaux d'eau (sans GDAL)")
 
-# Étape 1 : Téléversement du fichier GeoTIFF
+# Initialiser session_state pour stocker les données
+if 'flood_data' not in st.session_state:
+    st.session_state.flood_data = {
+        'surface_inondee': None,
+        'niveau_inondation': 0.0
+    }
+
+# Étape 1 : Téléverser un fichier GeoTIFF
 uploaded_tiff = st.file_uploader("Téléversez un fichier GeoTIFF", type=["tif", "tiff"])
 
 if uploaded_tiff is not None:
@@ -35,57 +42,61 @@ if uploaded_tiff is not None:
         with rasterio.open(uploaded_tiff) as src:
             elevation = src.read(1)  # Lire la première bande
             transform = src.transform
-            crs = src.crs  # Récupérer la projection du fichier
+            crs = src.crs
 
-        # Calculer les limites géographiques du raster
-        bounds = rasterio.transform.array_bounds(elevation.shape[0], elevation.shape[1], transform)
-        raster_bounds = box(*bounds)
-
-        # Afficher les informations de base
+        # Afficher les informations de base du fichier
         st.write(f"Dimensions: {elevation.shape}")
-        st.write(f"Résolution: {transform[0]} x {abs(transform[4])} (mètres par pixel)")
-        st.write(f"Système de coordonnées du fichier : {crs}")
+        st.write(f"Système de coordonnées: {crs}")
 
-        # Étape 2 : Vérifier ou convertir la projection
-        if crs.to_string() != "EPSG:3857":
-            st.warning("Reprojection en Web Mercator pour correspondre au fond de carte OSM...")
-            raster_bounds_gdf = gpd.GeoDataFrame({"geometry": [raster_bounds]}, crs=crs)
-            raster_bounds_gdf = raster_bounds_gdf.to_crs(epsg=3857)
-            raster_bounds = raster_bounds_gdf.geometry.iloc[0]
-        else:
-            raster_bounds_gdf = gpd.GeoDataFrame({"geometry": [raster_bounds]}, crs=crs)
+        # Étape 2 : Afficher une prévisualisation du raster
+        st.markdown("### Aperçu des altitudes")
+        fig, ax = plt.subplots(figsize=(8, 6))
+        show(elevation, transform=transform, ax=ax, cmap="terrain")
+        ax.set_title("Carte des altitudes")
+        st.pyplot(fig)
 
-        # Étape 3 : Calcul des zones inondées
+        # Étape 3 : Définir le niveau d'eau
         niveau_eau = st.slider("Niveau d'inondation (mètres)", float(np.min(elevation)), float(np.max(elevation)), step=0.1)
+        st.session_state.flood_data['niveau_inondation'] = niveau_eau
+
+        # Étape 4 : Calcul des zones inondées
         zone_inondee = elevation <= niveau_eau
 
         # Calculer la surface inondée
-        pixel_area = transform[0] * abs(transform[4])  # Taille d'un pixel en m²
+        pixel_area = transform[0] * abs(transform[4])  # Taille d'un pixel (en m²)
         surface_inondee = np.sum(zone_inondee) * pixel_area / 10000  # Surface en hectares
-        st.write(f"Surface inondée : {surface_inondee:.2f} hectares")
+        st.session_state.flood_data['surface_inondee'] = surface_inondee
 
-        # Étape 4 : Affichage avec fond de carte OSM
-        st.markdown("### Carte des zones inondées avec fond OSM")
-        fig, ax = plt.subplots(figsize=(10, 8))
+        st.write(f"Surface inondée: {surface_inondee:.2f} hectares")
 
-        # Afficher les zones inondées
-        cmap = ListedColormap(["none", "blue"])
-        show(zone_inondee.astype(int), transform=transform, ax=ax, cmap=cmap, alpha=0.5)
-
-        # Définir les limites et ajouter le fond de carte OSM
-        ax.set_xlim(raster_bounds_gdf.total_bounds[0], raster_bounds_gdf.total_bounds[2])
-        ax.set_ylim(raster_bounds_gdf.total_bounds[1], raster_bounds_gdf.total_bounds[3])
-
-        ctx.add_basemap(ax, crs=raster_bounds_gdf.crs.to_string(), source=ctx.providers.OpenStreetMap.Mapnik)
-
-        ax.set_title("Zones inondées avec fond de carte OSM")
+        # Étape 5 : Visualisation des zones inondées
+        st.markdown("### Carte des zones inondées")
+        fig, ax = plt.subplots(figsize=(8, 6))
+        cmap = ListedColormap(["blue", "lightgreen"])
+        show(zone_inondee.astype(int), transform=transform, ax=ax, cmap=cmap)
+        ax.set_title("Zones inondées")
         st.pyplot(fig)
+
+        # Étape 6 : Exporter les zones inondées en GeoJSON
+        if st.button("Exporter les zones inondées en GeoJSON"):
+            mask = zone_inondee.astype(np.uint8)
+            shapes_generator = rasterio.features.shapes(mask, transform=transform)
+            polygons = [shape for shape, value in shapes_generator if value == 1]
+
+            # Créer un GeoJSON
+            features = [{"type": "Feature", "geometry": mapping(polygon), "properties": {}} for polygon in polygons]
+            geojson = {"type": "FeatureCollection", "features": features}
+
+            # Sauvegarder le fichier
+            with open("zones_inondees.geojson", "w") as f:
+                json.dump(geojson, f)
+
+            st.success("Fichier GeoJSON des zones inondées exporté.")
 
     except Exception as e:
         st.error(f"Erreur lors du traitement du fichier GeoTIFF : {e}")
 else:
     st.warning("Veuillez téléverser un fichier GeoTIFF pour commencer.")
-
 
 
 import streamlit as st
