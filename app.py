@@ -46,7 +46,6 @@ if uploaded_tiff is not None:
 
         # Afficher les informations de base du fichier
         st.write(f"Dimensions: {elevation.shape}")
-        st.write(f"Résolution: {transform[0]} x {transform[4]} (mètres par pixel)")
         st.write(f"Système de coordonnées: {crs}")
 
         # Étape 2 : Afficher une prévisualisation du raster
