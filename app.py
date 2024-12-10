@@ -96,12 +96,6 @@ def main():
             st.write(f"- Valeurs min : {data_tiff.min()}, max : {data_tiff.max()}")
             st.write(f"- Système de coordonnées : {crs_tiff}")
             
-            # Calcul de la surface d'un pixel
-            surface_pixel_m2, surface_pixel_ha = calcul_surface_pixel(transform_tiff)
-
-            # Affichage des surfaces des pixels
-            st.write(f"### Surface d'un pixel réel : {surface_pixel_m2:.2f} m²")
-            st.write(f"### Surface d'un pixel réel : {surface_pixel_ha:.4f} ha")
             
             # Choisir l'opacité du TIFF
             opacity = st.slider("Opacité de l'image TIFF", 0.0, 1.0, 0.6, 0.1)
