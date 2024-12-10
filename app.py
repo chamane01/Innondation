@@ -17,10 +17,9 @@ import streamlit as st
 import rasterio
 import numpy as np
 import folium
+from folium import raster_layers
 from folium.plugins import MeasureControl
 import io
-import matplotlib.pyplot as plt
-import contextily as ctx  # Utilisé pour ajouter un fond OSM
 
 # Fonction pour charger et lire un fichier GeoTIFF
 def charger_tiff(fichier_tiff):
@@ -46,30 +45,37 @@ def calcul_surface_pixel(transform_tiff):
     surface_pixel_ha = surface_pixel_m2 / 10000  # Conversion en hectares
     return surface_pixel_m2, surface_pixel_ha
 
-# Fonction pour afficher la carte avec un fond OSM
-def create_map_with_osm(bounds_tiff):
-    lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]  # Coin inférieur gauche
-    lat_max, lon_max = bounds_tiff[3], bounds_tiff[2]  # Coin supérieur droit
+# Fonction pour créer une carte Folium avec l'emprise du TIFF
+def create_map(bounds, data_tiff, transform_tiff, opacity=0.6):
+    lat_min, lon_min = bounds[1], bounds[0]  # Coin inférieur gauche
+    lat_max, lon_max = bounds[3], bounds[2]  # Coin supérieur droit
 
     # Créer la carte centrée sur le centre de l'emprise du TIFF
     map_center = [(lat_max + lat_min) / 2, (lon_max + lon_min) / 2]
     m = folium.Map(location=map_center, zoom_start=13)
 
-    # Ajouter la carte OpenStreetMap comme fond
-    ctx.add_basemap(m, crs="EPSG:4326", source=ctx.providers.OpenStreetMap.Mapnik)
+    # Ajouter la carte OpenStreetMap
+    folium.TileLayer('OpenStreetMap').add_to(m)
+
+    # Ajouter l'image raster du fichier TIFF sur la carte avec une opacité ajustable
+    img_overlay = raster_layers.ImageOverlay(
+        image=data_tiff,
+        bounds=[[lat_min, lon_min], [lat_max, lon_max]],
+        opacity=opacity  # Opacité ajustée
+    )
+    img_overlay.add_to(m)
+
+    # Ajouter l'outil de mesure à la carte avec des options de personnalisation
+    measure_control = MeasureControl(
+        primary_length_unit='meters', 
+        secondary_length_unit='kilometers',
+        primary_area_unit='sqmeters', 
+        secondary_area_unit='hectares',
+        marker_options={'color': 'black', 'weight': 2, 'opacity': 1}
+    )
+    measure_control.add_to(m)
 
     return m
-
-# Fonction pour calculer la surface et le volume d'inondation
-def calculer_surface_bleue(data_tiff, niveau_inondation, surface_pixel_ha):
-    inondation_mask = data_tiff <= niveau_inondation
-    surface_bleue_ha = np.sum(inondation_mask) * surface_pixel_ha  # En hectares
-    return surface_bleue_ha
-
-def calculer_volume(surface_bleue_ha, profondeur_moyenne):
-    # Volume = Surface * Profondeur (en mètres)
-    volume_m3 = surface_bleue_ha * 10000 * profondeur_moyenne  # en m³
-    return volume_m3
 
 # Définition de l'application Streamlit
 def main():
@@ -90,33 +96,56 @@ def main():
             st.write(f"- Valeurs min : {data_tiff.min()}, max : {data_tiff.max()}")
             st.write(f"- Système de coordonnées : {crs_tiff}")
             
-            # Calcul de la surface d'un pixel
-            surface_pixel_m2, surface_pixel_ha = calcul_surface_pixel(transform_tiff)
+            
+            # Choisir l'opacité du TIFF
+            opacity = st.slider("Opacité de l'image TIFF", 0.0, 1.0, 0.6, 0.1)
+            
+            # Visualisation initiale avec Folium
+            st.write("### Carte d'altitude")
+            m = create_map(bounds_tiff, data_tiff, transform_tiff, opacity=opacity)
+            
+            # Affichage de la carte
+            st.write("Carte avec le fond OSM et les données TIFF")
+            st_folium(m, width=700, height=500)
 
-            # Choisir le niveau d'inondation
+            # Sélection du niveau d'eau
             niveau_inondation = st.slider("Définir le niveau d'inondation (m)", 
                                           float(data_tiff.min()), float(data_tiff.max()), step=0.1)
             
-            # Calculer la surface inondée
-            surface_bleue_ha = calculer_surface_bleue(data_tiff, niveau_inondation, surface_pixel_ha)
+            # Sélection de la couleur du masque d'inondation
+            colormap = st.selectbox("Choisissez la couleur du masque d'inondation", 
+                                    ["Blues", "Reds", "Greens", "YlOrRd", "Purples"])
 
-            # Calculer le volume d'eau (en utilisant une profondeur moyenne comme exemple)
-            profondeur_moyenne = st.slider("Profondeur moyenne de l'inondation (m)", 0.1, 10.0, 1.0)
-            volume_eau = calculer_volume(surface_bleue_ha, profondeur_moyenne)
+            if st.button("Calculer et afficher la zone inondée"):
+                # Calcul du masque d'inondation
+                inondation_mask = data_tiff <= niveau_inondation
+                surface_inondee_plan_ha = np.sum(inondation_mask) * surface_pixel_ha  # En hectares
+                surface_inondee_reel_m2 = np.sum(inondation_mask) * surface_pixel_m2  # En mètres carrés
+                
+                st.write(f"### Surface inondée (plan) : {surface_inondee_plan_ha:.2f} hectares")
+                st.write(f"### Surface inondée (réelle) : {surface_inondee_reel_m2:.2f} m²")
 
-            st.write(f"### Surface inondée estimée : {surface_bleue_ha:.2f} hectares")
-            st.write(f"### Volume d'eau estimé : {volume_eau:.2f} m³")
+                # Afficher la carte avec les zones inondées
+                st.write("### Carte avec la zone inondée affichée")
+                m = create_map(bounds_tiff, data_tiff, transform_tiff, opacity=opacity)
 
-            # Affichage de la carte
-            st.write("### Carte avec la zone inondée affichée")
-            m = create_map_with_osm(bounds_tiff)
+                # Superposition du masque d'inondation avec la couleur choisie
+                lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
+                lat_max, lon_max = bounds_tiff[3], bounds_tiff[2]
 
-            # Afficher la carte avec la zone inondée
-            st_folium(m, width=700, height=500)
+                inondation_mask_overlay = raster_layers.ImageOverlay(
+                    image=inondation_mask.astype(np.uint8) * 255,  # Assurez-vous que l'image est en valeurs 0-255
+                    bounds=[[lat_min, lon_min], [lat_max, lon_max]],
+                    opacity=0.6,
+                    colormap=colormap  # Application de la couleur choisie
+                )
+                inondation_mask_overlay.add_to(m)
+                
+                # Afficher la carte
+                st_folium(m, width=700, height=500)
 
 if __name__ == "__main__":
     main()
-
 
 
 
