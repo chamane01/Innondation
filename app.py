@@ -57,7 +57,7 @@ def create_map(bounds, data_tiff, transform_tiff, opacity=0.6, zoom_start=13):
 
     return m
 
-# Fonction pour superposer la zone inondée en magenta
+# Fonction pour superposer la zone inondée en bleu
 def afficher_inondation(m, data_tiff, niveau_inondation, bounds_tiff):
     lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
     lat_max, lon_max = bounds_tiff[3], bounds_tiff[2]
@@ -65,12 +65,12 @@ def afficher_inondation(m, data_tiff, niveau_inondation, bounds_tiff):
     # Créer le masque d'inondation
     inondation_mask = data_tiff <= niveau_inondation
     
-    # Appliquer la coloration magenta pour les zones inondées
+    # Appliquer le masque à la carte en bleu
     inondation_mask_overlay = raster_layers.ImageOverlay(
         image=inondation_mask.astype(np.uint8) * 255,  # Convertir en valeurs 0-255
         bounds=[[lat_min, lon_min], [lat_max, lon_max]],
         opacity=0.6,
-        colormap='magma'  # Magenta est plus proche de la palette 'magma' pour des rendus visuels
+        colormap='Blues'  # Appliquer la couleur bleue pour les zones inondées
     )
     inondation_mask_overlay.add_to(m)
 
@@ -131,8 +131,8 @@ def main():
                 fig, ax = plt.subplots(figsize=(8, 6))
                 extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]  # Définir l'extent
                 ax.imshow(data_tiff, cmap='terrain', extent=extent)
-                ax.imshow(inondation_mask, cmap='magma', alpha=0.6, extent=extent)  # Utilisation de la palette 'magma' pour magenta
-                ax.set_title("Zone inondée (en magenta)")
+                ax.imshow(inondation_mask, cmap='Blues', alpha=0.5, extent=extent)
+                ax.set_title("Zone inondée (en bleu)")
                 fig.colorbar(ax.imshow(data_tiff, cmap='terrain', extent=extent), ax=ax, label="Altitude (m)")
                 st.pyplot(fig)
 
