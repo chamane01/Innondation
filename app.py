@@ -199,6 +199,7 @@ def main():
     if fichier_geojson_polygon is not None:
         geojson_data_polygon = charger_geojson(fichier_geojson_polygon)
 
+    # Paramètres pour personnaliser les styles des GeoJSON
     couleur_geojson = st.color_picker("Choisissez la couleur des zones GeoJSON", "#0000FF")
     opacite_geojson = st.slider("Choisissez l'opacité des zones GeoJSON", 0.0, 1.0, 0.5)
 
@@ -230,15 +231,16 @@ def main():
                 surface_totale_inondee_m2, surface_totale_inondee_ha = calculer_surface_inondee(nombre_pixels_inondes, taille_unite)
 
                 st.write(f"Nombre de pixels inondés : {nombre_pixels_inondes}")
-                st.write(f"Surface totale inondée : {surface_totale_inondee_m2:.2f} m².")
-                st.write(f"Surface totale inondée : {surface_totale_inondee_ha:.2f} hectares.")
+                st.write(f"Surface totale inondée : {surface_totale_inondee_m2:.2f} m²")
+                st.write(f"Surface totale inondée : {surface_totale_inondee_ha:.2f} hectares")
 
-            # Créer la carte avec les données GeoTIFF et GeoJSON
-            m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, geojson_data_routes, geojson_data_polygon, couleur_geojson, opacite_geojson)
-            st_folium(m, width=700, height=500, key="osm_map")
+            m = creer_carte_osm(
+                data_tiff, bounds_tiff, niveau_inondation,
+                geojson_data_routes, geojson_data_polygon,
+                couleur_geojson, opacite_geojson
+            )
+            st_folium(m, width=700, height=500)
 
-if __name__ == "__main__":
-    main()
 
 
 
