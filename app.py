@@ -54,25 +54,56 @@ def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
 
 # Fonction pour créer une carte Folium avec superposition
 def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
-    lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
-    lat_max, lon_max = bounds_tiff[3], bounds_tiff[2]
-    center = [(lat_min + lat_max) / 2, (lon_min + lon_max) / 2]
+    try:
+        lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
+        lat_max, lon_max = bounds_tiff[3], bounds_tiff[2]
+        center = [(lat_min + lat_max) / 2, (lon_min + lon_max) / 2]
 
-    # Créer une carte Folium
-    m = folium.Map(location=center, zoom_start=13, control_scale=True)
+        # Créer une carte Folium
+        m = folium.Map(location=center, zoom_start=13, control_scale=True)
 
-    # Générer une image temporaire pour la carte de profondeur
-    depth_map_path = "temp_depth_map.png"
-    generer_image_profondeur(data_tiff, bounds_tiff, depth_map_path)
+        # Générer une image temporaire pour la carte de profondeur
+        depth_map_path = "temp_depth_map.png"
+        generer_image_profondeur(data_tiff, bounds_tiff, depth_map_path)
 
-    # Ajouter la superposition de la carte de profondeur
-    img_overlay = folium.raster_layers.ImageOverlay(
-        image=depth_map_path,
-        bounds=[[lat_min, lon_min], [lat_max, lon_max]],
-        opacity=0.7,
-        interactive=True
-    )
-    img_overlay.add_to(m)
+        # Ajouter la superposition de la carte de profondeur
+        img_overlay = folium.raster_layers.ImageOverlay(
+            image=depth_map_path,
+            bounds=[[lat_min, lon_min], [lat_max, lon_max]],
+            opacity=0.7,
+            interactive=True
+        )
+        img_overlay.add_to(m)
+
+        # Gestion du niveau d'inondation si défini
+        if niveau_inondation is not None:
+            inondation_mask = data_tiff <= niveau_inondation
+            zone_inondee = np.zeros_like(data_tiff, dtype=np.uint8)
+            zone_inondee[inondation_mask] = 255
+
+            # Générer une image temporaire pour les zones inondées
+            flood_map_path = "temp_flood_map.png"
+            fig, ax = plt.subplots(figsize=(8, 6))
+            extent = [lon_min, lon_max, lat_min, lat_max]
+            ax.imshow(zone_inondee, cmap=ListedColormap(['none', 'magenta']), extent=extent, alpha=0.5)
+            plt.axis('off')
+            plt.savefig(flood_map_path, format='png', bbox_inches='tight', transparent=True)
+            plt.close(fig)
+
+            flood_overlay = folium.raster_layers.ImageOverlay(
+                image=flood_map_path,
+                bounds=[[lat_min, lon_min], [lat_max, lon_max]],
+                opacity=0.6,
+                interactive=True
+            )
+            flood_overlay.add_to(m)
+
+        folium.LayerControl().add_to(m)
+        return m
+    except Exception as e:
+        st.error(f"Erreur lors de la création de la carte : {e}")
+        return None
+
 
 # Fonction pour générer une carte statique combinée
 def generer_carte_combinee(data_tiff, bounds_tiff, niveau_inondation, output_path):
