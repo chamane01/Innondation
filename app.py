@@ -13,6 +13,118 @@ from datetime import datetime
 import rasterio
 
 
+
+
+import streamlit as st
+import numpy as np
+import folium
+from folium import raster_layers, plugins
+from streamlit_folium import st_folium
+import rasterio
+import matplotlib.pyplot as plt
+
+# Fonction pour charger et lire un fichier GeoTIFF
+def charger_tiff(fichier_tiff):
+    try:
+        with rasterio.open(fichier_tiff) as src:
+            data = src.read(1)  # Lire la première bande
+            transform = src.transform  # Transformation géographique
+            crs = src.crs  # Système de coordonnées
+            bounds = src.bounds  # (xmin, ymin, xmax, ymax)
+            return data, transform, crs, bounds
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
+        return None, None, None, None
+
+# Fonction pour créer une carte Folium
+def create_base_map(bounds, zoom_start=13):
+    lat_min, lon_min = bounds[1], bounds[0]  # Coin inférieur gauche
+    lat_max, lon_max = bounds[3], bounds[2]  # Coin supérieur droit
+    map_center = [(lat_max + lat_min) / 2, (lon_max + lon_min) / 2]
+
+    # Créer la carte centrée
+    m = folium.Map(location=map_center, zoom_start=zoom_start, control_scale=True, prefer_canvas=True)
+    folium.TileLayer('OpenStreetMap').add_to(m)
+    return m
+
+# Fonction pour ajouter un overlay sur une carte existante
+def ajouter_overlay(m, data_tiff, bounds, opacity=0.6, colormap='YlGnBu'):
+    lat_min, lon_min = bounds[1], bounds[0]
+    lat_max, lon_max = bounds[3], bounds[2]
+
+    img_overlay = raster_layers.ImageOverlay(
+        image=data_tiff,
+        bounds=[[lat_min, lon_min], [lat_max, lon_max]],
+        opacity=opacity,
+        colormap=colormap
+    )
+    img_overlay.add_to(m)
+
+# Fonction pour ajouter la zone inondée
+def afficher_inondation(m, data_tiff, niveau_inondation, bounds):
+    lat_min, lon_min = bounds[1], bounds[0]
+    lat_max, lon_max = bounds[3], bounds[2]
+
+    inondation_mask = data_tiff <= niveau_inondation
+    flood_overlay = raster_layers.ImageOverlay(
+        image=inondation_mask.astype(np.uint8) * 255,
+        bounds=[[lat_min, lon_min], [lat_max, lon_max]],
+        opacity=0.6,
+        colormap='Blues'
+    )
+    flood_overlay.add_to(m)
+
+# Application principale
+def main():
+    st.title("Analyse des zones inondées")
+    st.markdown("## Téléversez un fichier GeoTIFF pour analyser les zones inondées.")
+
+    uploaded_tiff_file = st.file_uploader("Choisissez un fichier GeoTIFF (.tif)", type=["tif"])
+
+    if uploaded_tiff_file is not None:
+        # Charger les données
+        data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(uploaded_tiff_file)
+
+        if data_tiff is not None:
+            # Afficher les informations du fichier
+            st.write("### Informations sur le fichier GeoTIFF")
+            st.write(f"- Dimensions : {data_tiff.shape}")
+            st.write(f"- Valeurs min : {data_tiff.min()}, max : {data_tiff.max()}")
+            st.write(f"- Système de coordonnées : {crs_tiff}")
+
+            # Créer la carte fixe avec emprise et affichage du TIFF
+            if "base_map" not in st.session_state:
+                st.session_state.base_map = create_base_map(bounds_tiff)
+                ajouter_overlay(st.session_state.base_map, data_tiff, bounds_tiff)
+
+            st.write("### Carte d'altitude (fixe)")
+            st_folium(st.session_state.base_map, width=700, height=500)
+
+            # Niveau d'inondation
+            st.write("### Zone inondée")
+            niveau_inondation = st.slider(
+                "Sélectionnez le niveau d'inondation",
+                min_value=float(data_tiff.min()),
+                max_value=float(data_tiff.max()),
+                value=float(np.percentile(data_tiff, 50)),
+                step=0.1
+            )
+
+            # Afficher les zones inondées
+            if st.button("Afficher la zone inondée"):
+                # Créer une carte dynamique en copiant la base fixe
+                flood_map = folium.Map(location=st.session_state.base_map.location, zoom_start=st.session_state.base_map.options['zoom'])
+                ajouter_overlay(flood_map, data_tiff, bounds_tiff)
+                afficher_inondation(flood_map, data_tiff, niveau_inondation, bounds_tiff)
+                st_folium(flood_map, width=700, height=500)
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
 import streamlit as st
 import numpy as np
 import folium
