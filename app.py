@@ -33,17 +33,17 @@ def charger_tiff(fichier_tiff):
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None, None
 
-# Fonction pour créer une carte statique Folium avec l'emprise du TIFF
-def create_static_map(bounds, data_tiff, transform_tiff):
+# Fonction pour créer une carte Folium avec l'emprise du TIFF
+def create_map(bounds, data_tiff, transform_tiff):
     lat_min, lon_min = bounds[1], bounds[0]  # Coin inférieur gauche
     lat_max, lon_max = bounds[3], bounds[2]  # Coin supérieur droit
 
     # Créer la carte centrée sur le centre de l'emprise du TIFF
     map_center = [(lat_max + lat_min) / 2, (lon_max + lon_min) / 2]
-    m = folium.Map(location=map_center, zoom_start=13, control_scale=False)
+    m = folium.Map(location=map_center, zoom_start=13)
 
-    # Ajouter une couche de fond OSM invisible
-    folium.TileLayer('OpenStreetMap', overlay=True, control=False).add_to(m)
+    # Ajouter la carte OpenStreetMap
+    folium.TileLayer('OpenStreetMap').add_to(m)
 
     # Ajouter l'image raster du fichier TIFF sur la carte
     img_overlay = raster_layers.ImageOverlay(
@@ -54,16 +54,6 @@ def create_static_map(bounds, data_tiff, transform_tiff):
     img_overlay.add_to(m)
 
     return m
-
-# Fonction pour calculer la surface réelle d'un pixel en mètres carrés
-def calcul_surface_pixel(transform_tiff):
-    # La résolution du pixel en unités géographiques
-    pixel_size_x = transform_tiff[0]  # Taille du pixel en longitude
-    pixel_size_y = abs(transform_tiff[4])  # Taille du pixel en latitude (la valeur est négative, donc on la rend positive)
-    
-    # Calcul de la surface d'un pixel en mètres carrés
-    surface_pixel_m2 = pixel_size_x * pixel_size_y
-    return surface_pixel_m2
 
 # Définition de l'application Streamlit
 def main():
@@ -84,15 +74,11 @@ def main():
             st.write(f"- Valeurs min : {data_tiff.min()}, max : {data_tiff.max()}")
             st.write(f"- Système de coordonnées : {crs_tiff}")
             
-            # Calcul de la surface réelle d'un pixel
-            surface_pixel_m2 = calcul_surface_pixel(transform_tiff)
-            st.write(f"### Surface réelle d'un pixel : {surface_pixel_m2:.2f} m²")
-            
-            # Visualisation initiale avec Folium (carte statique)
+            # Visualisation initiale avec Folium
             st.write("### Carte d'altitude")
-            m = create_static_map(bounds_tiff, data_tiff, transform_tiff)
+            m = create_map(bounds_tiff, data_tiff, transform_tiff)
             
-            # Affichage de la carte statique
+            # Affichage de la carte
             st.write("Carte avec le fond OSM et les données TIFF")
             st_folium(m, width=700, height=500)
 
@@ -103,14 +89,17 @@ def main():
             if st.button("Calculer et afficher la zone inondée"):
                 # Calcul du masque d'inondation
                 inondation_mask = data_tiff <= niveau_inondation
-                surface_inondee = np.sum(inondation_mask) * surface_pixel_m2 / 10_000  # Surface en hectares
+                surface_inondee = np.sum(inondation_mask) * (transform_tiff[0] * abs(transform_tiff[4])) / 10_000  # En hectares
                 st.write(f"### Surface inondée : {surface_inondee:.2f} hectares")
 
                 # Afficher la carte avec les zones inondées
                 st.write("### Carte avec la zone inondée affichée")
-                m = create_static_map(bounds_tiff, data_tiff, transform_tiff)
+                m = create_map(bounds_tiff, data_tiff, transform_tiff)
 
                 # Superposition du masque d'inondation
+                lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
+                lat_max, lon_max = bounds_tiff[3], bounds_tiff[2]
+
                 inondation_mask_overlay = raster_layers.ImageOverlay(
                     image=inondation_mask.astype(np.uint8) * 255,  # Assurez-vous que l'image est en valeurs 0-255
                     bounds=[[lat_min, lon_min], [lat_max, lon_max]],
@@ -124,7 +113,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 
 
