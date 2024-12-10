@@ -54,8 +54,10 @@ def create_map(bounds, data_tiff, transform_tiff, opacity=0.6):
     )
     img_overlay.add_to(m)
 
-    # Ajouter l'échelle de la carte
-    m.add_child(folium.plugins.ScaleBar())
+    # Ajouter l'outil de mesure à la carte pour afficher l'échelle
+    measure_control = MeasureControl(primary_length_unit='meters', secondary_length_unit='kilometers',
+                                     primary_area_unit='sqmeters', secondary_area_unit='hectares')
+    measure_control.add_to(m)
 
     return m
 
@@ -134,6 +136,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
