@@ -17,6 +17,7 @@ import streamlit as st
 import numpy as np
 import rasterio
 import folium
+from folium.plugins import Draw
 from streamlit_folium import st_folium
 from geopy.distance import geodesic
 import matplotlib.pyplot as plt
@@ -124,6 +125,14 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
             )
             flood_overlay.add_to(m)
 
+        # Ajouter les outils de dessin à la carte
+        draw = Draw(
+            draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4}},
+                          'polygon': {'shapeOptions': {'color': 'red', 'weight': 4}},
+                          'circle': {'shapeOptions': {'color': 'green', 'weight': 4}},
+                          'marker': {'icon': folium.Icon(color='darkblue')}})
+        draw.add_to(m)
+
         folium.LayerControl().add_to(m)
         return m
     except Exception as e:
@@ -182,6 +191,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
