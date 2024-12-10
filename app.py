@@ -211,7 +211,8 @@ def main():
                 st.write(f"Surface totale inondée : {surface_totale_inondee_ha:.2f} hectares.")
 
             m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, geojson_data)
-            st_folium(m, width=700, height=500, key="osm_map")
+            if m:
+                st_folium(m, width=700, height=500, key="osm_map")
 
 if __name__ == "__main__":
     main()
