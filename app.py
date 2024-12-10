@@ -19,8 +19,15 @@ import rasterio
 import folium
 from streamlit_folium import st_folium
 from matplotlib.colors import ListedColormap
+import matplotlib.pyplot as pltimport streamlit as st
+import numpy as np
+import rasterio
+import folium
+from streamlit_folium import st_folium
+from matplotlib.colors import ListedColormap
 import matplotlib.pyplot as plt
 import os
+import tempfile  # Pour gérer les fichiers temporaires
 
 
 # Fonction pour charger un fichier TIFF
@@ -37,23 +44,6 @@ def charger_tiff(fichier_tiff):
         return None, None, None, None
 
 
-# Fonction pour générer une carte de profondeur et sauvegarder comme image temporaire
-def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
-    extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
-
-    fig, ax = plt.subplots(figsize=(8, 6))
-    im = ax.imshow(data_tiff, cmap='terrain', extent=extent)
-    fig.colorbar(im, ax=ax, label="Altitude (m)")
-
-    ax.set_title("Carte de profondeur (terrain)", fontsize=14)
-    ax.set_xlabel("Longitude")
-    ax.set_ylabel("Latitude")
-
-    # Sauvegarder l'image
-    plt.savefig(output_path, format='png', bbox_inches='tight')
-    plt.close(fig)
-
-
 # Fonction pour créer une carte Folium avec superposition
 def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
     try:
@@ -65,8 +55,9 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
         m = folium.Map(location=center, zoom_start=13, control_scale=True)
 
         # Générer une image temporaire pour la carte de profondeur
-        depth_map_path = "temp_depth_map.png"
-        generer_image_profondeur(data_tiff, bounds_tiff, depth_map_path)
+        with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp_depth_file:
+            depth_map_path = temp_depth_file.name
+            generer_image_profondeur(data_tiff, bounds_tiff, depth_map_path)
 
         # Ajouter la superposition de la carte de profondeur
         img_overlay = folium.raster_layers.ImageOverlay(
@@ -84,52 +75,45 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
             zone_inondee[inondation_mask] = 255
 
             # Générer une image temporaire pour les zones inondées
-            flood_map_path = "temp_flood_map.png"
-            fig, ax = plt.subplots(figsize=(8, 6))
-            extent = [lon_min, lon_max, lat_min, lat_max]
-            ax.imshow(zone_inondee, cmap=ListedColormap(['none', 'magenta']), extent=extent, alpha=0.5)
-            plt.axis('off')
-            plt.savefig(flood_map_path, format='png', bbox_inches='tight', transparent=True)
-            plt.close(fig)
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp_flood_file:
+                flood_map_path = temp_flood_file.name
+                fig, ax = plt.subplots(figsize=(8, 6))
+                extent = [lon_min, lon_max, lat_min, lat_max]
+                ax.imshow(zone_inondee, cmap=ListedColormap(['none', 'magenta']), extent=extent, alpha=0.5)
+                plt.axis('off')
+                plt.savefig(flood_map_path, format='png', bbox_inches='tight', transparent=True)
+                plt.close(fig)
 
-            flood_overlay = folium.raster_layers.ImageOverlay(
-                image=flood_map_path,
-                bounds=[[lat_min, lon_min], [lat_max, lon_max]],
-                opacity=0.6,
-                interactive=True
-            )
-            flood_overlay.add_to(m)
+                flood_overlay = folium.raster_layers.ImageOverlay(
+                    image=flood_map_path,
+                    bounds=[[lat_min, lon_min], [lat_max, lon_max]],
+                    opacity=0.6,
+                    interactive=True
+                )
+                flood_overlay.add_to(m)
 
         folium.LayerControl().add_to(m)
+
+        # Supprimer les fichiers temporaires après usage
+        os.remove(depth_map_path)
+        if niveau_inondation is not None:
+            os.remove(flood_map_path)
+
         return m
     except Exception as e:
         st.error(f"Erreur lors de la création de la carte : {e}")
         return None
 
 
-# Fonction pour générer une carte statique combinée
-def generer_carte_combinee(data_tiff, bounds_tiff, niveau_inondation, output_path):
-    # Extraire les limites des coordonnées
-    lon_min, lat_min, lon_max, lat_max = bounds_tiff[0], bounds_tiff[1], bounds_tiff[2], bounds_tiff[3]
-
-    extent = [lon_min, lon_max, lat_min, lat_max]
-
-    # Masque des zones inondées
-    inondation_mask = data_tiff <= niveau_inondation
+# Fonction pour générer une carte de profondeur et sauvegarder comme image temporaire
+def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
+    extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
 
     fig, ax = plt.subplots(figsize=(8, 6))
-
-    # Afficher la carte de profondeur
     im = ax.imshow(data_tiff, cmap='terrain', extent=extent)
-    cbar = fig.colorbar(im, ax=ax, label="Altitude (m)")
+    fig.colorbar(im, ax=ax, label="Altitude (m)")
 
-    # Superposer les zones inondées
-    zone_inondee = np.zeros_like(data_tiff, dtype=np.uint8)
-    zone_inondee[inondation_mask] = 1
-    ax.imshow(zone_inondee, cmap=ListedColormap(["none", "magenta"]), extent=extent, alpha=0.5)
-
-    # Ajouter des titres et des axes
-    ax.set_title("Carte combinée : Profondeur et Zones inondées", fontsize=14)
+    ax.set_title("Carte de profondeur (terrain)", fontsize=14)
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
 
@@ -169,22 +153,6 @@ def main():
                 st.write(f"### Zone inondée pour une altitude de {niveau_inondation:.2f} m")
                 m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=niveau_inondation)
                 st_folium(m, width=700, height=500, key="flood_map")
-
-            # Bouton pour créer une carte statique
-            if st.button("Créer une carte statique", key="btn_carte_statique"):
-                carte_statique_path = "carte_combinee.png"
-                generer_carte_combinee(data_tiff, bounds_tiff, niveau_inondation, carte_statique_path)
-                st.image(carte_statique_path, caption="Carte statique combinée", use_column_width=True)
-
-                # Supprimer l'image après affichage
-                if os.path.exists(carte_statique_path):
-                    os.remove(carte_statique_path)
-
-            # Supprimer les fichiers temporaires après usage
-            if os.path.exists("temp_depth_map.png"):
-                os.remove("temp_depth_map.png")
-            if os.path.exists("temp_flood_map.png"):
-                os.remove("temp_flood_map.png")
 
 
 if __name__ == "__main__":
