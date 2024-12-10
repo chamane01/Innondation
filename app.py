@@ -22,6 +22,7 @@ import contextily as ctx
 from shapely.geometry import box
 import geopandas as gpd
 from matplotlib.colors import ListedColormap
+from rasterio.warp import calculate_default_transform, reproject, Resampling
 
 # Titre de l'application
 st.title("Carte des zones inondées avec niveaux d'eau et fond de carte OSM")
@@ -44,21 +45,40 @@ if uploaded_tiff is not None:
             transform = src.transform
             crs = src.crs
 
-        # Calculer les limites géographiques du raster
-        bounds = rasterio.transform.array_bounds(elevation.shape[0], elevation.shape[1], transform)
+        # Reprojection du raster vers EPSG:3857 (Web Mercator)
+        dst_crs = "EPSG:3857"  # Système de projection Web Mercator
+        transform_new, width, height = calculate_default_transform(
+            crs, dst_crs, src.width, src.height, *src.bounds
+        )
+        elevation_reprojected = np.empty((height, width), dtype=elevation.dtype)
+
+        with rasterio.Env():
+            reproject(
+                source=elevation,
+                destination=elevation_reprojected,
+                src_transform=transform,
+                src_crs=crs,
+                dst_transform=transform_new,
+                dst_crs=dst_crs,
+                resampling=Resampling.nearest,
+            )
+
+        # Mise à jour des variables transform et bounds
+        transform = transform_new
+        bounds = rasterio.transform.array_bounds(height, width, transform)
         raster_bounds = box(*bounds)
 
         # Afficher les informations de base du fichier
-        st.write(f"Dimensions: {elevation.shape}")
-        st.write(f"Résolution: {transform[0]} x {transform[4]} (mètres par pixel)")
-        st.write(f"Système de coordonnées: {crs}")
+        st.write(f"Dimensions: {elevation_reprojected.shape}")
+        st.write(f"Résolution: {transform[0]} x {abs(transform[4])} (mètres par pixel)")
+        st.write(f"Système de coordonnées: {dst_crs}")
 
         # Étape 2 : Définir le niveau d'eau
         niveau_eau = st.slider("Niveau d'inondation (mètres)", float(np.min(elevation)), float(np.max(elevation)), step=0.1)
         st.session_state.flood_data['niveau_inondation'] = niveau_eau
 
         # Étape 3 : Calcul des zones inondées
-        zone_inondee = elevation <= niveau_eau
+        zone_inondee = elevation_reprojected <= niveau_eau
 
         # Calculer la surface inondée
         pixel_area = transform[0] * abs(transform[4])  # Taille d'un pixel (en m²)
@@ -76,8 +96,7 @@ if uploaded_tiff is not None:
         show(zone_inondee.astype(int), transform=transform, ax=ax, cmap=cmap, alpha=0.5)
 
         # Ajouter le fond de carte OSM
-        gdf_bounds = gpd.GeoDataFrame({"geometry": [raster_bounds]}, crs=crs)
-        gdf_bounds = gdf_bounds.to_crs(epsg=3857)  # Conversion au système de coordonnées Web Mercator
+        gdf_bounds = gpd.GeoDataFrame({"geometry": [raster_bounds]}, crs=dst_crs)
         ax.set_xlim(gdf_bounds.bounds.minx[0], gdf_bounds.bounds.maxx[0])
         ax.set_ylim(gdf_bounds.bounds.miny[0], gdf_bounds.bounds.maxy[0])
 
@@ -90,6 +109,7 @@ if uploaded_tiff is not None:
         st.error(f"Erreur lors du traitement du fichier GeoTIFF : {e}")
 else:
     st.warning("Veuillez téléverser un fichier GeoTIFF pour commencer.")
+
 
 
 
