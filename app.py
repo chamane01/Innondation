@@ -22,6 +22,7 @@ from matplotlib.colors import ListedColormap
 import matplotlib.pyplot as plt
 import os
 
+
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
     try:
@@ -73,6 +74,34 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
     )
     img_overlay.add_to(m)
 
+# Fonction pour générer une carte statique combinée
+def generer_carte_combinee(data_tiff, bounds_tiff, niveau_inondation, output_path):
+    extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
+
+    # Masque des zones inondées
+    inondation_mask = data_tiff <= niveau_inondation
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+
+    # Afficher la carte de profondeur
+    im = ax.imshow(data_tiff, cmap='terrain', extent=extent)
+    cbar = fig.colorbar(im, ax=ax, label="Altitude (m)")
+
+    # Superposer les zones inondées
+    zone_inondee = np.zeros_like(data_tiff, dtype=np.uint8)
+    zone_inondee[inondation_mask] = 1
+    ax.imshow(zone_inondee, cmap=ListedColormap(["none", "magenta"]), extent=extent, alpha=0.5)
+
+    # Ajouter des titres et des axes
+    ax.set_title("Carte combinée : Profondeur et Zones inondées", fontsize=14)
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+
+    # Sauvegarder l'image
+    plt.savefig(output_path, format='png', bbox_inches='tight')
+    plt.close(fig)
+
+    
     # Si un niveau d'inondation est défini, superposer les zones inondées
     if niveau_inondation is not None:
         inondation_mask = data_tiff <= niveau_inondation
@@ -99,6 +128,7 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None):
     folium.LayerControl().add_to(m)
     return m
 
+# Interface principale Streamlit
 # Interface principale Streamlit
 def main():
     st.title("Analyse des zones inondées")
@@ -131,6 +161,16 @@ def main():
                 m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=niveau_inondation)
                 st_folium(m, width=700, height=500, key="flood_map")
 
+            # Bouton pour créer une carte statique
+            if st.button("Créer une carte statique", key="btn_carte_statique"):
+                carte_statique_path = "carte_combinee.png"
+                generer_carte_combinee(data_tiff, bounds_tiff, niveau_inondation, carte_statique_path)
+                st.image(carte_statique_path, caption="Carte statique combinée", use_column_width=True)
+
+                # Supprimer l'image après affichage
+                if os.path.exists(carte_statique_path):
+                    os.remove(carte_statique_path)
+
             # Supprimer les fichiers temporaires après usage
             if os.path.exists("temp_depth_map.png"):
                 os.remove("temp_depth_map.png")
@@ -139,6 +179,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
