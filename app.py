@@ -35,7 +35,11 @@ def charger_tiff(fichier_tiff):
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None, None
-
+# Fonction pour calculer la taille d'un pixel
+def calculer_taille_pixel(transform):
+    pixel_width = transform[0]  # Largeur d'un pixel (dx)
+    pixel_height = -transform[4]  # Hauteur d'un pixel (dy, négatif car les Y diminuent vers le haut)
+    return pixel_width, pixel_height
 
 # Fonction pour générer une carte de profondeur et sauvegarder comme image temporaire
 def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
