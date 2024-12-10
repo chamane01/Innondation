@@ -135,38 +135,28 @@ def main():
     st.title("Analyse des zones inondées")
     st.markdown("### Téléchargez un fichier GeoTIFF pour analyser les zones inondées.")
 
-    fichier_tiff = st.file_uploader("Téléchargez un fichier GeoTIFF", type=["tif"], key="file_uploader")
+    # Téléversement du fichier GeoTIFF
+    fichier_tiff = st.file_uploader("Téléchargez un fichier GeoTIFF", type=["tif"])
 
     if fichier_tiff is not None:
+        # Charger le fichier TIFF
         data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
 
         if data_tiff is not None:
+            # Afficher les informations de base
             st.write(f"Dimensions : {data_tiff.shape}")
             st.write(f"Altitude min : {data_tiff.min()}, max : {data_tiff.max()}")
 
-            st.write("### Carte de profondeur avec OSM")
-            m = creer_carte_osm(data_tiff, bounds_tiff)
-            st_folium(m, width=700, height=500, key="osm_map")
+            # Calcul de la taille des pixels
+            try:
+                height, width = data_tiff.shape
+                pixel_width, pixel_height = calculer_taille_pixel(bounds_tiff, (height, width), crs_tiff)
+                st.write(f"Taille d'un pixel : {pixel_width:.2f} m x {pixel_height:.2f} m")
+            except Exception as e:
+                st.error(f"Erreur lors du calcul de la taille des pixels : {e}")
 
-            niveau_inondation = st.slider(
-                "Choisissez le niveau d'inondation",
-                float(data_tiff.min()),
-                float(data_tiff.max()),
-                float(np.percentile(data_tiff, 50)),
-                step=0.1,
-                key="niveau_inondation"
-            )
-
-            if st.button("Afficher la zone inondée", key="btn_zone_inondee"):
-                st.write(f"### Zone inondée pour une altitude de {niveau_inondation:.2f} m")
-                m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=niveau_inondation)
-                st_folium(m, width=700, height=500, key="flood_map")
-
-            # Supprimer les fichiers temporaires après usage
-            if os.path.exists("temp_depth_map.png"):
-                os.remove("temp_depth_map.png")
-            if os.path.exists("temp_flood_map.png"):
-                os.remove("temp_flood_map.png")
+        else:
+            st.error("Impossible de lire le fichier GeoTIFF. Veuillez vérifier son format ou son contenu.")
 
 if __name__ == "__main__":
     main()
