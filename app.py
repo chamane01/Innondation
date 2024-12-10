@@ -117,19 +117,21 @@ def main():
                                     ["Blues", "Reds", "Greens", "YlOrRd", "Purples"])
 
             if st.button("Calculer et afficher la zone inondée"):
-            # Calculer la zone inondée
-            inondation_mask = data_tiff <= st.session_state.flood_data['niveau_inondation']
-            surface_inondee = np.sum(inondation_mask) * (transform_tiff[0] * transform_tiff[4]) / 10_000  # En hectares
-            st.session_state.flood_data['surface_bleu'] = surface_inondee
-            st.write(f"**Surface inondée :** {surface_inondee:.2f} hectares")
-
-            # Afficher la carte de l'inondation
-            fig, ax = plt.subplots(figsize=(8, 6))
-            ax.imshow(data_tiff, cmap='terrain', extent=extent)
-            ax.imshow(inondation_mask, cmap='Blues', alpha=0.5, extent=extent)
-            ax.set_title("Zone inondée (en bleu)")
-            fig.colorbar(cax, ax=ax, label="Altitude (m)")
-            st.pyplot(fig)
+                # Calculer la zone inondée
+                inondation_mask = data_tiff <= st.session_state.flood_data['niveau_inondation']
+                surface_inondee = np.sum(inondation_mask) * (transform_tiff[0] * transform_tiff[4]) / 10_000  # En hectares
+                st.session_state.flood_data['surface_bleu'] = surface_inondee
+                st.write(f"**Surface inondée :** {surface_inondee:.2f} hectares")
+                # Afficher la carte de l'inondation
+                fig, ax = plt.subplots(figsize=(8, 6))
+                ax.imshow(data_tiff, cmap='terrain', extent=extent)
+                ax.imshow(inondation_mask, cmap='Blues', alpha=0.5, extent=extent)
+                ax.set_title("Zone inondée (en bleu)")
+                fig.colorbar(cax, ax=ax, label="Altitude (m)")
+                st.pyplot(fig)
+            
+            
+            
 
 if __name__ == "__main__":
     main()
