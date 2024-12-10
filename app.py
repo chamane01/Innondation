@@ -33,13 +33,14 @@ def charger_tiff(fichier_tiff):
         return None, None, None, None
 
 # Fonction pour créer une carte Folium avec l'emprise du TIFF
-def create_map(bounds, data_tiff, transform_tiff, opacity=0.6):
+def create_map(bounds, data_tiff, transform_tiff, opacity=0.6, zoom_start=13):
     lat_min, lon_min = bounds[1], bounds[0]  # Coin inférieur gauche
     lat_max, lon_max = bounds[3], bounds[2]  # Coin supérieur droit
 
-    # Créer la carte centrée sur l'emprise du TIFF
+    # Créer la carte centrée sur l'emprise du TIFF avec un zoom fixe
     map_center = [(lat_max + lat_min) / 2, (lon_max + lon_min) / 2]
-    m = folium.Map(location=map_center, zoom_start=13)
+    m = folium.Map(location=map_center, zoom_start=zoom_start, control_scale=True, 
+                   prefer_canvas=True)  # Permet de désactiver certaines interactions
 
     # Ajouter la carte OpenStreetMap
     folium.TileLayer('OpenStreetMap').add_to(m)
@@ -98,7 +99,7 @@ def main():
             # Ajouter l'outil de mesure
             plugins.MeasureControl(primary_length_unit='meters').add_to(m)
 
-            # Affichage de la carte
+            # Affichage de la carte d'altitude
             st.write("### Carte d'altitude avec outils de mesure")
             st_folium(m, width=700, height=500)
 
@@ -114,13 +115,14 @@ def main():
 
             if st.button("Afficher la zone inondée"):
                 # Créer la carte d'altitude et afficher les zones inondées
-                m_inondation = create_map(bounds_tiff, data_tiff, transform_tiff, opacity=opacity)
+                m_inondation = create_map(bounds_tiff, data_tiff, transform_tiff, opacity=opacity, zoom_start=13)
                 afficher_inondation(m_inondation, data_tiff, niveau_inondation, bounds_tiff)
                 st.write(f"### Zones inondées pour le niveau d'inondation {niveau_inondation:.2f}")
                 st_folium(m_inondation, width=700, height=500)
 
 if __name__ == "__main__":
     main()
+
 
 
 
