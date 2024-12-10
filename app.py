@@ -65,6 +65,11 @@ def main():
             st.write(f"- Largeur totale (en X) : {width_in_meters} mètres")
             st.write(f"- Hauteur totale (en Y) : {height_in_meters} mètres")
 
+            fig, ax = plt.subplots(figsize=(8, 6))
+            ax.set_xlim(X_min, X_max)
+            ax.set_ylim(Y_min, Y_max)
+            ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+
             # Afficher la carte avec les zones inondées
             st.write("### Carte d'altitude")
             fig, ax = plt.subplots(figsize=(8, 6))
