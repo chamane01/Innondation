@@ -204,7 +204,7 @@ def main():
     if fichier_tiff:
         data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
 
-         if fichier_geojson_polygon:
+        if fichier_geojson_polygon:
              geojson_polygon = charger_geojson(fichier_geojson_polygon)
              if geojson_polygon is not None:
                  surface_m2, surface_ha = calculer_surface_polygone(geojson_polygon)
