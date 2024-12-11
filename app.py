@@ -218,8 +218,7 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_la
 def main():
     def main():
         st.title("Calcul de la surface inondée dans l'emprise")
-        fichier_tiff = st.file_uploader("Téléverser un fichier GeoTIFF (altitudes/profondeurs)", type=["tif", "tiff"])
-        fichier_geojson_polygon = st.file_uploader("Téléverser un fichier GeoJSON (emprise polygonale)", type=["geojson"])
+
         if fichier_tiff and fichier_geojson_polygon:
             data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
             geojson_polygon = charger_geojson(fichier_geojson_polygon)
