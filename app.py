@@ -23,7 +23,6 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from folium.plugins import MeasureControl
 import geopandas as gpd
-from rasterio.features import geometry_mask
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -46,27 +45,11 @@ def charger_geojson(fichier_geojson):
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
         return None
-def calculer_pixels_inondes_polygon(data, niveau_inondation, polygon_geojson, transform):
-    # Appliquer le masque du polygone
-    masked_data = appliquer_masque_polygon(data, polygon_geojson, transform)
-    # Calculer les pixels inondés dans la zone masquée
-    return np.sum(masked_data <= niveau_inondation)
 
-def calculer_surface_inondee_polygon(data, niveau_inondation, taille_unite, polygon_geojson, transform):
-    nombre_pixels_inondes = calculer_pixels_inondes_polygon(data, niveau_inondation, polygon_geojson, transform)
-    surface_m2, surface_ha = calculer_surface_inondee(nombre_pixels_inondes, taille_unite)
-    return surface_m2, surface_ha
 # Calcul de la taille d'un pixel
 def calculer_taille_pixel(transform):
     return transform[0], -transform[4]
-def appliquer_masque_polygon(data, polygon_geojson, transform):
-    # Convertir le GeoDataFrame en objets géométriques (polygones)
-    geometries = polygon_geojson.geometry
-    # Appliquer le masque en utilisant la géométrie
-    mask = geometry_mask(geometries, transform=transform, invert=True, out_shape=data.shape)
-    # Appliquer le masque à l'image des données
-    masked_data = np.ma.masked_array(data, mask=mask)
-    return masked_data
+
 # Taille réelle d'une unité (pixel)
 def calculer_taille_unite(bounds_tiff, largeur_pixels, hauteur_pixels):
     point1 = (bounds_tiff[1], bounds_tiff[0])
@@ -100,19 +83,6 @@ def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     plt.title("Carte de profondeur")
     plt.savefig(output_path, format='png', bbox_inches='tight')
     plt.close()
-
-def calculer_pixels_dans_polygone(data_tiff, transform_tiff, gdf_polygon):
-    try:
-        # Extraire la géométrie du polygone
-        geometries = [geom for geom in gdf_polygon.geometry]
-        mask = geometry_mask(geometries, transform=transform_tiff, invert=True, out_shape=data_tiff.shape)
-        
-        # Sélectionner les pixels à l'intérieur du masque (zones magenta)
-        pixels_dans_polygone = data_tiff[mask]
-        return pixels_dans_polygone
-    except Exception as e:
-        st.error(f"Erreur lors du calcul des pixels dans le polygone : {e}")
-        return None
 
 # Carte Folium avec superposition
 def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_layers):
@@ -221,26 +191,6 @@ def main():
         "plantations": charger_geojson(fichier_geojson_plantations) if fichier_geojson_plantations else None,
     }
 
-
-    if fichier_tiff and fichier_geojson_polygon:
-        gdf_polygon = geojson_data["polygon"]
-        data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
-    
-        if data_tiff is not None and gdf_polygon is not None:
-            
-            st.write(f"Dimensions : {data_tiff.shape}")
-            taille_unite = calculer_taille_unite(bounds_tiff, data_tiff.shape[1], data_tiff.shape[0])
-            st.write(f"Taille moyenne d'une unité : {taille_unite:.2f} m")
-
-            # Calcul des pixels dans le polygone
-            pixels_dans_polygone = calculer_pixels_dans_polygone(data_tiff, transform_tiff, gdf_polygon)
-            if pixels_dans_polygone is not None:
-                
-                nombre_pixels = len(pixels_dans_polygone)
-                surface_m2, surface_ha = calculer_surface_inondee(nombre_pixels, taille_unite)
-                st.write(f"Surface magenta dans le polygone : {surface_m2:.2f} m² ({surface_ha:.2f} ha)")
-    
-
     if fichier_tiff:
         data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
         if data_tiff is not None:
@@ -258,8 +208,6 @@ def main():
 
             m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, **geojson_data)
             st_folium(m, width=700, height=500)
-
-
 
 if __name__ == "__main__":
     main()
