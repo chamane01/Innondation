@@ -23,7 +23,7 @@ from geopy.distance import geodesic
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from folium.plugins import MeasureControl
-
+from rasterio.mask import mask
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
     try:
