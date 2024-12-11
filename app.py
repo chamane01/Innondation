@@ -133,7 +133,7 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_data
     if geojson_data_polygon is not None:
         folium.GeoJson(
             geojson_data_polygon,
-            style_function=lambda feature: {'fillColor': 'transparent', 'color': 'white', 'weight': 2}
+            style_function=lambda feature: {'fillColor': 'transparent', 'color': 'black', 'weight': 2}
         ).add_to(m)
 
     folium.LayerControl().add_to(m)
