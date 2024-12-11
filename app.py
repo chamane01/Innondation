@@ -74,18 +74,6 @@ def calculer_surface_inondee(nombre_pixels_inondes, taille_unite):
     surface_totale_hectares = surface_totale_m2 / 10000
     return surface_totale_m2, surface_totale_hectares
 
-# Surface inondée dans la polygonale
-def calculer_surface_inondee_polygonale(data, niveau_inondation, polygon_gdf, transform):
-    mask = rasterio.features.geometry_mask(
-        [geom for geom in polygon_gdf.geometry],
-        out_shape=data.shape,
-        transform=transform,
-        invert=True
-    )
-    inondation_mask = (data <= niveau_inondation) & mask
-    pixels_inondes_polygon = np.sum(inondation_mask)
-    return pixels_inondes_polygon
-
 # Génération d'une image de profondeur
 def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
@@ -182,70 +170,28 @@ def main():
     }
 
     if fichier_tiff:
-         try:
-             # Charger le fichier TIFF
-             data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
-             if data_tiff is not None:
-                 # Afficher les informations de base sur le fichier TIFF
-                 st.write(f"Dimensions : {data_tiff.shape}")
-                 st.write(f"Altitude : min {data_tiff.min()} m, max {data_tiff.max()} m")
-                 # Calculer la taille moyenne d'une unité
-                 taille_unite = calculer_taille_unite(bounds_tiff, data_tiff.shape[1], data_tiff.shape[0])
-                 st.write(f"Taille moyenne d'une unité : {taille_unite:.2f} m")
-                 niveau_inondation = st.slider(
-                     "Niveau d'inondation",
-                     float(data_tiff.min()),
-                     float(data_tiff.max()),
-                     step=0.1
-                 )
-                 if niveau_inondation is not None:
-                     # Calcul des pixels inondés
-                     pixels_inondes = calculer_pixels_inondes(data_tiff, niveau_inondation)
-                     # Calcul des surfaces inondées
-                     surface_m2, surface_ha = calculer_surface_inondee(pixels_inondes, taille_unite)
-                     st.write(f"Surface inondée : {surface_m2:.2f} m², ({surface_ha:.2f} ha)")
-                     # Génération de la carte interactive
-                     m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, **geojson_data)
-                     st_folium(m, width=700, height=500)
+        data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
+        if data_tiff is not None:
+            st.write(f"Dimensions : {data_tiff.shape}")
+            st.write(f"Altitude : min {data_tiff.min()} m, max {data_tiff.max()} m")
 
-    
-                
-                
-                
-                
-                
+            taille_unite = calculer_taille_unite(bounds_tiff, data_tiff.shape[1], data_tiff.shape[0])
+            st.write(f"Taille moyenne d'une unité : {taille_unite:.2f} m")
 
-                
-                
-                
-             else:
-                 st.error("Les données TIFF sont introuvables ou invalides.")
+            niveau_inondation = st.slider("Niveau d'inondation", float(data_tiff.min()), float(data_tiff.max()), step=0.1)
+            if niveau_inondation:
+                pixels_inondes = calculer_pixels_inondes(data_tiff, niveau_inondation)
+                surface_m2, surface_ha = calculer_surface_inondee(pixels_inondes, taille_unite)
+                st.write(f"Surface inondée : {surface_m2:.2f} m² ({surface_ha:.2f} ha)")
 
-         except Exception as e:
-             st.error(f"Une erreur est survenue lors du traitement du fichier TIFF : {e}")
-    
+            m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, **geojson_data)
+            st_folium(m, width=700, height=500)
+
 if __name__ == "__main__":
     main()
 
 
-                
-                     
-                    
-                
-            
-        
-            
-            
-            
 
-            # Sélection du niveau d'inondation
-            
-            
-
-        
-        
-
-   
 
 
 
