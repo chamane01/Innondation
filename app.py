@@ -84,6 +84,142 @@ def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     plt.savefig(output_path, format='png', bbox_inches='tight')
     plt.close()
 
+def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0):
+    # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
+    ax.set_xlim(X_min, X_max)
+    ax.set_ylim(Y_min, Y_max)
+
+    # Afficher la carte de fond OpenStreetMap en EPSG:32630
+    ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+
+    ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
+    ax.set_xticks(np.linspace(X_min, X_max, num=5))
+    ax.set_yticks(np.linspace(Y_min, Y_max, num=5))
+    ax.xaxis.set_tick_params(labeltop=True)
+    ax.yaxis.set_tick_params(labelright=True)
+
+    # Masquer les coordonnées aux extrémités
+    xticks = ax.get_xticks()
+    yticks = ax.get_yticks()
+    ax.set_xticklabels(
+        ["" if x == X_min or x == X_max else f"{int(x)}" for x in xticks],
+        rotation=label_rotation_x,
+    )
+    ax.set_yticklabels(
+        ["" if y == Y_min or y == Y_max else f"{int(y)}" for y in yticks],
+        rotation=label_rotation_y,
+        va="center"  # Alignement vertical des étiquettes Y
+    )
+
+    # Modifier rotation
+    for label in ax.get_xticklabels():
+        label.set_rotation(label_rotation_x)
+
+    for label in ax.get_yticklabels():
+        label.set_rotation(label_rotation_y)
+
+    # Ajouter les contours pour la profondeur et Barre verticale
+    depth_levels = np.linspace(grid_Z.min(), grid_Z.max(), 100)
+    cmap = plt.cm.plasma  # Couleurs allant de bleu à jaune
+    cont = ax.contourf(grid_X, grid_Y, grid_Z, levels=depth_levels, cmap=cmap)
+    cbar = plt.colorbar(cont, ax=ax)
+    cbar.set_label('Profondeur (m)', rotation=270, labelpad=20)
+
+    # Ajouter les bas-fonds en cyan
+    bas_fonds, seuil_bas_fond = detecter_bas_fonds(grid_Z)  # Appel à la fonction externe
+    ax.contourf(grid_X, grid_Y, bas_fonds, levels=[0.5, 1], colors='cyan', alpha=0.4, label='Bas-fonds')
+
+    # Ajouter une ligne de contour autour des bas-fonds
+    contour_lines = ax.contour(
+        grid_X, grid_Y, grid_Z,
+        levels=[seuil_bas_fond],  # Niveau correspondant au seuil des bas-fonds
+        colors='black',  # Couleur des contours
+        linewidths=1.5,
+        linestyles='solid',
+    )
+    intersections_x = np.linspace(X_min, X_max, num=5)
+    intersections_y = np.linspace(Y_min, Y_max, num=5)
+    for x in intersections_x:
+        for y in intersections_y:
+            ax.plot(x, y, 'k+', markersize=7, alpha=1.0)
+
+    # Ajouter des labels pour les contours
+    ax.clabel(contour_lines, inline=True, fmt={seuil_bas_fond: f"{seuil_bas_fond:.2f} m"}, fontsize=12, colors='white')
+
+    # Ajouter des lignes pour relier les tirets
+    for x in np.linspace(X_min, X_max, num=5):
+        ax.axvline(x, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
+    for y in np.linspace(Y_min, Y_max, num=5):
+        ax.axhline(y, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
+
+    # Affichage de la carte de profondeur
+    surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
+    st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
+    # Afficher la surface des bas-fonds dans les polygones
+    st.write(f"**Surface des bas-fonds dans les polygones** : {surface_bas_fond_polygones:.2f} hectares")
+
+    
+    # Ajouter des labels sous l'emprise de la carte de profondeur
+    label_y_position = Y_min - (Y_max - Y_min) * 0.10
+    ax.text(
+        X_min + (X_max - X_min) * 0,  # Position horizontale (10% de la largeur)
+        label_y_position,
+        f"Surface des bas-fonds :",
+        fontsize=12,
+        color="black",
+        ha="left",  # Aligné à gauche
+        va="top",# Aligné en haut
+        fontweight='bold',
+    )
+    ax.text(
+        X_min + (X_max - X_min) * 0.37,  # Position horizontale (10% de la largeur)
+        label_y_position - (Y_max - Y_min) * 0,  # Légèrement plus bas
+        f"{surface_bas_fond:.2f} hectares",
+        fontsize=12,
+        color="black",
+        ha="left",  # Aligné à gauche
+        va="top",   # Aligné en haut
+    )
+    
+    ax.text(
+        X_min + (X_max - X_min) * 0,  # Position horizontale (10% de la largeur)
+        label_y_position - (Y_max - Y_min) * 0.10,  # Légèrement plus bas
+        f"Surface des bas-fonds dans les polygones :",
+        fontsize=12,
+        color="black",
+        ha="left",  # Aligné à gauche
+        va="top",
+        fontweight='bold',# Aligné en haut
+    )
+    ax.text(
+        X_min + (X_max - X_min) * 0.67,  # Position horizontale (10% de la largeur)
+        label_y_position - (Y_max - Y_min) * 0.10,  # Légèrement plus bas
+       f"{surface_bas_fond_polygones:.2f} hectares",
+        fontsize=12,
+        color="black",
+        ha="left",  # Aligné à gauche
+        va="top",# Aligné en haut
+    )
+    ax.text(
+        X_min + (X_max - X_min) * 0,  # Position horizontale (10% de la largeur)
+        label_y_position - (Y_max - Y_min) * 0.20,  # Légèrement plus bas
+        f"Cote du bafond :",
+        fontsize=12,
+        color="black",
+        ha="left",  # Aligné à gauche
+        va="top",
+        fontweight='bold',# Aligné en haut
+    )
+    ax.text(
+        X_min + (X_max - X_min) * 0.26,  # Position horizontale (10% de la largeur)
+        label_y_position - (Y_max - Y_min) * 0.20,  # Légèrement plus bas
+        f"{seuil_bas_fond:.2f} m",
+        fontsize=12,
+        color="black",
+        ha="left",  # Aligné à gauche
+        va="top",# Aligné en haut
+    )
+
 # Calcul de la surface d'un polygone (en hectares)
 def calculer_surface_polygone(geojson_polygon):
     try:
