@@ -209,7 +209,7 @@ def main():
             m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, **geojson_data)
             st_folium(m, width=700, height=500)
             
-     if fichier_tiff and fichier_geojson_polygon:
+    if fichier_tiff and fichier_geojson_polygon:
         data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
         gdf_polygon = charger_geojson(fichier_geojson_polygon)
         if data_tiff is not None and gdf_polygon is not None:
