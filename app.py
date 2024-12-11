@@ -24,7 +24,6 @@ from matplotlib.colors import ListedColormap
 from folium.plugins import MeasureControl
 import geopandas as gpd
 from folium.plugins import Draw
-from rasterio.features import geometry_mask
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -38,20 +37,6 @@ def charger_tiff(fichier_tiff):
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None, None
-
-def calculer_pixels_dans_polygone(data, transform, polygon_geom):
-    try:
-        mask = geometry_mask(
-            [polygon_geom],
-            transform=transform,
-            invert=True,
-            out_shape=data.shape
-        )
-        pixels_dans_polygone = np.sum(mask)
-        return pixels_dans_polygone
-    except Exception as e:
-        st.error(f"Erreur lors du calcul des pixels dans le polygone : {e}")
-        return 0
 
 # Fonction pour charger un fichier GeoJSON
 def charger_geojson(fichier_geojson):
@@ -285,20 +270,6 @@ def main():
 
             m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, **geojson_data)
             st_folium(m, width=700, height=500)
-            
-    if fichier_tiff and fichier_geojson_polygon:
-        data_tiff, transform, crs, bounds_tiff = charger_tiff(fichier_tiff)
-        geojson_polygon = charger_geojson(fichier_geojson_polygon)
-
-        if data_tiff is not None and geojson_polygon is not None:
-            for _, row in geojson_polygon.iterrows():
-                polygon_geom = row.geometry
-                pixels_dans_polygone = calculer_pixels_dans_polygone(data_tiff, transform, polygon_geom)
-                st.write(f"Nombre de pixels dans le polygone : {pixels_dans_polygone}")
-
-            largeur_pixels, hauteur_pixels = data_tiff.shape
-            taille_unite = calculer_taille_unite(bounds_tiff, largeur_pixels, hauteur_pixels)
-            st.write(f"Taille approximative d'un pixel en mètres : {taille_unite:.2f}")
 
 if __name__ == "__main__":
     main()
