@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from folium.plugins import MeasureControl
 import geopandas as gpd
+from rasterio.mask import mask
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -73,7 +74,22 @@ def calculer_surface_inondee(nombre_pixels_inondes, taille_unite):
     surface_totale_m2 = nombre_pixels_inondes * surface_pixel
     surface_totale_hectares = surface_totale_m2 / 10000
     return surface_totale_m2, surface_totale_hectares
-
+# Fonction principale pour calculer la surface inondée
+def calculer_surface_inondee_polygonale(data_tiff, transform_tiff, geojson_polygon, niveau_inondation):
+    # Appliquer le masque
+    data_masquee = appliquer_masque_polygonale(data_tiff, transform_tiff, geojson_polygon)
+    
+    if data_masquee is not None:
+        # Calculer la taille d'une unité
+        taille_unite = calculer_taille_unite(data_tiff, data_masquee.shape[1], data_masquee.shape[0])
+        
+        # Identifier les pixels inondés
+        pixels_inondes = np.sum(data_masquee <= niveau_inondation)
+        
+        # Calculer la surface totale inondée
+        surface_totale_m2, surface_totale_ha = calculer_surface_inondee(pixels_inondes, taille_unite)
+        return surface_totale_m2, surface_totale_ha
+    return None, None
 # Génération d'une image de profondeur
 def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
@@ -93,6 +109,24 @@ def calculer_surface_polygone(geojson_polygon):
     except Exception as e:
         st.error(f"Erreur lors du calcul de la surface du polygone : {e}")
         return None, None
+# Fonction pour appliquer un masque à partir d'une polygonale GeoJSON
+def appliquer_masque_polygonale(data_tiff, transform_tiff, geojson_polygon):
+    try:
+        # Convertir la polygonale GeoJSON en coordonnées adaptées à rasterio
+        polygon_coords = [geojson_polygon.geometry.unary_union.__geo_interface__]
+        
+        # Appliquer le masque sur le GeoTIFF
+        masked_data, masked_transform = mask(
+            dataset=rasterio.open(data_tiff), 
+            shapes=polygon_coords, 
+            crop=True, 
+            filled=False
+        )
+        return masked_data[0]  # Retourne les données masquées
+    except Exception as e:
+        st.error(f"Erreur lors de l'application du masque : {e}")
+        return None
+
 
 # Carte Folium avec superposition
 def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_layers):
@@ -200,6 +234,21 @@ def main():
         "ville": charger_geojson(fichier_geojson_ville) if fichier_geojson_ville else None,
         "plantations": charger_geojson(fichier_geojson_plantations) if fichier_geojson_plantations else None,
     }
+
+    if fichier_tiff and fichier_geojson_polygon:
+        data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
+        geojson_polygon = charger_geojson(fichier_geojson_polygon)
+        
+        if data_tiff is not None and geojson_polygon is not None:
+            niveau_inondation = st.slider("Niveau d'inondation", float(data_tiff.min()), float(data_tiff.max()), step=0.1)
+            
+            # Calcul de la surface inondée dans l'emprise de la polygonale
+            surface_m2, surface_ha = calculer_surface_inondee_polygonale(data_tiff, transform_tiff, geojson_polygon, niveau_inondation)
+            
+            if surface_m2 is not None:
+                st.write(f"Surface inondée dans l'emprise : {surface_m2:.2f} m² ({surface_ha:.2f} ha)")
+
+    
     # Calcul du nombre de bâtiments dans l'emprise du polygone
     if fichier_geojson_batiments and fichier_geojson_polygon:
         geojson_batiments = charger_geojson(fichier_geojson_batiments)
