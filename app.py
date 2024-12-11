@@ -179,6 +179,43 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_la
         }
     )
     draw.add_to(m)
+
+    folium.JavascriptLink('https://cdn.jsdelivr.net/npm/leaflet-draw@latest/dist/leaflet.draw.js').add_to(m)
+    m.get_root().html.add_child(folium.Element("""
+    <script>
+    function onEachFeature(feature, layer) {
+        // Ajoute une popup pour chaque élément
+        if (feature.geometry.type === "Point") {
+            layer.bindPopup("Point: " + JSON.stringify(feature.geometry.coordinates));
+        } else if (feature.geometry.type === "Polygon") {
+            layer.bindPopup("Polygon: " + JSON.stringify(feature.geometry.coordinates));
+        } else if (feature.geometry.type === "LineString") {
+            layer.bindPopup("LineString: " + JSON.stringify(feature.geometry.coordinates));
+        }
+    }
+    var drawnItems = new L.FeatureGroup();
+    map.addLayer(drawnItems);
+
+    map.on(L.Draw.Event.CREATED, function (e) {
+        var type = e.layerType,
+            layer = e.layer;
+
+        if (type === "marker") {
+            layer.bindPopup("Point ajouté: " + JSON.stringify(layer.getLatLng()));
+        }
+        if (type === "polygon" || type === "polyline") {
+            var latlngs = layer.getLatLngs();
+            layer.bindPopup(type + " créé avec " + latlngs.length + " sommets");
+        }
+
+        drawnItems.addLayer(layer);
+    });
+
+    map.on("click", function(e) {
+        console.log("Clicked at " + e.latlng);
+    });
+    </script>
+    """))
     
     
 
