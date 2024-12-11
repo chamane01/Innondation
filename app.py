@@ -179,6 +179,8 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_la
         }
     )
     draw.add_to(m)
+    
+    
 
 
     # Ajouter les GeoJSON avec des styles spécifiques
