@@ -48,7 +48,15 @@ def charger_geojson(fichier_geojson):
 
 # Calcul de la taille d'un pixel
 def calculer_taille_pixel(transform):
-    return transform[0], -transform[4]
+    pixel_x = transform[0]  # Résolution en x (mètres)
+    pixel_y = -transform[4]  # Résolution en y (mètres)
+    return (pixel_x, pixel_y)
+
+def afficher_masque(data, mask):
+    plt.imshow(mask, cmap='gray', alpha=0.5)
+    plt.imshow(data, cmap='terrain', alpha=0.7)
+    plt.show()
+
 
 # Taille réelle d'une unité (pixel)
 def calculer_taille_unite(bounds_tiff, largeur_pixels, hauteur_pixels):
