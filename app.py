@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from folium.plugins import MeasureControl
 import geopandas as gpd
+from shapely.geometry import Point, box
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -83,29 +84,13 @@ def charger_polygones(uploaded_file):
             
             # Convertir le GeoDataFrame au CRS EPSG:32630
             polygones_gdf = polygones_gdf.to_crs(epsg=32630)
-            
-            # Créer une emprise (bounding box) basée sur les données
-            if 'X' in df.columns and 'Y' in df.columns:
-                emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
-                polygones_dans_emprise = polygones_gdf[polygones_gdf.intersects(emprise)]  # Filtrer les polygones dans l'emprise
-            else:
-                polygones_dans_emprise = polygones_gdf  # Si pas de colonne X/Y dans df, prendre tous les polygones
         else:
-            polygones_dans_emprise = None
+            polygones_gdf = None
     except Exception as e:
         st.error(f"Erreur lors du chargement des polygones : {e}")
-        polygones_dans_emprise = None
+        polygones_gdf = None
 
-    return polygones_dans_emprise
-
-
-# Fonction pour afficher les polygones
-def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
-    if gdf_polygones is not None and not gdf_polygones.empty:
-        gdf_polygones.plot(ax=ax, facecolor='none', edgecolor=edgecolor, linewidth=linewidth)
-    else:
-        st.warning("Aucun polygone à afficher dans l'emprise.")
-
+    return polygones_gdf
 
 # Fonction pour calculer la surface inondée dans les polygones
 def calculer_surface_inondee_dans_polygones(data, polygones, transform, niveau_inondation):
@@ -129,7 +114,6 @@ def calculer_surface_inondee_dans_polygones(data, polygones, transform, niveau_i
     # Calculer la surface inondée dans les polygones
     surface_inondee = gdf_points[gdf_points['inondee']].geometry.area.sum() / 10_000  # Convertir en hectares
     return surface_inondee
-
 
 # Fonction pour afficher la carte de profondeur
 def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0):
@@ -309,6 +293,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
