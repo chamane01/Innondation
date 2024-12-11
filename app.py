@@ -66,9 +66,8 @@ def calculer_taille_unite(bounds_tiff, largeur_pixels, hauteur_pixels):
 
 # Pixels inondés
 def calculer_pixels_inondes(data, niveau_inondation):
-    # Création du masque binaire pour l'inondation
-    inondation_mask = data <= niveau_inondation  # True pour les pixels inondés
-    return np.sum(inondation_mask)
+    return np.sum(data <= niveau_inondation)
+
 # Surface inondée
 def calculer_surface_inondee(nombre_pixels_inondes, taille_unite):
     surface_pixel = taille_unite ** 2
@@ -95,22 +94,7 @@ def calculer_surface_polygone(geojson_polygon):
     except Exception as e:
         st.error(f"Erreur lors du calcul de la surface du polygone : {e}")
         return None, None
-def calculer_pixels_inondes_polygone(data_tiff, bounds_tiff, niveau_inondation, geojson_polygon):
-    # Créer un masque pour la zone inondée
-    inondation_mask = data_tiff <= niveau_inondation
-    # Convertir le tableau en GeoDataFrame (donnée raster)
-    raster = rasterio.open(bounds_tiff)
-    transform = raster.transform
-    data_polygon = gpd.GeoDataFrame.from_features([{
-        "type": "Feature",
-        "geometry": geojson_polygon.geometry[0]
-    }], crs=geojson_polygon.crs)
-    
-    # Filtrer les pixels dans l'emprise du polygone
-    pixels_in_polygon = inondation_mask[data_polygon.geometry[0].intersects(raster.bounds)]
-    nombre_pixels_inondes = np.sum(pixels_in_polygon)
-    
-    return nombre_pixels_inondes
+
 # Carte Folium avec superposition
 def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_layers):
     lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
@@ -286,6 +270,18 @@ def main():
 
             m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, **geojson_data)
             st_folium(m, width=700, height=500)
+    if fichier_geojson_polygon and fichier_geojson_inondation:
+        geojson_polygon = charger_geojson(fichier_geojson_polygon)
+        geojson_inondation = charger_geojson(fichier_geojson_inondation)
+        
+        if geojson_polygon is not None and geojson_inondation is not None:
+            # Effectuer l'intersection
+            intersection = gpd.overlay(geojson_polygon, geojson_inondation, how='intersection')
+            
+            # Calculer l'aire de l'intersection
+            intersection["aire"] = intersection.geometry.area
+            total_aire_inondee = intersection["aire"].sum()
+            st.write(f"Total de l'aire inondée dans la zone polygonale: {total_aire_inondee:.2f} unités carrées")
 
 if __name__ == "__main__":
     main()
