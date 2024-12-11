@@ -161,7 +161,13 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_data
 
         # Si des données GeoJSON de routes sont fournies, les ajouter à la carte
         if geojson_data_routes is not None:
-            folium.GeoJson(geojson_data_routes).add_to(m)
+            folium.GeoJson(
+                geojson_data_routes,
+                style_function=lambda feature: {
+                    'color': couleur_routes,
+                    'weight': 2
+                }
+            ).add_to(m)
 
         # Si des données GeoJSON de polygonale sont fournies, les ajouter à la carte avec style
         if geojson_data_polygon is not None:
