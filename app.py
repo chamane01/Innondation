@@ -77,16 +77,26 @@ def calculer_surface_inondee(nombre_pixels_inondes, taille_unite):
 
 # Calculer le nombre de pixels dans un polygone
 def calculer_pixels_polygonale(data, polygon, transform):
-    # Convertir le polygone en coordonnées de pixels
-    rows, cols = rasterio.transform.rowcol(transform, [point[0] for point in polygon], [point[1] for point in polygon])
-    polygon_mask = np.zeros_like(data, dtype=np.uint8)
-
-    # Marquer les pixels à l'intérieur du polygone
-    for r, c in zip(rows, cols):
-        if 0 <= r < data.shape[0] and 0 <= c < data.shape[1]:
-            polygon_mask[r, c] = 1
-
-    return np.sum(polygon_mask)
+    if polygon.geom_type == 'MultiPolygon':
+        # Si c'est un MultiPolygon, nous devons l'itérer et traiter chaque polygone séparément
+        polygon_mask = np.zeros_like(data, dtype=np.uint8)
+        for poly in polygon.geoms:
+            rows, cols = rasterio.transform.rowcol(transform, [point[0] for point in poly.exterior.coords], [point[1] for point in poly.exterior.coords])
+            for r, c in zip(rows, cols):
+                if 0 <= r < data.shape[0] and 0 <= c < data.shape[1]:
+                    polygon_mask[r, c] = 1
+        return np.sum(polygon_mask)
+    elif polygon.geom_type == 'Polygon':
+        # Si c'est un simple Polygon
+        rows, cols = rasterio.transform.rowcol(transform, [point[0] for point in polygon.exterior.coords], [point[1] for point in polygon.exterior.coords])
+        polygon_mask = np.zeros_like(data, dtype=np.uint8)
+        for r, c in zip(rows, cols):
+            if 0 <= r < data.shape[0] and 0 <= c < data.shape[1]:
+                polygon_mask[r, c] = 1
+        return np.sum(polygon_mask)
+    else:
+        # Si la géométrie n'est ni un Polygon ni un MultiPolygon
+        raise ValueError("Le fichier GeoJSON contient une géométrie incompatible. Attendu un Polygon ou MultiPolygon.")
 
 # Génération d'une image de profondeur
 def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
