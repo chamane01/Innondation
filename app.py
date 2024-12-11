@@ -162,7 +162,22 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_la
     )
     measure_control.add_to(m)
 
-    
+
+    # Ajouter l'outil de dessin
+    draw = Draw(
+        export=True,  # Permet l'export des couches dessinées en GeoJSON
+        position='topleft',  # Position de l'icône sur la carte
+        draw_options={
+            'polyline': {'allowIntersection': False},  # Empêche l'intersection des lignes
+            'polygon': {'showArea': True},  # Affiche la surface des polygones
+            'circle': False,  # Désactive l'outil cercle
+            'circlemarker': False,  # Désactive l'outil cercle-marqueur
+        },
+        edit_options={
+            'remove': True  # Permet de supprimer des couches
+        }
+    )
+    draw.add_to(m)
     
     
 
