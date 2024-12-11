@@ -50,7 +50,14 @@ def charger_geojson(fichier_geojson):
 # Calcul de la taille d'un pixel
 def calculer_taille_pixel(transform):
     return transform[0], -transform[4]
-
+def appliquer_masque_polygon(data, polygon_geojson, transform):
+    # Convertir le GeoDataFrame en objets géométriques (polygones)
+    geometries = polygon_geojson.geometry
+    # Appliquer le masque en utilisant la géométrie
+    mask = geometry_mask(geometries, transform=transform, invert=True, out_shape=data.shape)
+    # Appliquer le masque à l'image des données
+    masked_data = np.ma.masked_array(data, mask=mask)
+    return masked_data
 # Taille réelle d'une unité (pixel)
 def calculer_taille_unite(bounds_tiff, largeur_pixels, hauteur_pixels):
     point1 = (bounds_tiff[1], bounds_tiff[0])
