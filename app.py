@@ -128,7 +128,7 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_la
     styles = {
         "routes": {"color": "orange", "weight": 2},
         "polygon": {"fillColor": "transparent", "color": "black", "weight": 2},
-        "pistes": {"color": "blue", "weight": 2},
+        "pistes": {"color": "brown", "weight": 2},
         "cours_eau": {"color": "cyan", "weight": 2},
         "batiments": {"fillColor": "red", "color": "red", "weight": 1, "fillOpacity": 0.5},
         "ville": {"fillColor": "green", "color": "green", "weight": 1, "fillOpacity": 0.3},
