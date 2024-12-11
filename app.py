@@ -37,27 +37,6 @@ def charger_tiff(fichier_tiff):
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None, None
 
-
-
-
-def generer_polygon_inonde(data_tiff, transform, niveau_inondation, geojson_polygon):
-    try:
-        inondation_mask = (data_tiff <= niveau_inondation)
-        results = (
-            {'properties': {'value': v}, 'geometry': s}
-            for i, (s, v) in enumerate(shapes(inondation_mask.astype(np.int16), transform=transform))
-        )
-        inondation_gdf = gpd.GeoDataFrame.from_features(results)
-        inondation_gdf = inondation_gdf.set_crs(geojson_polygon.crs)
-
-        intersection = gpd.overlay(inondation_gdf, geojson_polygon, how='intersection')
-        surface_totale_m2 = intersection.geometry.area.sum()
-        surface_totale_ha = surface_totale_m2 / 10000
-        return intersection, surface_totale_m2, surface_totale_ha
-    except Exception as e:
-        st.error(f"Erreur lors de la création du polygone inondé : {e}")
-        return None, None, None
-
 # Fonction pour charger un fichier GeoJSON
 def charger_geojson(fichier_geojson):
     try:
@@ -204,12 +183,6 @@ def main():
     st.markdown("### Téléchargez les fichiers nécessaires pour visualiser les données.")
 
     fichier_tiff = st.file_uploader("Fichier GeoTIFF", type=["tif"])
-    fichier_geojson_polygon = st.file_uploader("GeoJSON (polygone)", type=["geojson"])
-    niveau_inondation = st.slider("Niveau d'inondation (en mètres)", min_value=0.0, max_value=10.0, step=0.1)
-
-    
-
-    fichier_tiff = st.file_uploader("Fichier GeoTIFF", type=["tif"])
     fichier_geojson_routes = st.file_uploader("GeoJSON (routes)", type=["geojson"])
     fichier_geojson_polygon = st.file_uploader("GeoJSON (polygone)", type=["geojson"])
     fichier_geojson_pistes = st.file_uploader("GeoJSON (pistes)", type=["geojson"])
@@ -227,64 +200,6 @@ def main():
         "ville": charger_geojson(fichier_geojson_ville) if fichier_geojson_ville else None,
         "plantations": charger_geojson(fichier_geojson_plantations) if fichier_geojson_plantations else None,
     }
-
-
-
-    
-    fichier_geojson_polygon = fichier_geojson_polygon if 'fichier_geojson_polygon' in locals() else None
-
-    if niveau_inondation and fichier_geojson_polygon is not None:
-        geojson_polygon = charger_geojson(fichier_geojson_polygon)
-        if geojson_polygon is not None:
-            polygon_inonde, surface_inondee_m2, surface_inondee_ha = generer_polygon_inonde(
-                data_tiff, transform_tiff, niveau_inondation, geojson_polygon
-            )
-            if polygon_inonde is not None:
-                st.write(f"Nouvelle surface inondée dans le polygone : {surface_inondee_m2:.2f} m² ({surface_inondee_ha:.2f} ha)")
-                # Ajouter la nouvelle polygonale à la carte
-                folium.GeoJson(
-                    polygon_inonde,
-                    style_function=lambda x: {"color": "blue", "fillColor": "blue", "fillOpacity": 0.5}
-                ).add_to(m)
-        else:
-            st.error("Erreur lors du chargement ou de l'intersection du GeoJSON.")
-        
-    
-    
-        
-        
-            
-
-            
-            
-    
-        
-    if fichier_tiff and fichier_geojson_polygon:
-        # Charger les fichiers
-        data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
-        geojson_polygon = charger_geojson(fichier_geojson_polygon)
-
-        if data_tiff is not None and geojson_polygon is not None:
-            # Générer la carte
-            polygon_inonde, surface_inondee_m2, surface_inondee_ha = generer_polygon_inonde(
-                data_tiff, transform_tiff, niveau_inondation, geojson_polygon
-            )
-            if polygon_inonde is not None:
-                st.write(f"Surface inondée dans le polygone : {surface_inondee_m2:.2f} m² ({surface_inondee_ha:.2f} ha)")
-                m = folium.Map(location=[(bounds_tiff[1] + bounds_tiff[3]) / 2, (bounds_tiff[0] + bounds_tiff[2]) / 2], zoom_start=13)
-                folium.GeoJson(
-                    polygon_inonde,
-                    style_function=lambda x: {"color": "blue", "fillColor": "blue", "fillOpacity": 0.5}
-                ).add_to(m)
-                st_folium(m, width=700, height=500)
-            else:
-                st.error("Impossible de générer le polygone inondé.")
-        else:
-            st.error("Erreur lors du chargement des données TIFF ou GeoJSON.")
-    else:
-        st.warning("Veuillez téléverser les fichiers nécessaires.")
-
-    
     # Calcul du nombre de bâtiments dans l'emprise du polygone
     if fichier_geojson_batiments and fichier_geojson_polygon:
         geojson_batiments = charger_geojson(fichier_geojson_batiments)
