@@ -24,6 +24,7 @@ from matplotlib.colors import ListedColormap
 from folium.plugins import MeasureControl
 import geopandas as gpd
 from folium.plugins import Draw
+from shapely.geometry import shape
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
