@@ -143,30 +143,6 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_la
 
 
     
-    
-    
-
-
-    
-    
-         
-
-
-
-# Ajouter la superposition à la carte
-
-    
-    
-    
-
-
-
-
-
-
-
-
-    
     measure_control = MeasureControl(primary_length_unit='meters', primary_area_unit='sqmeters')
     measure_control.add_to(m)
 
