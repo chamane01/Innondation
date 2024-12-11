@@ -24,7 +24,6 @@ from matplotlib.colors import ListedColormap
 from folium.plugins import MeasureControl
 import geopandas as gpd
 from folium.plugins import Draw
-from shapely.geometry import shape
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -95,34 +94,6 @@ def calculer_surface_polygone(geojson_polygon):
     except Exception as e:
         st.error(f"Erreur lors du calcul de la surface du polygone : {e}")
         return None, None
-
-# Charger les polygones inondés à partir du GeoTIFF
-def charger_polygones_inondes(chemin_tiff, niveau_inondation):
-    with rasterio.open(chemin_tiff) as src:
-        data = src.read(1)  # Première bande
-        transform = src.transform
-        # Créer un masque des pixels inondés
-        masque_inondation = data <= niveau_inondation
-        nombre_pixels_inondes = calculer_pixels_inondes(masque_inondation, niveau_inondation)
-        # Calculer la surface totale inondée
-        taille_unite = src.res[0]  # Taille d'un pixel en unité de projection (mètre)
-        surface_m2, surface_hectares = calculer_surface_inondee(nombre_pixels_inondes, taille_unite)
-        return surface_m2, surface_hectares
-
-# Charger le fichier GeoJSON représentant la zone d'intérêt
-def charger_zone_interet(fichier_geojson):
-    return gpd.read_file(fichier_geojson)
-
-# Calculer la surface d'intersection entre la zone d'intérêt et la zone inondée
-def calculer_surface_intersection(fichier_tiff, fichier_geojson, niveau_inondation):
-    # Charger la zone inondée
-    surface_m2, surface_hectares = charger_polygones_inondes(fichier_tiff, niveau_inondation)
-    
-    # Charger la zone d'intérêt depuis le GeoJSON
-    zone_interet = charger_zone_interet(fichier_geojson)
-
-    # Retourner la surface inondée dans la zone d'intérêt
-    return surface_m2, surface_hectares
 
 # Carte Folium avec superposition
 def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_layers):
@@ -237,13 +208,10 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_la
 def main():
     st.title("Analyse des zones inondées")
     st.markdown("### Téléchargez les fichiers nécessaires pour visualiser les données.")
-    fichier_geojson_polygon = st.file_uploader("GeoJSON (polygone)", type=["geojson"], key="geojson_uploader")
-    fichier_tiff = st.file_uploader("GeoTIFF (modèle d'inondation)", type=["tif"], key="tiff_uploader")
 
-
-    
+    fichier_tiff = st.file_uploader("Fichier GeoTIFF", type=["tif"])
     fichier_geojson_routes = st.file_uploader("GeoJSON (routes)", type=["geojson"])
-    
+    fichier_geojson_polygon = st.file_uploader("GeoJSON (polygone)", type=["geojson"])
     fichier_geojson_pistes = st.file_uploader("GeoJSON (pistes)", type=["geojson"])
     fichier_geojson_cours_eau = st.file_uploader("GeoJSON (cours d'eau)", type=["geojson"])
     fichier_geojson_batiments = st.file_uploader("GeoJSON (bâtiments)", type=["geojson"])
@@ -273,29 +241,6 @@ def main():
             # Compter le nombre de bâtiments
             nombre_batiments = len(intersection)
             st.write(f"Nombre de bâtiments dans l'emprise du polygone : {nombre_batiments}")
-            
-    fichier_geojson_polygon = st.file_uploader("GeoJSON (polygone)", type=["geojson"])
-    fichier_tiff = st.file_uploader("GeoTIFF (modèle d'inondation)", type=["tif"])
-    if fichier_geojson_polygon and fichier_tiff:
-        niveau_inondation = st.slider("Niveau d'inondation", min_value=0, max_value=100, value=10)
-        # Calculer la surface inondée
-        surface_m2, surface_hectares = calculer_surface_intersection(fichier_tiff, fichier_geojson_polygon, niveau_inondation)
-        # Affichage des résultats
-        st.write(f"Surface totale inondée dans la zone d'intérêt: {surface_m2:.2f} m²")
-        st.write(f"Surface totale inondée dans la zone d'intérêt: {surface_hectares:.2f} hectares")
-    
-    
-    
-    
-    
-    
-    
-    
-
-
-
-
-    
 
 
 
