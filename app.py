@@ -83,15 +83,18 @@ def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     plt.title("Carte de profondeur")
     plt.savefig(output_path, format='png', bbox_inches='tight')
     plt.close()
-def calculer_surface_inondee_pour_polygon(data, niveau_inondation, polygon, transform):
+def calculer_surface_inondee_pour_polygon(data, niveau_inondation, polygon_gdf, transform):
     # Créer un masque géospatial avec le polygone
     mask = np.zeros(data.shape, dtype=bool)
 
-    # Récupérer les coordonnées du polygone dans le système de coordonnées du raster
-    poly = shape(polygon.geometry[0])  # Assurez-vous que votre polygone est sous forme de géométrie Shapely
-    rows, cols = rasterio.transform.rowcol(transform, *zip(*poly.exterior.coords))
+    # Récupérer la géométrie du polygone
+    polygon = polygon_gdf.geometry[0]  # Assurez-vous que vous avez un polygone valide
 
-    # Remplir le masque pour les pixels à l'intérieur du polygone
+    # Transformez les coordonnées du polygone en indices du raster
+    coords = np.array(list(polygon.exterior.coords))
+    rows, cols = rasterio.transform.rowcol(transform, coords[:, 0], coords[:, 1])
+
+    # Créer un masque à l'intérieur du polygone
     mask[rows, cols] = True
 
     # Calculer le nombre de pixels inondés à l'intérieur du polygone
@@ -189,13 +192,23 @@ def main():
 
     if fichier_geojson_polygon:
         polygon_gdf = charger_geojson(fichier_geojson_polygon)
-        if polygon_gdf is not None:
-            # Assurez-vous que le polygone est en géométrie Shapely
-            polygon = polygon_gdf
-            st.write(f"Polygone chargé : {polygon.geometry}")
-            # Calculer la surface inondée pour le polygone
-            surface_m2_polygon, surface_ha_polygon = calculer_surface_inondee_pour_polygon(data_tiff, niveau_inondation, polygon, transform_tiff)
-            st.write(f"Surface inondée dans le polygone : {surface_m2_polygon:.2f} m² ({surface_ha_polygon:.2f} ha)")
+        if polygon_gdf is not None and not polygon_gdf.empty:
+            # Vérifier si la géométrie est valide
+            polygon = polygon_gdf.geometry[0]  # Charger le premier polygone
+            if polygon.is_valid:
+                st.write(f"Polygone chargé : {polygon}")
+
+                # Calculer la surface inondée pour le polygone
+                surface_m2_polygon, surface_ha_polygon = calculer_surface_inondee_pour_polygon(data_tiff, niveau_inondation, polygon_gdf, transform_tiff)
+                st.write(f"Surface inondée dans le polygone : {surface_m2_polygon:.2f} m² ({surface_ha_polygon:.2f} ha)")
+            else:
+                st.error("La géométrie du polygone est invalide.")
+
+        else:
+            st.error("Aucun polygone valide trouvé dans le fichier GeoJSON.")
+
+        
+        
     
 
 
