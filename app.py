@@ -422,6 +422,44 @@ def main():
 
             m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, **geojson_data)
             st_folium(m, width=700, height=500)
+    # Charger les polygones
+    polygones_dans_emprise = charger_polygones(uploaded_file)
+
+    # Si des polygones sont chargés, utiliser leur emprise pour ajuster les limites
+    if polygones_dans_emprise is not None:
+        # Calculer les limites du polygone
+        X_min_polygone, Y_min_polygone, X_max_polygone, Y_max_polygone = polygones_dans_emprise.total_bounds
+        
+        # Calculer les limites de la carte de profondeur
+        X_min_depth, Y_min_depth, X_max_depth, Y_max_depth = grid_X.min(), grid_Y.min(), grid_X.max(), grid_Y.max()
+
+        # Vérifier si l'emprise de la carte de profondeur couvre celle des polygones
+        if (X_min_depth <= X_min_polygone and X_max_depth >= X_max_polygone and
+            Y_min_depth <= Y_min_polygone and Y_max_depth >= Y_max_polygone):
+            X_min, Y_min, X_max, Y_max = X_min_depth, Y_min_depth, X_max_depth, Y_max_depth
+        else:
+            marge = 0.1
+            X_range = X_max_polygone - X_min_polygone
+            Y_range = Y_max_polygone - Y_min_polygone
+            
+            X_min = min(X_min_depth, X_min_polygone - X_range * marge)
+            Y_min = min(Y_min_depth, Y_min_polygone - Y_range * marge)
+            X_max = max(X_max_depth, X_max_polygone + X_range * marge)
+            Y_max = max(Y_max_depth, Y_max_polygone + Y_range * marge)
+
+        # Calculer les bas-fonds
+        bas_fonds, _ = detecter_bas_fonds(grid_Z)
+
+        # Calculer la surface des bas-fonds à l'intérieur des polygones
+        surface_bas_fond_polygones = calculer_surface_bas_fonds_polygones(
+            polygones_dans_emprise, bas_fonds, grid_X, grid_Y
+        )
+
+        # Affichage de la carte
+        fig, ax = plt.subplots(figsize=(10, 10))
+        generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=-90)
+        afficher_polygones(ax, polygones_dans_emprise)
+        st.pyplot(fig)        
 
 if __name__ == "__main__":
     main()
