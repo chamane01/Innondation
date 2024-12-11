@@ -23,10 +23,6 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from folium.plugins import MeasureControl
 import geopandas as gpd
-from shapely.geometry import Polygon, shape
-from shapely.geometry import Polygon, MultiPolygon
-import geopandas as gpd
-import rasterio.mask
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -75,50 +71,6 @@ def calculer_pixels_inondes(data, niveau_inondation):
 def calculer_surface_inondee(nombre_pixels_inondes, taille_unite):
     surface_pixel = taille_unite ** 2
     surface_totale_m2 = nombre_pixels_inondes * surface_pixel
-    surface_totale_hectares = surface_totale_m2 / 10000
-    return surface_totale_m2, surface_totale_hectares
-
-# Calcul de la surface inondée dans le polygone
-def calculer_pixels_inondes_dans_polygone(data, polygon, transform, niveau_inondation):
-    try:
-        # Vérification du type de géométrie
-        if isinstance(polygon, MultiPolygon):
-            # Si c'est un MultiPolygon, on traite chaque polygone individuellement
-            polygons = [geom for geom in polygon.geoms]
-        elif isinstance(polygon, Polygon):
-            polygons = [polygon]
-        else:
-            raise ValueError("La géométrie fournie n'est ni un Polygon ni un MultiPolygon.")
-
-        # Initialisation du masque
-        inondation_mask = np.zeros(data.shape, dtype=bool)
-
-        for poly in polygons:
-            # Conversion des coordonnées en indices de raster
-            polygon_coords = [
-                list(map(lambda x: ~transform * x, list(poly.exterior.coords)))
-            ]
-
-            # Création du masque pour le polygone
-            poly_mask = rasterio.features.geometry_mask(
-                [Polygon(polygon_coords)],
-                transform=transform,
-                invert=True,
-                out_shape=data.shape,
-            )
-
-            # Appliquer le masque et vérifier les pixels inondés
-            inondation_mask |= (data <= niveau_inondation) & poly_mask
-
-        # Calcul des pixels inondés
-        return np.sum(inondation_mask)
-    except Exception as e:
-        raise RuntimeError(f"Erreur lors du calcul des pixels inondés dans le polygone : {e}")
-
-# Surface inondée dans le polygone
-def calculer_surface_inondee_dans_polygone(pixels_inondes_polygone, taille_unite):
-    surface_pixel = taille_unite ** 2
-    surface_totale_m2 = pixels_inondes_polygone * surface_pixel
     surface_totale_hectares = surface_totale_m2 / 10000
     return surface_totale_m2, surface_totale_hectares
 
@@ -232,19 +184,11 @@ def main():
                 surface_m2, surface_ha = calculer_surface_inondee(pixels_inondes, taille_unite)
                 st.write(f"Surface inondée : {surface_m2:.2f} m² ({surface_ha:.2f} ha)")
 
-                # Pour le calcul de la surface inondée dans un polygone spécifique
-                if geojson_data.get("polygon") is not None:
-                    polygon = geojson_data["polygon"].geometry.iloc[0]
-                    pixels_inondes_polygone = calculer_pixels_inondes_dans_polygone(data_tiff, polygon, transform_tiff)
-                    surface_m2_poly, surface_ha_poly = calculer_surface_inondee_dans_polygone(pixels_inondes_polygone, taille_unite)
-                    st.write(f"Surface inondée dans le polygone : {surface_m2_poly:.2f} m² ({surface_ha_poly:.2f} ha)")
-
             m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, **geojson_data)
             st_folium(m, width=700, height=500)
 
 if __name__ == "__main__":
     main()
-
 
 
 
