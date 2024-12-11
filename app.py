@@ -302,19 +302,21 @@ def main():
 
             m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, **geojson_data)
             st_folium(m, width=700, height=500)
-    if data is not None and geojson_polygon is not None:
-        # Définir un seuil pour l'inondation
-        niveau_inondation = st.slider("Définir le niveau d'inondation", float(np.nanmin(data)), float(np.nanmax(data)), value=float(np.nanmean(data)))
+            
+    if fichier_tiff and fichier_geojson_polygon:
+         # Charger les données
+        data, transform, crs, bounds = charger_tiff(fichier_tiff)
+        geojson_polygon = charger_geojson(fichier_geojson_polygon)
+        if data is not None and geojson_polygon is not None:
+            # Définir un seuil pour l'inondation
+            niveau_inondation = st.slider("Définir le niveau d'inondation", float(np.nanmin(data)), float(np.nanmax(data)), value=float(np.nanmean(data)))
+            # Calculer la surface inondée dans le polygone
+            surface_m2, surface_ha = calculer_surface_inondee_dans_polygone(data, transform, geojson_polygon, niveau_inondation)
+            if surface_m2 is not None:
+                st.write(f"Surface inondée dans le polygone : {surface_m2:.2f} m² ({surface_ha:.2f} hectares)")
+            else:
+                st.error("Impossible de calculer la surface inondée.")
         
-        # Calculer la surface inondée dans le polygone
-        surface_m2, surface_ha = calculer_surface_inondee_dans_polygone(data, transform, geojson_polygon, niveau_inondation)
-        
-        if surface_m2 is not None:
-            st.write(f"Surface inondée dans le polygone : {surface_m2:.2f} m² ({surface_ha:.2f} hectares)")
-        else:
-            st.error("Impossible de calculer la surface inondée.")
-
-
 
 if __name__ == "__main__":
     main()
