@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from folium.plugins import MeasureControl
 import geopandas as gpd
+from rasterio.features import geometry_mask
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -83,6 +84,19 @@ def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     plt.title("Carte de profondeur")
     plt.savefig(output_path, format='png', bbox_inches='tight')
     plt.close()
+
+def calculer_pixels_dans_polygone(data_tiff, transform_tiff, gdf_polygon):
+    try:
+        # Extraire la géométrie du polygone
+        geometries = [geom for geom in gdf_polygon.geometry]
+        mask = geometry_mask(geometries, transform=transform_tiff, invert=True, out_shape=data_tiff.shape)
+        
+        # Sélectionner les pixels à l'intérieur du masque (zones magenta)
+        pixels_dans_polygone = data_tiff[mask]
+        return pixels_dans_polygone
+    except Exception as e:
+        st.error(f"Erreur lors du calcul des pixels dans le polygone : {e}")
+        return None
 
 # Carte Folium avec superposition
 def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_layers):
@@ -191,6 +205,26 @@ def main():
         "plantations": charger_geojson(fichier_geojson_plantations) if fichier_geojson_plantations else None,
     }
 
+
+    if fichier_tiff and fichier_geojson_polygon:
+        gdf_polygon = geojson_data["polygon"]
+        data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
+    
+        if data_tiff is not None and gdf_polygon is not None:
+            
+            st.write(f"Dimensions : {data_tiff.shape}")
+            taille_unite = calculer_taille_unite(bounds_tiff, data_tiff.shape[1], data_tiff.shape[0])
+            st.write(f"Taille moyenne d'une unité : {taille_unite:.2f} m")
+
+            # Calcul des pixels dans le polygone
+            pixels_dans_polygone = calculer_pixels_dans_polygone(data_tiff, transform_tiff, gdf_polygon)
+            if pixels_dans_polygone is not None:
+                
+                nombre_pixels = len(pixels_dans_polygone)
+                surface_m2, surface_ha = calculer_surface_inondee(nombre_pixels, taille_unite)
+                st.write(f"Surface magenta dans le polygone : {surface_m2:.2f} m² ({surface_ha:.2f} ha)")
+    
+
     if fichier_tiff:
         data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
         if data_tiff is not None:
@@ -208,6 +242,8 @@ def main():
 
             m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, **geojson_data)
             st_folium(m, width=700, height=500)
+
+
 
 if __name__ == "__main__":
     main()
