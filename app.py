@@ -217,23 +217,37 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_la
 # Interface principale Streamlit
 def main():
     def main():
-    st.title("Calcul de la surface inondée dans l'emprise")
+        st.title("Calcul de la surface inondée dans l'emprise")
+        fichier_tiff = st.file_uploader("Téléverser un fichier GeoTIFF (altitudes/profondeurs)", type=["tif", "tiff"])
+        fichier_geojson_polygon = st.file_uploader("Téléverser un fichier GeoJSON (emprise polygonale)", type=["geojson"])
+        if fichier_tiff and fichier_geojson_polygon:
+            data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
+            geojson_polygon = charger_geojson(fichier_geojson_polygon)
+
+            if data_tiff is not None and geojson_polygon is not None:
+                niveau_inondation = st.slider("Niveau d'inondation", float(data_tiff.min()), float(data_tiff.max()), step=0.1)
+                surface_inondee = calculer_surface_inondee_dans_emprise(data_tiff, transform_tiff, fichier_geojson_polygon, niveau_inondation)
+                if surface_inondee is not None:
+                    st.write(f"Surface inondée dans l'emprise : {surface_inondee:.2f} m²")
+            
+            
     
-    fichier_tiff = st.file_uploader("Téléverser un fichier GeoTIFF (altitudes/profondeurs)", type=["tif", "tiff"])
-    fichier_geojson_polygon = st.file_uploader("Téléverser un fichier GeoJSON (emprise polygonale)", type=["geojson"])
     
-    if fichier_tiff and fichier_geojson_polygon:
-        data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
-        geojson_polygon = charger_geojson(fichier_geojson_polygon)
+    
+    
+    
+    
         
-        if data_tiff is not None and geojson_polygon is not None:
-            niveau_inondation = st.slider("Niveau d'inondation", float(data_tiff.min()), float(data_tiff.max()), step=0.1)
+        
+        
+        
+            
             
             # Calcul de la surface inondée dans l'emprise de la polygonale
-            surface_inondee = calculer_surface_inondee_dans_emprise(data_tiff, transform_tiff, fichier_geojson_polygon, niveau_inondation)
             
-            if surface_inondee is not None:
-                st.write(f"Surface inondée dans l'emprise : {surface_inondee:.2f} m²")
+            
+            
+                
 
     
 
