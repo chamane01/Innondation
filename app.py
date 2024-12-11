@@ -23,7 +23,6 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from folium.plugins import MeasureControl
 import geopandas as gpd
-from shapely.geometry import Point, box
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -75,87 +74,15 @@ def calculer_surface_inondee(nombre_pixels_inondes, taille_unite):
     surface_totale_hectares = surface_totale_m2 / 10000
     return surface_totale_m2, surface_totale_hectares
 
-# Fonction pour charger les polygones
-def charger_polygones(uploaded_file):
-    try:
-        if uploaded_file is not None:
-            # Lire le fichier GeoJSON téléchargé
-            polygones_gdf = gpd.read_file(uploaded_file)
-            
-            # Convertir le GeoDataFrame au CRS EPSG:32630
-            polygones_gdf = polygones_gdf.to_crs(epsg=32630)
-        else:
-            polygones_gdf = None
-    except Exception as e:
-        st.error(f"Erreur lors du chargement des polygones : {e}")
-        polygones_gdf = None
-
-    return polygones_gdf
-
-# Fonction pour calculer la surface inondée dans les polygones
-def calculer_surface_inondee_dans_polygones(data, polygones, transform, niveau_inondation):
-    # Créer un GeoDataFrame à partir de l'image de données
-    rows, cols = data.shape
-    X, Y = np.meshgrid(np.arange(cols), np.arange(rows))
-    coords = np.stack([X.flatten(), Y.flatten()], axis=-1)
-
-    # Convertir les coordonnées des pixels en coordonnées géographiques
-    lon, lat = rasterio.transform.xy(transform, coords[:, 1], coords[:, 0])
-    points = [Point(lon[i], lat[i]) for i in range(len(lon))]
-    gdf_points = gpd.GeoDataFrame(geometry=points, crs="EPSG:4326")
-
-    # Filtrer les points qui sont dans les polygones
-    gdf_points = gdf_points[gdf_points.geometry.within(polygones.geometry.unary_union)]
-    
-    # Filtrer les points en fonction du niveau d'inondation
-    inondee = data.flatten() <= niveau_inondation
-    gdf_points['inondee'] = inondee
-
-    # Calculer la surface inondée dans les polygones
-    surface_inondee = gdf_points[gdf_points['inondee']].geometry.area.sum() / 10_000  # Convertir en hectares
-    return surface_inondee
-
-# Fonction pour afficher la carte de profondeur
-def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0):
-    # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
-    ax.set_xlim(X_min, X_max)
-    ax.set_ylim(Y_min, Y_max)
-
-    # Afficher la carte de fond OpenStreetMap en EPSG:32630
-    ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
-
-    ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
-    ax.set_xticks(np.linspace(X_min, X_max, num=5))
-    ax.set_yticks(np.linspace(Y_min, Y_max, num=5))
-    ax.xaxis.set_tick_params(labeltop=True)
-    ax.yaxis.set_tick_params(labelright=True)
-
-    # Masquer les coordonnées aux extrémités
-    xticks = ax.get_xticks()
-    yticks = ax.get_yticks()
-    ax.set_xticklabels(
-        ["" if x == X_min or x == X_max else f"{int(x)}" for x in xticks],
-        rotation=label_rotation_x,
-    )
-    ax.set_yticklabels(
-        ["" if y == Y_min or y == Y_max else f"{int(y)}" for y in yticks],
-        rotation=label_rotation_y,
-        va="center"  # Alignement vertical des étiquettes Y
-    )
-
-    # Modifier rotation
-    for label in ax.get_xticklabels():
-        label.set_rotation(label_rotation_x)
-
-    for label in ax.get_yticklabels():
-        label.set_rotation(label_rotation_y)
-
-    # Ajouter les contours pour la profondeur et Barre verticale
-    depth_levels = np.linspace(grid_Z.min(), grid_Z.max(), 100)
-    cmap = plt.cm.plasma  # Couleurs allant de bleu à jaune
-    cont = ax.contourf(grid_X, grid_Y, grid_Z, levels=depth_levels, cmap=cmap)
-    cbar = plt.colorbar(cont, ax=ax)
-    cbar.set_label('Profondeur (m)', rotation=270, labelpad=20)
+# Génération d'une image de profondeur
+def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
+    extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
+    plt.figure(figsize=(8, 6))
+    plt.imshow(data_tiff, cmap='terrain', extent=extent)
+    plt.colorbar(label="Altitude (m)")
+    plt.title("Carte de profondeur")
+    plt.savefig(output_path, format='png', bbox_inches='tight')
+    plt.close()
 
 # Carte Folium avec superposition
 def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_layers):
@@ -223,8 +150,6 @@ def main():
     st.title("Analyse des zones inondées")
     st.markdown("### Téléchargez les fichiers nécessaires pour visualiser les données.")
 
-    uploaded_file = st.file_uploader("Téléverser un fichier GeoJSON pour les polygones", type="geojson")
-
     fichier_tiff = st.file_uploader("Fichier GeoTIFF", type=["tif"])
     fichier_geojson_routes = st.file_uploader("GeoJSON (routes)", type=["geojson"])
     fichier_geojson_polygon = st.file_uploader("GeoJSON (polygone)", type=["geojson"])
@@ -243,35 +168,6 @@ def main():
         "ville": charger_geojson(fichier_geojson_ville) if fichier_geojson_ville else None,
         "plantations": charger_geojson(fichier_geojson_plantations) if fichier_geojson_plantations else None,
     }
-
-    polygones_dans_emprise = charger_polygones(uploaded_file)
-
-    if fichier_tiff:
-        # Charger le fichier GeoTIFF
-        data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
-        
-        if data_tiff is not None:
-            # Affichage des informations sur l'image
-            st.write(f"Dimensions : {data_tiff.shape}")
-            st.write(f"Altitude : min {data_tiff.min()} m, max {data_tiff.max()} m")
-            
-            # Définir le niveau d'inondation
-            niveau_inondation = st.slider("Niveau d'inondation", float(data_tiff.min()), float(data_tiff.max()), step=0.1)
-            
-            if niveau_inondation:
-                # Calcul de la surface inondée dans les polygones
-                surface_inondee = calculer_surface_inondee_dans_polygones(
-                    data_tiff, polygones_dans_emprise, transform_tiff, niveau_inondation
-                )
-                
-                st.write(f"**Surface inondée dans les polygones** : {surface_inondee:.2f} hectares")
-            
-            # Affichage de la carte de profondeur et des polygones
-            fig, ax = plt.subplots(figsize=(10, 10))
-            generate_depth_map(ax, data_tiff, bounds_tiff, label_rotation_x=0, label_rotation_y=-90)
-            afficher_polygones(ax, polygones_dans_emprise)
-            st.pyplot(fig)
-    
 
     if fichier_tiff:
         data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
@@ -293,7 +189,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 
 
