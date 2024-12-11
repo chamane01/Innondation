@@ -74,6 +74,28 @@ def calculer_surface_inondee(nombre_pixels_inondes, taille_unite):
     surface_totale_hectares = surface_totale_m2 / 10000
     return surface_totale_m2, surface_totale_hectares
 
+def calculer_surface_inondee_polygonale(data_tiff, transform_tiff, niveau_inondation, polygon):
+    rows, cols = data_tiff.shape
+    x_coords, y_coords = np.meshgrid(
+        np.arange(cols) * transform_tiff[0] + transform_tiff[2],
+        np.arange(rows) * transform_tiff[4] + transform_tiff[5]
+    )
+    points = np.column_stack((x_coords.ravel(), y_coords.ravel()))
+    gdf_points = gpd.GeoDataFrame(geometry=gpd.points_from_xy(points[:, 0], points[:, 1]), crs="EPSG:4326")
+    
+    polygon_gdf = gpd.GeoDataFrame(geometry=[polygon], crs="EPSG:4326")
+    in_polygon = gdf_points.sjoin(polygon_gdf, predicate="within")
+    mask_polygon = np.zeros_like(data_tiff, dtype=bool)
+    mask_polygon[in_polygon.index] = True
+
+    inondation_mask = data_tiff <= niveau_inondation
+    mask_inondee_polygonale = inondation_mask & mask_polygon
+    pixels_inondes_polygonale = np.sum(mask_inondee_polygonale)
+    
+    taille_pixel = calculer_taille_unite(transform_tiff, cols, rows)
+    surface_m2, surface_ha = calculer_surface_inondee(pixels_inondes_polygonale, taille_pixel)
+    return surface_m2, surface_ha
+
 # Génération d'une image de profondeur
 def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
@@ -186,6 +208,19 @@ def main():
 
             m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, **geojson_data)
             st_folium(m, width=700, height=500)
+            
+     if fichier_tiff and fichier_geojson_polygon:
+        data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
+        gdf_polygon = charger_geojson(fichier_geojson_polygon)
+        if data_tiff is not None and gdf_polygon is not None:
+            st.write(f"Dimensions : {data_tiff.shape}")
+            st.write(f"Altitude : min {data_tiff.min()} m, max {data_tiff.max()} m")
+
+            niveau_inondation = st.slider("Niveau d'inondation", float(data_tiff.min()), float(data_tiff.max()), step=0.1)
+            if niveau_inondation:
+                polygon = gdf_polygon.geometry.iloc[0]
+                surface_m2, surface_ha = calculer_surface_inondee_polygonale(data_tiff, transform_tiff, niveau_inondation, polygon)
+                st.write(f"Surface inondée dans le polygone : {surface_m2:.2f} m² ({surface_ha:.2f} ha)")
 
 if __name__ == "__main__":
     main()
