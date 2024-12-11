@@ -203,17 +203,13 @@ def main():
 
     if fichier_tiff:
         data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
-
+        #afficher surface polygone
         if fichier_geojson_polygon:
              geojson_polygon = charger_geojson(fichier_geojson_polygon)
              if geojson_polygon is not None:
                  surface_m2, surface_ha = calculer_surface_polygone(geojson_polygon)
                  st.write(f"Surface du polygone : {surface_m2:.2f} m² ({surface_ha:.2f} ha)")
         
-        
-            
-            
-
 
         
         if data_tiff is not None:
