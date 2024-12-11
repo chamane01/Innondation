@@ -80,17 +80,22 @@ def calculer_surface_inondee_polygonale(data, transform, polygon_gdf, niveau_ino
     if polygon_gdf.empty or polygon_gdf.geometry.isnull().all():
         st.error("Le fichier GeoJSON ne contient pas de géométrie valide.")
         return 0, 0
+    
+    # Extraction des géométries du GeoDataFrame
+    geoms = [geom for geom in polygon_gdf.geometry]
 
-    # Créer le masque avec les géométries du polygone
     try:
-        mask = rasterio.features.geometry_mask(
-            [geom for geom in polygon_gdf.geometry],
-            transform=transform,
-            invert=True,
-            out_shape=data.shape
-        )
-        pixels_inondes_polygon = np.sum((data <= niveau_inondation) & mask)
-        return calculer_surface_inondee(pixels_inondes_polygon, taille_unite)
+        # Utilisation de rasterio.mask pour découper le raster avec le polygone
+        out_image, out_transform = mask(dataset=rasterio.open(data), shapes=geoms, crop=True)
+        out_image = out_image[0]  # On prend la première bande si c'est un raster multi-bande
+
+        # Créer un masque où les pixels sont inondés
+        inondation_mask = out_image <= niveau_inondation
+        pixels_inondes_polygon = np.sum(inondation_mask)
+
+        # Calcul de la surface inondée
+        surface_m2, surface_ha = calculer_surface_inondee(pixels_inondes_polygon, taille_unite)
+        return surface_m2, surface_ha
     except Exception as e:
         st.error(f"Erreur lors du calcul du masque : {e}")
         return 0, 0
