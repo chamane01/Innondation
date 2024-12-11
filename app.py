@@ -276,7 +276,7 @@ def main():
         
         if geojson_polygon is not None and geojson_inondation is not None:
             # Effectuer l'intersection
-            intersection = gpd.overlay(geojson_polygon, geojson_inondation, how='intersection')
+            intersection = gpd.overlay(fichier_geojson_polygon, fichier_geojson_inondation, how='intersection')
             
             # Calculer l'aire de l'intersection
             intersection["aire"] = intersection.geometry.area
