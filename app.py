@@ -79,11 +79,41 @@ def calculer_surface_inondee(nombre_pixels_inondes, taille_unite):
     return surface_totale_m2, surface_totale_hectares
 
 # Calcul de la surface inondée dans le polygone
-def calculer_pixels_inondes_dans_polygone(data, polygon, transform):
-    # Convertir les coordonnées du polygone dans le système de coordonnées du raster
-    polygon_coords = [list(map(lambda x: ~transform * x, list(polygon.exterior.coords)))]
-    out_image, out_transform = rasterio.mask.mask(data, polygon_coords, crop=True)
-    return np.sum(out_image <= niveau_inondation)
+def calculer_pixels_inondes_dans_polygone(data, polygon, transform, niveau_inondation):
+    try:
+        # Vérification du type de géométrie
+        if isinstance(polygon, MultiPolygon):
+            # Si c'est un MultiPolygon, on traite chaque polygone individuellement
+            polygons = [geom for geom in polygon.geoms]
+        elif isinstance(polygon, Polygon):
+            polygons = [polygon]
+        else:
+            raise ValueError("La géométrie fournie n'est ni un Polygon ni un MultiPolygon.")
+
+        # Initialisation du masque
+        inondation_mask = np.zeros(data.shape, dtype=bool)
+
+        for poly in polygons:
+            # Conversion des coordonnées en indices de raster
+            polygon_coords = [
+                list(map(lambda x: ~transform * x, list(poly.exterior.coords)))
+            ]
+
+            # Création du masque pour le polygone
+            poly_mask = rasterio.features.geometry_mask(
+                [Polygon(polygon_coords)],
+                transform=transform,
+                invert=True,
+                out_shape=data.shape,
+            )
+
+            # Appliquer le masque et vérifier les pixels inondés
+            inondation_mask |= (data <= niveau_inondation) & poly_mask
+
+        # Calcul des pixels inondés
+        return np.sum(inondation_mask)
+    except Exception as e:
+        raise RuntimeError(f"Erreur lors du calcul des pixels inondés dans le polygone : {e}")
 
 # Surface inondée dans le polygone
 def calculer_surface_inondee_dans_polygone(pixels_inondes_polygone, taille_unite):
