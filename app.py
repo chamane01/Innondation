@@ -74,6 +74,43 @@ def calculer_surface_inondee(nombre_pixels_inondes, taille_unite):
     surface_totale_hectares = surface_totale_m2 / 10000
     return surface_totale_m2, surface_totale_hectares
 
+def generer_zones_inondees(data_tiff, transform_tiff, niveau_inondation):
+    # Extraire les pixels inondés
+    inonde = data_tiff <= niveau_inondation
+    indices = np.argwhere(inonde)  # Indices des pixels inondés
+    
+    # Convertir les indices des pixels en coordonnées géographiques (limites des pixels)
+    polygons = []
+    for row, col in indices:
+        x_min, y_max = rasterio.transform.xy(transform_tiff, row, col, offset="ul")
+        x_max, y_min = rasterio.transform.xy(transform_tiff, row + 1, col + 1, offset="ul")
+        polygons.append(box(x_min, y_min, x_max, y_max))  # Crée une polygonale pour le pixel inondé
+    
+    # Combiner toutes les polygonales inondées
+    zones_inondees = gpd.GeoDataFrame(geometry=gpd.GeoSeries(polygons))
+    zones_inondees = zones_inondees.dissolve()  # Fusionner toutes les zones
+    return zones_inondees
+
+# Fonction principale pour calculer la surface inondée dans l'emprise de la polygonale téléversée
+def calculer_surface_inondee_dans_emprise(data_tiff, transform_tiff, geojson_polygon, niveau_inondation):
+    # Générer les zones inondées à partir des données du GeoTIFF
+    zones_inondees = generer_zones_inondees(data_tiff, transform_tiff, niveau_inondation)
+    
+    # Charger la polygonale téléversée
+    polygon_emprise = gpd.read_file(geojson_polygon)
+    
+    # Vérifier si les CRS sont compatibles
+    if zones_inondees.crs != polygon_emprise.crs:
+        polygon_emprise = polygon_emprise.to_crs(zones_inondees.crs)
+    
+    # Effectuer l'intersection entre les zones inondées et l'emprise
+    intersection = gpd.overlay(zones_inondees, polygon_emprise, how="intersection")
+    
+    # Calculer la surface totale inondée
+    surface_inondee = intersection.geometry.area.sum()  # La surface sera dans les unités du CRS (souvent m²)
+    return surface_inondee
+
+
 # Génération d'une image de profondeur
 def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
@@ -179,6 +216,37 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_la
 
 # Interface principale Streamlit
 def main():
+    def main():
+    st.title("Calcul de la surface inondée dans l'emprise")
+    
+    fichier_tiff = st.file_uploader("Téléverser un fichier GeoTIFF (altitudes/profondeurs)", type=["tif", "tiff"])
+    fichier_geojson_polygon = st.file_uploader("Téléverser un fichier GeoJSON (emprise polygonale)", type=["geojson"])
+    
+    if fichier_tiff and fichier_geojson_polygon:
+        data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
+        geojson_polygon = charger_geojson(fichier_geojson_polygon)
+        
+        if data_tiff is not None and geojson_polygon is not None:
+            niveau_inondation = st.slider("Niveau d'inondation", float(data_tiff.min()), float(data_tiff.max()), step=0.1)
+            
+            # Calcul de la surface inondée dans l'emprise de la polygonale
+            surface_inondee = calculer_surface_inondee_dans_emprise(data_tiff, transform_tiff, fichier_geojson_polygon, niveau_inondation)
+            
+            if surface_inondee is not None:
+                st.write(f"Surface inondée dans l'emprise : {surface_inondee:.2f} m²")
+
+    
+
+
+    
+
+
+
+
+
+
+
+    
     st.title("Analyse des zones inondées")
     st.markdown("### Téléchargez les fichiers nécessaires pour visualiser les données.")
 
