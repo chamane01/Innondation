@@ -132,6 +132,7 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_la
         "cours_eau": {"color": "cyan", "weight": 2},
         "batiments": {"fillColor": "red", "color": "red", "weight": 1, "fillOpacity": 0.5},
         "ville": {"fillColor": "green", "color": "green", "weight": 1, "fillOpacity": 0.3},
+        "plantations": {"fillColor": "yellow", "color": "yellow", "weight": 1, "fillOpacity": 0.3},
     }
 
     for layer, geojson_data in geojson_layers.items():
@@ -156,6 +157,7 @@ def main():
     fichier_geojson_cours_eau = st.file_uploader("GeoJSON (cours d'eau)", type=["geojson"])
     fichier_geojson_batiments = st.file_uploader("GeoJSON (bâtiments)", type=["geojson"])
     fichier_geojson_ville = st.file_uploader("GeoJSON (ville)", type=["geojson"])
+    fichier_geojson_plantations = st.file_uploader("GeoJSON (plantations)", type=["geojson"])
 
     geojson_data = {
         "routes": charger_geojson(fichier_geojson_routes) if fichier_geojson_routes else None,
@@ -164,6 +166,7 @@ def main():
         "cours_eau": charger_geojson(fichier_geojson_cours_eau) if fichier_geojson_cours_eau else None,
         "batiments": charger_geojson(fichier_geojson_batiments) if fichier_geojson_batiments else None,
         "ville": charger_geojson(fichier_geojson_ville) if fichier_geojson_ville else None,
+        "plantations": charger_geojson(fichier_geojson_plantations) if fichier_geojson_plantations else None,
     }
 
     if fichier_tiff:
