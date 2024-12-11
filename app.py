@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from folium.plugins import MeasureControl
 import geopandas as gpd
-from shapely.geometry import shape, Point  # Ajouter l'importation de Point
+from shapely.geometry import shape, Point  # Importation de Point
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -75,15 +75,18 @@ def calculer_surface_inondee(nombre_pixels_inondes, taille_unite):
     surface_totale_hectares = surface_totale_m2 / 10000
     return surface_totale_m2, surface_totale_hectares
 
-# Calculer les pixels inondés dans la polygonale
-def calculer_pixels_inondes_polygonale(data, polygon, transform):
+# Calculer les pixels inondés dans la polygonale (avec unités géographiques)
+def calculer_pixels_inondes_polygonale(data, polygon, transform, taille_unite):
     # Convertir la polygonale en pixels
     pixels_inondes = 0
     for i in range(data.shape[0]):
         for j in range(data.shape[1]):
+            # Convertir les indices de pixels en coordonnées géographiques
             lon, lat = rasterio.transform.xy(transform, i, j)
-            point = (lon, lat)
-            if polygon.contains(Point(point)) and data[i, j] <= 0:  # Considérer la zone inondée avec un niveau d'inondation = 0
+            point = Point(lon, lat)
+
+            # Vérifier si le point est à l'intérieur du polygone
+            if polygon.contains(point) and data[i, j] <= 0:  # Considérer la zone inondée avec un niveau d'inondation = 0
                 pixels_inondes += 1
     return pixels_inondes
 
@@ -199,7 +202,7 @@ def main():
 
             if geojson_data["polygon"] is not None:
                 polygon = shape(geojson_data["polygon"].geometry.iloc[0])  # Extraire le premier polygone
-                pixels_inondes_polygon = calculer_pixels_inondes_polygonale(data_tiff, polygon, transform_tiff)
+                pixels_inondes_polygon = calculer_pixels_inondes_polygonale(data_tiff, polygon, transform_tiff, taille_unite)
                 surface_m2_polygon, surface_ha_polygon = calculer_surface_inondee(pixels_inondes_polygon, taille_unite)
                 st.write(f"Surface inondée dans la polygonale : {surface_m2_polygon:.2f} m² ({surface_ha_polygon:.2f} ha)")
 
@@ -208,6 +211,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
