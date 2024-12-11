@@ -200,6 +200,22 @@ def main():
         "ville": charger_geojson(fichier_geojson_ville) if fichier_geojson_ville else None,
         "plantations": charger_geojson(fichier_geojson_plantations) if fichier_geojson_plantations else None,
     }
+    # Calcul du nombre de bâtiments dans l'emprise du polygone
+    if fichier_geojson_batiments and fichier_geojson_polygon:
+        geojson_batiments = charger_geojson(fichier_geojson_batiments)
+        geojson_polygon = charger_geojson(fichier_geojson_polygon)
+        if geojson_batiments is not None and geojson_polygon is not None:
+            # Vérifier si les CRS sont compatibles
+            if geojson_batiments.crs != geojson_polygon.crs:
+                geojson_batiments = geojson_batiments.to_crs(geojson_polygon.crs)
+                
+            # Effectuer l'intersection
+            intersection = gpd.overlay(geojson_batiments, geojson_polygon, how='intersection')
+            # Compter le nombre de bâtiments
+            nombre_batiments = len(intersection)
+            st.write(f"Nombre de bâtiments dans l'emprise du polygone : {nombre_batiments}")
+
+
 
     if fichier_tiff:
         data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
