@@ -164,7 +164,7 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_data
             folium.GeoJson(
                 geojson_data_routes,
                 style_function=lambda feature: {
-                    'color': couleur_routes,
+                    'color':'orange',
                     'weight': 2
                 }
             ).add_to(m)
