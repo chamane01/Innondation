@@ -182,44 +182,70 @@ def main():
     }
 
     if fichier_tiff:
-    try:
-        # Charger le fichier TIFF
-        data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
-        if data_tiff is not None:
-            # Afficher les informations de base sur le fichier TIFF
-            st.write(f"Dimensions : {data_tiff.shape}")
-            st.write(f"Altitude : min {data_tiff.min()} m, max {data_tiff.max()} m")
+         try:
+             # Charger le fichier TIFF
+             data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
+             if data_tiff is not None:
+                 # Afficher les informations de base sur le fichier TIFF
+                 st.write(f"Dimensions : {data_tiff.shape}")
+                 st.write(f"Altitude : min {data_tiff.min()} m, max {data_tiff.max()} m")
+                 # Calculer la taille moyenne d'une unité
+                 taille_unite = calculer_taille_unite(bounds_tiff, data_tiff.shape[1], data_tiff.shape[0])
+                 st.write(f"Taille moyenne d'une unité : {taille_unite:.2f} m")
+                 niveau_inondation = st.slider(
+                     "Niveau d'inondation",
+                     float(data_tiff.min()),
+                     float(data_tiff.max()),
+                     step=0.1
+                 )
+                 if niveau_inondation is not None:
+                     # Calcul des pixels inondés
+                     pixels_inondes = calculer_pixels_inondes(data_tiff, niveau_inondation)
+                     # Calcul des surfaces inondées
+                     surface_m2, surface_ha = calculer_surface_inondee(pixels_inondes, taille_unite)
+                     st.write(f"Surface inondée : {surface_m2:.2f} m², ({surface_ha:.2f} ha)")
+                     # Génération de la carte interactive
+                     m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, **geojson_data)
+                     st_folium(m, width=700, height=500)
 
-            # Calculer la taille moyenne d'une unité
-            taille_unite = calculer_taille_unite(bounds_tiff, data_tiff.shape[1], data_tiff.shape[0])
-            st.write(f"Taille moyenne d'une unité : {taille_unite:.2f} m")
+    
+                
+                
+                
+                
+                
 
-            # Sélection du niveau d'inondation
-            niveau_inondation = st.slider(
-                "Niveau d'inondation",
-                float(data_tiff.min()),
-                float(data_tiff.max()),
-                step=0.1
-            )
-            if niveau_inondation is not None:
-                # Calcul des pixels inondés
-                pixels_inondes = calculer_pixels_inondes(data_tiff, niveau_inondation)
-                # Calcul des surfaces inondées
-                surface_m2, surface_ha = calculer_surface_inondee(pixels_inondes, taille_unite)
-                st.write(f"Surface inondée : {surface_m2:.2f} m², ({surface_ha:.2f} ha)")
+                
+                
+                
+             else:
+                 st.error("Les données TIFF sont introuvables ou invalides.")
 
-                # Génération de la carte interactive
-                m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, **geojson_data)
-                st_folium(m, width=700, height=500)
-        else:
-            st.error("Les données TIFF sont introuvables ou invalides.")
-    except Exception as e:
-        st.error(f"Une erreur est survenue lors du traitement du fichier TIFF : {e}")
-
+         except Exception as e:
+             st.error(f"Une erreur est survenue lors du traitement du fichier TIFF : {e}")
+    
 if __name__ == "__main__":
     main()
 
 
+                
+                     
+                    
+                
+            
+        
+            
+            
+            
+
+            # Sélection du niveau d'inondation
+            
+            
+
+        
+        
+
+   
 
 
 
