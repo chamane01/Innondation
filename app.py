@@ -230,6 +230,49 @@ def calculer_surface_polygone(geojson_polygon):
         st.error(f"Erreur lors du calcul de la surface du polygone : {e}")
         return None, None
 
+def calculer_surface_bas_fonds_polygones(polygones, bas_fonds, grid_X, grid_Y):
+    try:
+        # Conversion des bas-fonds en GeoDataFrame
+        resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0])
+        bas_fonds_coords = [
+            Polygon([
+                (grid_X[i, j], grid_Y[i, j]),
+                (grid_X[i + 1, j], grid_Y[i + 1, j]),
+                (grid_X[i + 1, j + 1], grid_Y[i + 1, j + 1]),
+                (grid_X[i, j + 1], grid_Y[i, j + 1])
+            ])
+            for i in range(grid_X.shape[0] - 1)
+            for j in range(grid_X.shape[1] - 1)
+            if bas_fonds[i, j]
+        ]
+        bas_fonds_gdf = gpd.GeoDataFrame(geometry=bas_fonds_coords, crs="EPSG:32630")
+
+        # Intersection entre bas-fonds et polygones
+        intersection = gpd.overlay(polygones, bas_fonds_gdf, how="intersection")
+        
+        # Calcul de la surface totale
+        surface_totale = intersection.area.sum() / 10_000  # Convertir en hectares
+        return surface_totale
+    except Exception as e:
+        st.error(f"Erreur dans le calcul de la surface des bas-fonds : {e}")
+        return 0
+
+
+# Définir la fonction detecter_bas_fonds en dehors de generate_depth_map
+def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
+    moyenne_Z = np.mean(grid_Z)
+    ecart_type_Z = np.std(grid_Z)
+    seuil_bas_fond = moyenne_Z - seuil_rel_bas_fond * ecart_type_Z
+    bas_fonds = grid_Z < seuil_bas_fond
+    return bas_fonds, seuil_bas_fond
+
+# Définir la fonction calculer_surface_bas_fond en dehors de generate_depth_map
+def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
+    resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000  # Résolution en hectares
+    surface_bas_fond = np.sum(bas_fonds) * resolution
+    return surface_bas_fond
+
+
 # Carte Folium avec superposition
 def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_layers):
     lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
