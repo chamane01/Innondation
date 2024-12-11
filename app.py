@@ -37,6 +37,33 @@ def charger_tiff(fichier_tiff):
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None, None
 
+
+
+
+def generer_polygon_inonde(data_tiff, transform, niveau_inondation, geojson_polygon):
+    try:
+        # Créer un masque binaire pour les zones inondées
+        inondation_mask = (data_tiff <= niveau_inondation)
+        
+        # Convertir le raster en vecteur (GeoJSON)
+        results = (
+            {'properties': {'value': v}, 'geometry': s}
+            for i, (s, v) in enumerate(shapes(inondation_mask.astype(np.int16), transform=transform))
+        )
+        inondation_gdf = gpd.GeoDataFrame.from_features(results)
+        inondation_gdf = inondation_gdf.set_crs(geojson_polygon.crs)
+
+        # Intersection avec le polygone existant
+        intersection = gpd.overlay(inondation_gdf, geojson_polygon, how='intersection')
+
+        # Calcul de la surface totale inondée
+        surface_totale_m2 = intersection.geometry.area.sum()
+        surface_totale_ha = surface_totale_m2 / 10000
+        return intersection, surface_totale_m2, surface_totale_ha
+    except Exception as e:
+        st.error(f"Erreur lors de la création du polygone inondé : {e}")
+        return None, None, None
+
 # Fonction pour charger un fichier GeoJSON
 def charger_geojson(fichier_geojson):
     try:
@@ -200,6 +227,26 @@ def main():
         "ville": charger_geojson(fichier_geojson_ville) if fichier_geojson_ville else None,
         "plantations": charger_geojson(fichier_geojson_plantations) if fichier_geojson_plantations else None,
     }
+
+
+
+    if niveau_inondation and fichier_geojson_polygon:
+        geojson_polygon = charger_geojson(fichier_geojson_polygon)
+        if geojson_polygon is not None:
+            polygon_inonde, surface_inondee_m2, surface_inondee_ha = generer_polygon_inonde(
+                data_tiff, transform_tiff, niveau_inondation, geojson_polygon
+            )
+            if polygon_inonde is not None:
+                st.write(f"Nouvelle surface inondée dans le polygone : {surface_inondee_m2:.2f} m² ({surface_inondee_ha:.2f} ha)")
+
+                # Ajouter la nouvelle polygonale à la carte
+                folium.GeoJson(
+                    polygon_inonde,
+                    style_function=lambda x: {"color": "blue", "fillColor": "blue", "fillOpacity": 0.5}
+
+                ).add_to(m)
+    
+    
     # Calcul du nombre de bâtiments dans l'emprise du polygone
     if fichier_geojson_batiments and fichier_geojson_polygon:
         geojson_batiments = charger_geojson(fichier_geojson_batiments)
