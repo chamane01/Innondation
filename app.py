@@ -46,21 +46,43 @@ def charger_geojson(fichier_geojson):
         st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
         return None
 
-# Calcul de statistiques spatiales
-def analyser_couche_geojson(gdf, nom_couche):
-    if gdf is None:
-        return f"{nom_couche}: Pas de données."
-    
-    surface_totale = gdf.area.sum()  # Surface totale
-    longueur_totale = gdf.length.sum()  # Longueur totale
-    nombre_elements = len(gdf)  # Nombre d'éléments
-    
-    return (
-        f"**{nom_couche.capitalize()}**\n"
-        f"- Surface totale : {surface_totale:.2f} m²\n"
-        f"- Longueur totale : {longueur_totale:.2f} m\n"
-        f"- Nombre d'éléments : {nombre_elements}"
-    )
+# Calcul de la taille d'un pixel
+def calculer_taille_pixel(transform):
+    return transform[0], -transform[4]
+
+# Taille réelle d'une unité (pixel)
+def calculer_taille_unite(bounds_tiff, largeur_pixels, hauteur_pixels):
+    point1 = (bounds_tiff[1], bounds_tiff[0])
+    point2 = (bounds_tiff[1], bounds_tiff[2])
+    distance_x = geodesic(point1, point2).meters
+
+    point3 = (bounds_tiff[3], bounds_tiff[0])
+    distance_y = geodesic(point1, point3).meters
+
+    taille_x = distance_x / largeur_pixels
+    taille_y = distance_y / hauteur_pixels
+    return (taille_x + taille_y) / 2
+
+# Pixels inondés
+def calculer_pixels_inondes(data, niveau_inondation):
+    return np.sum(data <= niveau_inondation)
+
+# Surface inondée
+def calculer_surface_inondee(nombre_pixels_inondes, taille_unite):
+    surface_pixel = taille_unite ** 2
+    surface_totale_m2 = nombre_pixels_inondes * surface_pixel
+    surface_totale_hectares = surface_totale_m2 / 10000
+    return surface_totale_m2, surface_totale_hectares
+
+# Génération d'une image de profondeur
+def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
+    extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
+    plt.figure(figsize=(8, 6))
+    plt.imshow(data_tiff, cmap='terrain', extent=extent)
+    plt.colorbar(label="Altitude (m)")
+    plt.title("Carte de profondeur")
+    plt.savefig(output_path, format='png', bbox_inches='tight')
+    plt.close()
 
 # Carte Folium avec superposition
 def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_layers):
@@ -70,6 +92,7 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_la
 
     m = folium.Map(location=center, zoom_start=13, control_scale=True)
     depth_map_path = "temp_depth_map.png"
+    generer_image_profondeur(data_tiff, bounds_tiff, depth_map_path)
 
     img_overlay = folium.raster_layers.ImageOverlay(
         image=depth_map_path,
@@ -83,6 +106,21 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_la
         zone_inondee = np.zeros_like(data_tiff, dtype=np.uint8)
         zone_inondee[inondation_mask] = 255
 
+        flood_map_path = "temp_flood_map.png"
+        extent = [lon_min, lon_max, lat_min, lat_max]
+        plt.figure(figsize=(8, 6))
+        plt.imshow(zone_inondee, cmap=ListedColormap(['none', 'magenta']), extent=extent, alpha=0.5)
+        plt.axis('off')
+        plt.savefig(flood_map_path, format='png', transparent=True, bbox_inches='tight')
+        plt.close()
+
+        flood_overlay = folium.raster_layers.ImageOverlay(
+            image=flood_map_path,
+            bounds=[[lat_min, lon_min], [lat_max, lon_max]],
+            opacity=0.6
+        )
+        flood_overlay.add_to(m)
+
     measure_control = MeasureControl(primary_length_unit='meters', primary_area_unit='sqmeters')
     measure_control.add_to(m)
 
@@ -90,7 +128,7 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_la
     styles = {
         "routes": {"color": "orange", "weight": 2},
         "polygon": {"fillColor": "transparent", "color": "black", "weight": 2},
-        "pistes": {"color": "brown", "weight": 2},
+        "pistes": {"color": "blue", "weight": 2},
         "cours_eau": {"color": "cyan", "weight": 2},
         "batiments": {"fillColor": "red", "color": "red", "weight": 1, "fillOpacity": 0.5},
         "ville": {"fillColor": "green", "color": "green", "weight": 1, "fillOpacity": 0.3},
@@ -109,8 +147,8 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_la
 
 # Interface principale Streamlit
 def main():
-    st.title("Analyse spatiale des couches GeoJSON")
-    st.markdown("### Téléchargez les fichiers nécessaires pour l'analyse spatiale.")
+    st.title("Analyse des zones inondées")
+    st.markdown("### Téléchargez les fichiers nécessaires pour visualiser les données.")
 
     fichier_tiff = st.file_uploader("Fichier GeoTIFF", type=["tif"])
     fichier_geojson_routes = st.file_uploader("GeoJSON (routes)", type=["geojson"])
@@ -137,19 +175,20 @@ def main():
             st.write(f"Dimensions : {data_tiff.shape}")
             st.write(f"Altitude : min {data_tiff.min()} m, max {data_tiff.max()} m")
 
+            taille_unite = calculer_taille_unite(bounds_tiff, data_tiff.shape[1], data_tiff.shape[0])
+            st.write(f"Taille moyenne d'une unité : {taille_unite:.2f} m")
+
             niveau_inondation = st.slider("Niveau d'inondation", float(data_tiff.min()), float(data_tiff.max()), step=0.1)
-            
+            if niveau_inondation:
+                pixels_inondes = calculer_pixels_inondes(data_tiff, niveau_inondation)
+                surface_m2, surface_ha = calculer_surface_inondee(pixels_inondes, taille_unite)
+                st.write(f"Surface inondée : {surface_m2:.2f} m² ({surface_ha:.2f} ha)")
+
             m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, **geojson_data)
             st_folium(m, width=700, height=500)
 
-            # Rapport sous la carte
-            st.markdown("## Rapport d'analyse spatiale")
-            for nom_couche, gdf in geojson_data.items():
-                st.markdown(analyser_couche_geojson(gdf, nom_couche))
-
 if __name__ == "__main__":
     main()
-
 
 
 
