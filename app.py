@@ -24,6 +24,7 @@ from matplotlib.colors import ListedColormap
 from folium.plugins import MeasureControl
 import geopandas as gpd
 from shapely.geometry import Polygon, shape
+from shapely.geometry import Polygon, MultiPolygon
 import geopandas as gpd
 import rasterio.mask
 
