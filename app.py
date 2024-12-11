@@ -121,19 +121,52 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_la
         )
         flood_overlay.add_to(m)
         # Ajouter les contours magenta foncés
-        plt.contour(zone_inondee, levels=[127], colors='darkmagenta', linewidths=1.5, extent=extent)
-        
+        plt.figure(figsize=(8, 6))
+        flipped_zone_inondee = np.flipud(zone_inondee)  # Retourne les données verticalement si nécessaire
+        plt.contour(
+            flipped_zone_inondee,  # Utiliser les données corrigées
+            levels=[127],  # Niveau de contour
+            colors='darkmagenta',  # Couleur des contours
+            linewidths=1.5,  # Épaisseur des contours
+            extent=extent  # Étendue géographique (doit correspondre à votre image)
+        )
         plt.axis('off')
         plt.savefig(flood_map_path, format='png', transparent=True, bbox_inches='tight')
         plt.close()
-
         flood_overlay = folium.raster_layers.ImageOverlay(
             image=flood_map_path,
             bounds=[[lat_min, lon_min], [lat_max, lon_max]],
             opacity=0.6
+
         )
         flood_overlay.add_to(m)
 
+
+    
+    
+    
+
+
+    
+    
+         
+
+
+
+# Ajouter la superposition à la carte
+
+    
+    
+    
+
+
+
+
+
+
+
+
+    
     measure_control = MeasureControl(primary_length_unit='meters', primary_area_unit='sqmeters')
     measure_control.add_to(m)
 
