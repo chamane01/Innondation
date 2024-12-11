@@ -74,6 +74,18 @@ def calculer_surface_inondee(nombre_pixels_inondes, taille_unite):
     surface_totale_hectares = surface_totale_m2 / 10000
     return surface_totale_m2, surface_totale_hectares
 
+# Surface inondée dans la polygonale
+def calculer_surface_inondee_polygonale(data, niveau_inondation, polygon_gdf, transform):
+    mask = rasterio.features.geometry_mask(
+        [geom for geom in polygon_gdf.geometry],
+        out_shape=data.shape,
+        transform=transform,
+        invert=True
+    )
+    inondation_mask = (data <= niveau_inondation) & mask
+    pixels_inondes_polygon = np.sum(inondation_mask)
+    return pixels_inondes_polygon
+
 # Génération d'une image de profondeur
 def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
@@ -182,7 +194,7 @@ def main():
             if niveau_inondation:
                 pixels_inondes = calculer_pixels_inondes(data_tiff, niveau_inondation)
                 surface_m2, surface_ha = calculer_surface_inondee(pixels_inondes, taille_unite)
-                st.write(f"Surface inondée : {surface_m2:.2f} m² ({surface_ha:.2f} ha)")
+                st.write(f"Surface inondée : {surface_m2:.2f} m², ({surface_ha:.2f} ha)")
 
             m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, **geojson_data)
             st_folium(m, width=700, height=500)
