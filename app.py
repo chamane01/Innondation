@@ -84,6 +84,16 @@ def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     plt.savefig(output_path, format='png', bbox_inches='tight')
     plt.close()
 
+# Calcul de la surface d'un polygone (en hectares)
+def calculer_surface_polygone(geojson_polygon):
+    try:
+        surface_totale_m2 = geojson_polygon.geometry.area.sum()
+        surface_totale_ha = surface_totale_m2 / 10000
+        return surface_totale_m2, surface_totale_ha
+    except Exception as e:
+        st.error(f"Erreur lors du calcul de la surface du polygone : {e}")
+        return None, None
+
 # Carte Folium avec superposition
 def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_layers):
     lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
@@ -193,6 +203,19 @@ def main():
 
     if fichier_tiff:
         data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
+
+         if fichier_geojson_polygon:
+             geojson_polygon = charger_geojson(fichier_geojson_polygon)
+             if geojson_polygon is not None:
+                 surface_m2, surface_ha = calculer_surface_polygone(geojson_polygon)
+                 st.write(f"Surface du polygone : {surface_m2:.2f} m² ({surface_ha:.2f} ha)")
+        
+        
+            
+            
+
+
+        
         if data_tiff is not None:
             st.write(f"Dimensions : {data_tiff.shape}")
             st.write(f"Altitude : min {data_tiff.min()} m, max {data_tiff.max()} m")
