@@ -160,6 +160,8 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_la
         primary_area_unit='sqmeters',
         secondary_area_unit='hectares'
     )
+    measure_control.add_to(m)
+
     
     
     
