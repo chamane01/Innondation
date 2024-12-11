@@ -230,7 +230,10 @@ def main():
 
 
 
-    if niveau_inondation and fichier_geojson_polygon:
+    
+    fichier_geojson_polygon = fichier_geojson_polygon if 'fichier_geojson_polygon' in locals() else None
+
+    if niveau_inondation and fichier_geojson_polygon is not None:
         geojson_polygon = charger_geojson(fichier_geojson_polygon)
         if geojson_polygon is not None:
             polygon_inonde, surface_inondee_m2, surface_inondee_ha = generer_polygon_inonde(
@@ -238,13 +241,24 @@ def main():
             )
             if polygon_inonde is not None:
                 st.write(f"Nouvelle surface inondée dans le polygone : {surface_inondee_m2:.2f} m² ({surface_inondee_ha:.2f} ha)")
-
                 # Ajouter la nouvelle polygonale à la carte
                 folium.GeoJson(
                     polygon_inonde,
                     style_function=lambda x: {"color": "blue", "fillColor": "blue", "fillOpacity": 0.5}
-
                 ).add_to(m)
+        else:
+            st.error("Erreur lors du chargement ou de l'intersection du GeoJSON.")
+        
+    
+    
+        
+        
+            
+
+            
+            
+    
+        
     
     
     # Calcul du nombre de bâtiments dans l'emprise du polygone
