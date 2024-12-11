@@ -24,7 +24,6 @@ from matplotlib.colors import ListedColormap
 from folium.plugins import MeasureControl
 import geopandas as gpd
 from folium.plugins import Draw
-from rasterio.mask import mask
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -85,38 +84,7 @@ def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     plt.title("Carte de profondeur")
     plt.savefig(output_path, format='png', bbox_inches='tight')
     plt.close()
-def decouper_raster_par_polygone(data, transform, polygone):
-    try:
-        # Convertir le polygone en coordonnées du raster
-        shapes = [features.geometry_mask([geometry], out_shape=data.shape, transform=transform, invert=True) for geometry in polygone.geometry]
-        mask_array = shapes[0]
-        
-        # Appliquer le masque
-        data_decoupee = np.where(mask_array, data, np.nan)
-        return data_decoupee
-    except Exception as e:
-        st.error(f"Erreur lors de la découpe du raster : {e}")
-        return None
 
-# Fonction principale pour calculer la surface inondée
-def calculer_surface_inondee_dans_polygone(data, transform, polygone, niveau_inondation):
-    # Découper les données GeoTIFF selon le polygone
-    data_decoupee = decouper_raster_par_polygone(data, transform, polygone)
-    
-    if data_decoupee is not None:
-        # Identifier les pixels inondés dans le polygone
-        pixels_inondes = np.nansum(data_decoupee <= niveau_inondation)
-
-        # Calculer la taille d'un pixel
-        largeur_pixel, hauteur_pixel = calculer_taille_pixel(transform)
-        surface_pixel_m2 = largeur_pixel * hauteur_pixel
-
-        # Calculer la surface totale inondée
-        surface_inondee_m2 = pixels_inondes * surface_pixel_m2
-        surface_inondee_hectares = surface_inondee_m2 / 10000
-        return surface_inondee_m2, surface_inondee_hectares
-    else:
-        return None, None
 # Calcul de la surface d'un polygone (en hectares)
 def calculer_surface_polygone(geojson_polygon):
     try:
@@ -302,21 +270,6 @@ def main():
 
             m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, **geojson_data)
             st_folium(m, width=700, height=500)
-            
-    if fichier_tiff and fichier_geojson_polygon:
-         # Charger les données
-        data, transform, crs, bounds = charger_tiff(fichier_tiff)
-        geojson_polygon = charger_geojson(fichier_geojson_polygon)
-        if data is not None and geojson_polygon is not None:
-            # Définir un seuil pour l'inondation
-            niveau_inondation = st.slider("Définir le niveau d'inondation", float(np.nanmin(data)), float(np.nanmax(data)), value=float(np.nanmean(data)))
-            # Calculer la surface inondée dans le polygone
-            surface_m2, surface_ha = calculer_surface_inondee_dans_polygone(data, transform, geojson_polygon, niveau_inondation)
-            if surface_m2 is not None:
-                st.write(f"Surface inondée dans le polygone : {surface_m2:.2f} m² ({surface_ha:.2f} hectares)")
-            else:
-                st.error("Impossible de calculer la surface inondée.")
-        
 
 if __name__ == "__main__":
     main()
