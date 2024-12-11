@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from folium.plugins import MeasureControl
 import geopandas as gpd
+from folium.plugins import Draw
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
