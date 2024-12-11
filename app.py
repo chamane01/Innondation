@@ -23,6 +23,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from folium.plugins import MeasureControl
 import geopandas as gpd
+from shapely.geometry import Polygon
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -74,6 +75,19 @@ def calculer_surface_inondee(nombre_pixels_inondes, taille_unite):
     surface_totale_hectares = surface_totale_m2 / 10000
     return surface_totale_m2, surface_totale_hectares
 
+# Calculer le nombre de pixels dans un polygone
+def calculer_pixels_polygonale(data, polygon, transform):
+    # Convertir le polygone en coordonnées de pixels
+    rows, cols = rasterio.transform.rowcol(transform, [point[0] for point in polygon], [point[1] for point in polygon])
+    polygon_mask = np.zeros_like(data, dtype=np.uint8)
+
+    # Marquer les pixels à l'intérieur du polygone
+    for r, c in zip(rows, cols):
+        if 0 <= r < data.shape[0] and 0 <= c < data.shape[1]:
+            polygon_mask[r, c] = 1
+
+    return np.sum(polygon_mask)
+
 # Génération d'une image de profondeur
 def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
@@ -120,29 +134,7 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_la
             opacity=0.6
         )
         flood_overlay.add_to(m)
-        # Ajouter les contours magenta foncés
-        plt.figure(figsize=(8, 6))
-        flipped_zone_inondee = np.flipud(zone_inondee)  # Retourne les données verticalement si nécessaire
-        plt.contour(
-            flipped_zone_inondee,  # Utiliser les données corrigées
-            levels=[127],  # Niveau de contour
-            colors='darkmagenta',  # Couleur des contours
-            linewidths=1.5,  # Épaisseur des contours
-            extent=extent  # Étendue géographique (doit correspondre à votre image)
-        )
-        plt.axis('off')
-        plt.savefig(flood_map_path, format='png', transparent=True, bbox_inches='tight')
-        plt.close()
-        flood_overlay = folium.raster_layers.ImageOverlay(
-            image=flood_map_path,
-            bounds=[[lat_min, lon_min], [lat_max, lon_max]],
-            opacity=0.6
 
-        )
-        flood_overlay.add_to(m)
-
-
-    
     measure_control = MeasureControl(primary_length_unit='meters', primary_area_unit='sqmeters')
     measure_control.add_to(m)
 
@@ -199,6 +191,17 @@ def main():
 
             taille_unite = calculer_taille_unite(bounds_tiff, data_tiff.shape[1], data_tiff.shape[0])
             st.write(f"Taille moyenne d'une unité : {taille_unite:.2f} m")
+
+            # Calcul du nombre de pixels de la carte et du polygone
+            pixels_totaux = data_tiff.size
+            if geojson_data["polygon"] is not None:
+                polygon = geojson_data["polygon"].geometry.iloc[0]  # Premier polygone
+                polygon_coords = [(x, y) for x, y in polygon.exterior.coords]
+                pixels_polygon = calculer_pixels_polygonale(data_tiff, polygon_coords, transform_tiff)
+                st.write(f"Nombre de pixels dans la polygonale : {pixels_polygon}")
+            else:
+                pixels_polygon = 0
+            st.write(f"Nombre total de pixels : {pixels_totaux}")
 
             niveau_inondation = st.slider("Niveau d'inondation", float(data_tiff.min()), float(data_tiff.max()), step=0.1)
             if niveau_inondation:
