@@ -46,7 +46,16 @@ def charger_geojson(fichier_geojson):
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
         return None
+def calculer_pixels_inondes_polygon(data, niveau_inondation, polygon_geojson, transform):
+    # Appliquer le masque du polygone
+    masked_data = appliquer_masque_polygon(data, polygon_geojson, transform)
+    # Calculer les pixels inondés dans la zone masquée
+    return np.sum(masked_data <= niveau_inondation)
 
+def calculer_surface_inondee_polygon(data, niveau_inondation, taille_unite, polygon_geojson, transform):
+    nombre_pixels_inondes = calculer_pixels_inondes_polygon(data, niveau_inondation, polygon_geojson, transform)
+    surface_m2, surface_ha = calculer_surface_inondee(nombre_pixels_inondes, taille_unite)
+    return surface_m2, surface_ha
 # Calcul de la taille d'un pixel
 def calculer_taille_pixel(transform):
     return transform[0], -transform[4]
