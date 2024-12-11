@@ -472,62 +472,30 @@ def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, l
     ax.text(
         X_min + (X_max - X_min) * 0,  # Position horizontale (10% de la largeur)
         label_y_position,
-        f"Surface des bas-fonds :",
-        fontsize=12,
-        color="black",
-        ha="left",  # Aligné à gauche
-        va="top",# Aligné en haut
-        fontweight='bold',
-    )
-    ax.text(
-        X_min + (X_max - X_min) * 0.37,  # Position horizontale (10% de la largeur)
-        label_y_position - (Y_max - Y_min) * 0,  # Légèrement plus bas
-        f"{surface_bas_fond:.2f} hectares",
+        f"Surface des bas-fonds : {surface_bas_fond:.2f} hectares",
         fontsize=12,
         color="black",
         ha="left",  # Aligné à gauche
         va="top",   # Aligné en haut
     )
-    
     ax.text(
         X_min + (X_max - X_min) * 0,  # Position horizontale (10% de la largeur)
         label_y_position - (Y_max - Y_min) * 0.10,  # Légèrement plus bas
-        f"Surface des bas-fonds dans les polygones :",
+        f"Surface des bas-fonds dans les polygones : {surface_bas_fond_polygones:.2f} hectares",
         fontsize=12,
         color="black",
         ha="left",  # Aligné à gauche
-        va="top",
-        fontweight='bold',# Aligné en haut
-    )
-    ax.text(
-        X_min + (X_max - X_min) * 0.67,  # Position horizontale (10% de la largeur)
-        label_y_position - (Y_max - Y_min) * 0.10,  # Légèrement plus bas
-       f"{surface_bas_fond_polygones:.2f} hectares",
-        fontsize=12,
-        color="black",
-        ha="left",  # Aligné à gauche
-        va="top",# Aligné en haut
+        va="top",   # Aligné en haut
     )
     ax.text(
         X_min + (X_max - X_min) * 0,  # Position horizontale (10% de la largeur)
         label_y_position - (Y_max - Y_min) * 0.20,  # Légèrement plus bas
-        f"Cote du bafond :",
+        f"Cote du bafond :{seuil_bas_fond:.2f} m",
         fontsize=12,
         color="black",
         ha="left",  # Aligné à gauche
-        va="top",
-        fontweight='bold',# Aligné en haut
+        va="top",   # Aligné en haut
     )
-    ax.text(
-        X_min + (X_max - X_min) * 0.26,  # Position horizontale (10% de la largeur)
-        label_y_position - (Y_max - Y_min) * 0.20,  # Légèrement plus bas
-        f"{seuil_bas_fond:.2f} m",
-        fontsize=12,
-        color="black",
-        ha="left",  # Aligné à gauche
-        va="top",# Aligné en haut
-    )
-    
 
 
 # Ajouter les polygones sur la carte
