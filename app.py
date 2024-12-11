@@ -270,18 +270,6 @@ def main():
 
             m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, **geojson_data)
             st_folium(m, width=700, height=500)
-    if fichier_geojson_polygon and fichier_geojson_inondation:
-        geojson_polygon = charger_geojson(fichier_geojson_polygon)
-        geojson_inondation = charger_geojson(fichier_geojson_inondation)
-        
-        if geojson_polygon is not None and geojson_inondation is not None:
-            # Effectuer l'intersection
-            intersection = gpd.overlay(fichier_geojson_polygon, fichier_geojson_inondation, how='intersection')
-            
-            # Calculer l'aire de l'intersection
-            intersection["aire"] = intersection.geometry.area
-            total_aire_inondee = intersection["aire"].sum()
-            st.write(f"Total de l'aire inondée dans la zone polygonale: {total_aire_inondee:.2f} unités carrées")
 
 if __name__ == "__main__":
     main()
