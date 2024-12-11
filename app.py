@@ -85,7 +85,7 @@ def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
     plt.close()
 
 # Carte Folium avec superposition
-def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_data_routes=None, geojson_data_polygon=None):
+def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_layers):
     lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
     lat_max, lon_max = bounds_tiff[3], bounds_tiff[2]
     center = [(lat_min + lat_max) / 2, (lon_min + lon_max) / 2]
@@ -111,7 +111,7 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_data
         plt.figure(figsize=(8, 6))
         plt.imshow(zone_inondee, cmap=ListedColormap(['none', 'magenta']), extent=extent, alpha=0.5)
         plt.axis('off')
-        plt.savefig(flood_map_path, format='png', bbox_inches='tight', transparent=True)
+        plt.savefig(flood_map_path, format='png', transparent=True, bbox_inches='tight')
         plt.close()
 
         flood_overlay = folium.raster_layers.ImageOverlay(
@@ -124,17 +124,22 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_data
     measure_control = MeasureControl(primary_length_unit='meters', primary_area_unit='sqmeters')
     measure_control.add_to(m)
 
-    if geojson_data_routes is not None:
-        folium.GeoJson(
-            geojson_data_routes,
-            style_function=lambda feature: {'color': 'orange', 'weight': 2}
-        ).add_to(m)
+    # Ajouter les GeoJSON avec des styles spécifiques
+    styles = {
+        "routes": {"color": "orange", "weight": 2},
+        "polygon": {"fillColor": "transparent", "color": "black", "weight": 2},
+        "pistes": {"color": "blue", "weight": 2},
+        "cours_eau": {"color": "cyan", "weight": 2},
+        "batiments": {"fillColor": "red", "color": "red", "weight": 1, "fillOpacity": 0.5},
+        "ville": {"fillColor": "green", "color": "green", "weight": 1, "fillOpacity": 0.3},
+    }
 
-    if geojson_data_polygon is not None:
-        folium.GeoJson(
-            geojson_data_polygon,
-            style_function=lambda feature: {'fillColor': 'transparent', 'color': 'black', 'weight': 2}
-        ).add_to(m)
+    for layer, geojson_data in geojson_layers.items():
+        if geojson_data is not None:
+            folium.GeoJson(
+                geojson_data,
+                style_function=lambda feature, style=styles[layer]: style
+            ).add_to(m)
 
     folium.LayerControl().add_to(m)
     return m
@@ -142,14 +147,24 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_data
 # Interface principale Streamlit
 def main():
     st.title("Analyse des zones inondées")
-    st.markdown("### Téléchargez un fichier GeoTIFF pour analyser les zones inondées.")
+    st.markdown("### Téléchargez les fichiers nécessaires pour visualiser les données.")
 
     fichier_tiff = st.file_uploader("Fichier GeoTIFF", type=["tif"])
     fichier_geojson_routes = st.file_uploader("GeoJSON (routes)", type=["geojson"])
     fichier_geojson_polygon = st.file_uploader("GeoJSON (polygone)", type=["geojson"])
+    fichier_geojson_pistes = st.file_uploader("GeoJSON (pistes)", type=["geojson"])
+    fichier_geojson_cours_eau = st.file_uploader("GeoJSON (cours d'eau)", type=["geojson"])
+    fichier_geojson_batiments = st.file_uploader("GeoJSON (bâtiments)", type=["geojson"])
+    fichier_geojson_ville = st.file_uploader("GeoJSON (ville)", type=["geojson"])
 
-    geojson_data_routes = charger_geojson(fichier_geojson_routes) if fichier_geojson_routes else None
-    geojson_data_polygon = charger_geojson(fichier_geojson_polygon) if fichier_geojson_polygon else None
+    geojson_data = {
+        "routes": charger_geojson(fichier_geojson_routes) if fichier_geojson_routes else None,
+        "polygon": charger_geojson(fichier_geojson_polygon) if fichier_geojson_polygon else None,
+        "pistes": charger_geojson(fichier_geojson_pistes) if fichier_geojson_pistes else None,
+        "cours_eau": charger_geojson(fichier_geojson_cours_eau) if fichier_geojson_cours_eau else None,
+        "batiments": charger_geojson(fichier_geojson_batiments) if fichier_geojson_batiments else None,
+        "ville": charger_geojson(fichier_geojson_ville) if fichier_geojson_ville else None,
+    }
 
     if fichier_tiff:
         data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
@@ -166,11 +181,12 @@ def main():
                 surface_m2, surface_ha = calculer_surface_inondee(pixels_inondes, taille_unite)
                 st.write(f"Surface inondée : {surface_m2:.2f} m² ({surface_ha:.2f} ha)")
 
-            m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, geojson_data_routes, geojson_data_polygon)
+            m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, **geojson_data)
             st_folium(m, width=700, height=500)
 
 if __name__ == "__main__":
     main()
+
 
 
 
