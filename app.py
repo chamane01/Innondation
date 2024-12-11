@@ -18,11 +18,11 @@ import numpy as np
 import rasterio
 import folium
 from streamlit_folium import st_folium
+import geopandas as gpd
 from geopy.distance import geodesic
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from folium.plugins import MeasureControl
-import geopandas as gpd
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -76,14 +76,24 @@ def calculer_surface_inondee(nombre_pixels_inondes, taille_unite):
 
 # Surface inondée dans une polygonale
 def calculer_surface_inondee_polygonale(data, transform, polygon_gdf, niveau_inondation, taille_unite):
-    mask = rasterio.features.geometry_mask(
-        [geom for geom in polygon_gdf.geometry],
-        transform=transform,
-        invert=True,
-        out_shape=data.shape
-    )
-    pixels_inondes_polygon = np.sum((data <= niveau_inondation) & mask)
-    return calculer_surface_inondee(pixels_inondes_polygon, taille_unite)
+    # Vérification de la géométrie du GeoJSON
+    if polygon_gdf.empty or polygon_gdf.geometry.isnull().all():
+        st.error("Le fichier GeoJSON ne contient pas de géométrie valide.")
+        return 0, 0
+
+    # Créer le masque avec les géométries du polygone
+    try:
+        mask = rasterio.features.geometry_mask(
+            [geom for geom in polygon_gdf.geometry],
+            transform=transform,
+            invert=True,
+            out_shape=data.shape
+        )
+        pixels_inondes_polygon = np.sum((data <= niveau_inondation) & mask)
+        return calculer_surface_inondee(pixels_inondes_polygon, taille_unite)
+    except Exception as e:
+        st.error(f"Erreur lors du calcul du masque : {e}")
+        return 0, 0
 
 # Génération d'une image de profondeur
 def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
