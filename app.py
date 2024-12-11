@@ -18,12 +18,12 @@ import numpy as np
 import rasterio
 import folium
 from streamlit_folium import st_folium
-import geopandas as gpd
 from geopy.distance import geodesic
 import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from folium.plugins import MeasureControl
-from rasterio.mask import mask
+import geopandas as gpd
+
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
     try:
@@ -73,34 +73,6 @@ def calculer_surface_inondee(nombre_pixels_inondes, taille_unite):
     surface_totale_m2 = nombre_pixels_inondes * surface_pixel
     surface_totale_hectares = surface_totale_m2 / 10000
     return surface_totale_m2, surface_totale_hectares
-
-# Surface inondée dans une polygonale
-def calculer_surface_inondee_polygonale(data, transform, polygon_gdf, niveau_inondation, taille_unite):
-    # Vérification de la géométrie du GeoJSON
-    if polygon_gdf.empty or polygon_gdf.geometry.isnull().all():
-        st.error("Le fichier GeoJSON ne contient pas de géométrie valide.")
-        return 0, 0
-    
-    # Extraction des géométries du GeoDataFrame
-    geoms = [geom for geom in polygon_gdf.geometry]
-
-    try:
-        # Ouverture du fichier raster avec rasterio
-        with rasterio.open(data) as src:
-            # Utilisation de rasterio.mask pour découper le raster avec le polygone
-            out_image, out_transform = mask(src, geoms, crop=True)
-            out_image = out_image[0]  # On prend la première bande si c'est un raster multi-bande
-
-            # Créer un masque où les pixels sont inondés
-            inondation_mask = out_image <= niveau_inondation
-            pixels_inondes_polygon = np.sum(inondation_mask)
-
-            # Calcul de la surface inondée
-            surface_m2, surface_ha = calculer_surface_inondee(pixels_inondes_polygon, taille_unite)
-            return surface_m2, surface_ha
-    except Exception as e:
-        st.error(f"Erreur lors du calcul du masque : {e}")
-        return 0, 0
 
 # Génération d'une image de profondeur
 def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
@@ -206,20 +178,17 @@ def main():
             taille_unite = calculer_taille_unite(bounds_tiff, data_tiff.shape[1], data_tiff.shape[0])
             st.write(f"Taille moyenne d'une unité : {taille_unite:.2f} m")
 
-            niveau_inondation = st.slider("Niveau d'inondation", float(data_tiff.min()), float(data_tiff.max()))
+            niveau_inondation = st.slider("Niveau d'inondation", float(data_tiff.min()), float(data_tiff.max()), step=0.1)
+            if niveau_inondation:
+                pixels_inondes = calculer_pixels_inondes(data_tiff, niveau_inondation)
+                surface_m2, surface_ha = calculer_surface_inondee(pixels_inondes, taille_unite)
+                st.write(f"Surface inondée : {surface_m2:.2f} m² ({surface_ha:.2f} ha)")
 
-            if geojson_data["polygon"] is not None:
-                surface_inondee_polygon, surface_inondee_ha_polygon = calculer_surface_inondee_polygonale(
-                    data_tiff, transform_tiff, geojson_data["polygon"], niveau_inondation, taille_unite
-                )
-                st.write(f"Surface inondée dans le polygone : {surface_inondee_ha_polygon:.2f} hectares")
-
-            m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=niveau_inondation, **geojson_data)
-            st_folium(m, width=700)
+            m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, **geojson_data)
+            st_folium(m, width=700, height=500)
 
 if __name__ == "__main__":
     main()
-
 
 
 
