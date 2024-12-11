@@ -23,7 +23,7 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from folium.plugins import MeasureControl
 import geopandas as gpd
-from shapely.geometry import shape
+from shapely.geometry import shape, Point  # Ajouter l'importation de Point
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
