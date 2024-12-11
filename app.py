@@ -173,7 +173,7 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_la
     # Ajouter les GeoJSON avec des styles spécifiques
     styles = {
         "routes": {"color": "orange", "weight": 2},
-        "polygon": {"fillColor": "transparent", "color": "black", "weight": 2},
+        "polygon": {"fillColor": "semi-transparent", "color": "black", "weight": 2},
         "pistes": {"color": "blue", "weight": 2},
         "cours_eau": {"color": "cyan", "weight": 2},
         "batiments": {"fillColor": "red", "color": "red", "weight": 1, "fillOpacity": 0.5},
