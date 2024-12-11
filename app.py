@@ -154,7 +154,16 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_la
 
     
     measure_control = MeasureControl(primary_length_unit='meters', primary_area_unit='sqmeters')
-    measure_control.add_to(m)
+    measure_control = MeasureControl(
+        primary_length_unit='meters',
+        secondary_length_unit='kilometers',
+        primary_area_unit='sqmeters',
+        secondary_area_unit='hectares'
+    )
+    
+    
+    
+
 
     # Ajouter les GeoJSON avec des styles spécifiques
     styles = {
