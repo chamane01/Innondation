@@ -237,10 +237,13 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_la
 def main():
     st.title("Analyse des zones inondées")
     st.markdown("### Téléchargez les fichiers nécessaires pour visualiser les données.")
+    fichier_geojson_polygon = st.file_uploader("GeoJSON (polygone)", type=["geojson"], key="geojson_uploader")
+    fichier_tiff = st.file_uploader("GeoTIFF (modèle d'inondation)", type=["tif"], key="tiff_uploader")
 
-    fichier_tiff = st.file_uploader("Fichier GeoTIFF", type=["tif"])
+
+    
     fichier_geojson_routes = st.file_uploader("GeoJSON (routes)", type=["geojson"])
-    fichier_geojson_polygon = st.file_uploader("GeoJSON (polygone)", type=["geojson"])
+    
     fichier_geojson_pistes = st.file_uploader("GeoJSON (pistes)", type=["geojson"])
     fichier_geojson_cours_eau = st.file_uploader("GeoJSON (cours d'eau)", type=["geojson"])
     fichier_geojson_batiments = st.file_uploader("GeoJSON (bâtiments)", type=["geojson"])
