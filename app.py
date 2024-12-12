@@ -15,126 +15,80 @@ import rasterio
 
 
 import streamlit as st
-import folium
 import numpy as np
-from rasterio import open as rio_open
-from rasterio.enums import Resampling
+import rasterio
+from rasterio.plot import reshape_as_image
+import matplotlib.pyplot as plt
 from PIL import Image
-from streamlit_folium import folium_static
-import tempfile
+
+# Fonction pour normaliser les bandes en 8 bits
+def normalize_to_8bit(band):
+    band_min, band_max = np.min(band), np.max(band)
+    return np.uint8(255 * (band - band_min) / (band_max - band_min))
+
+# Fonction pour afficher une bande en niveaux de gris
 def plot_band(band, title):
     plt.figure(figsize=(5, 5))
-    plt.imshow(band, cmap='gray')
+    plt.imshow(band, cmap="gray")
     plt.title(title)
     plt.colorbar()
     st.pyplot(plt)
 
-with rio_open(uploaded_file) as dataset:
-    for i in range(1, min(dataset.count, 3) + 1):
-        band = dataset.read(i)
-        plot_band(band, f"Bande {i}")
-# Fonction pour traiter l'orthomosaïque
-def process_tiff(uploaded_file):
+# Fonction principale pour gérer les fichiers TIFF
+def process_tiff(file):
+    with rasterio.open(file) as dataset:
+        st.write("**Métadonnées TIFF :**")
+        st.write({
+            "Driver": dataset.driver,
+            "DType": dataset.dtypes,
+            "NoData": dataset.nodata,
+            "Width": dataset.width,
+            "Height": dataset.height,
+            "Count": dataset.count,
+            "CRS": dataset.crs,
+            "Bounds": dataset.bounds
+        })
+
+        # Lire et afficher les valeurs de chaque bande
+        st.write("**Valeurs des bandes :**")
+        bands = []
+        for i in range(1, dataset.count + 1):
+            band = dataset.read(i)
+            plot_band(band, f"Bande {i}")
+            bands.append(band)
+            st.write(f"Bande {i} : min={band.min()}, max={band.max()}, moyenne={band.mean()}")
+
+        # Gérer la valeur NoData
+        nodata_value = dataset.nodata
+        if nodata_value is not None:
+            st.write(f"Valeur NoData détectée : {nodata_value}. Remplacement par 0.")
+            for i in range(len(bands)):
+                bands[i][bands[i] == nodata_value] = 0
+
+        # Normaliser les bandes pour les convertir en 8 bits si nécessaire
+        st.write("**Normalisation des bandes en 8 bits**")
+        normalized_bands = [normalize_to_8bit(band) for band in bands[:3]]  # Utiliser les 3 premières bandes
+
+        # Reconstituer une image RGB
+        rgb_image = np.dstack(normalized_bands)
+
+        # Afficher l'image RGB
+        st.write("**Aperçu de l'image RGB :**")
+        st.image(rgb_image, caption="Image RGB normalisée", clamp=True)
+
+        return rgb_image
+
+# Streamlit UI
+st.title("Vérification et Affichage de TIFF Orthomosaïque")
+
+uploaded_file = st.file_uploader("Charger un fichier TIFF", type=["tif", "tiff"])
+
+if uploaded_file:
+    st.write("**Traitement du fichier...**")
     try:
-        with rio_open(uploaded_file) as dataset:
-            st.write("**Métadonnées TIFF :**")
-            st.json(dataset.meta)
-
-            # Vérifiez si le TIFF contient au moins 3 bandes
-            if dataset.count < 3:
-                st.error("Le fichier TIFF ne contient pas suffisamment de bandes pour RGB.")
-                return None, None, None, None, None
-
-            # Lire les bandes RGB
-            red = dataset.read(1, resampling=Resampling.bilinear)
-            green = dataset.read(2, resampling=Resampling.bilinear)
-            blue = dataset.read(3, resampling=Resampling.bilinear)
-
-            # Vérifier les valeurs des bandes
-            st.write(f"Valeurs minimales et maximales des bandes :")
-            st.write(f"R: min={red.min()}, max={red.max()}")
-            st.write(f"G: min={green.min()}, max={green.max()}")
-            st.write(f"B: min={blue.min()}, max={blue.max()}")
-
-            # Normalisation des bandes en 8 bits
-            def normalize_to_8bit(band):
-                band_min, band_max = np.min(band), np.max(band)
-                if band_min == band_max:
-                    st.error("Les bandes semblent vides ou contiennent des valeurs uniformes.")
-                    return None
-                return np.uint8(255 * (band - band_min) / (band_max - band_min))
-
-            red_8bit = normalize_to_8bit(red)
-            green_8bit = normalize_to_8bit(green)
-            blue_8bit = normalize_to_8bit(blue)
-
-            if red_8bit is None or green_8bit is None or blue_8bit is None:
-                return None, None, None, None, None
-
-            # Fusionner en image RGB
-            rgb_image = Image.merge(
-                "RGB",
-                (
-                    Image.fromarray(red_8bit),
-                    Image.fromarray(green_8bit),
-                    Image.fromarray(blue_8bit),
-                ),
-            )
-
-            # Sauvegarder l'image temporaire
-            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_rgb_file:
-                rgb_image.save(tmp_rgb_file.name, format="PNG")
-                rgb_path = tmp_rgb_file.name
-
-            # Extraire les bounds pour la carte
-            bounds = dataset.bounds
-            transform = dataset.transform
-
-            # Reprojection des bounds en EPSG:4326
-            from rasterio.warp import transform_bounds
-            left, bottom, right, top = transform_bounds(dataset.crs, "EPSG:4326",
-                                                        bounds.left, bounds.bottom,
-                                                        bounds.right, bounds.top)
-
-            return rgb_path, left, bottom, right, top
-
+        rgb_image = process_tiff(uploaded_file)
     except Exception as e:
-        st.error(f"Erreur lors du traitement du TIFF : {e}")
-        return None, None, None, None, None
-
-
-# Fonction pour créer une carte
-def create_map(rgb_path, left, bottom, right, top):
-    folium_map = folium.Map(location=[(top + bottom) / 2, (left + right) / 2], zoom_start=15)
-
-    # Ajouter l'image RGB
-    folium.raster_layers.ImageOverlay(
-        image=rgb_path,
-        bounds=[[bottom, left], [top, right]],
-        opacity=1.0,
-        name="Orthomosaïque RGB",
-    ).add_to(folium_map)
-
-    # Ajouter un contrôle de couches
-    folium.LayerControl().add_to(folium_map)
-
-    return folium_map
-
-
-# Interface Streamlit
-st.title("Orthomosaïque Interactive (TIFF)")
-
-uploaded_file = st.file_uploader("Téléchargez une orthomosaïque TIFF (RGB)", type=["tiff", "tif"])
-
-if uploaded_file is not None:
-    rgb_path, left, bottom, right, top = process_tiff(uploaded_file)
-
-    if rgb_path and left and bottom and right and top:
-        folium_map = create_map(rgb_path, left, bottom, right, top)
-        st.markdown("### Carte interactive")
-        folium_static(folium_map)
-    else:
-        st.error("Erreur lors de la génération de la carte.")
+        st.error(f"Erreur lors du traitement : {e}")
 
 
 
