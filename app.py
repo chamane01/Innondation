@@ -17,185 +17,103 @@ import rasterio
 import streamlit as st
 import folium
 import numpy as np
-from PIL import Image
-import rasterio
+from rasterio import open as rio_open
 from rasterio.enums import Resampling
-from rasterio.warp import transform_bounds, calculate_default_transform, reproject
-import tempfile
-from folium import plugins
+from PIL import Image
 from streamlit_folium import folium_static
+import tempfile
 
+# Fonction pour traiter le fichier TIFF
 def process_tiff(uploaded_file):
     try:
-        with rasterio.open(uploaded_file) as dataset:
-            # Afficher les métadonnées du TIFF
+        with rio_open(uploaded_file) as dataset:
             st.write("**Métadonnées TIFF :**")
             st.json(dataset.meta)
 
-            # Reprojection des bounds en EPSG:4326
-            bounds = dataset.bounds
-            left, bottom, right, top = transform_bounds(dataset.crs, 'EPSG:4326', 
-                                                        bounds.left, bounds.bottom, 
-                                                        bounds.right, bounds.top)
-            st.write("**Bounds reprojetés (EPSG:4326):**", {"left": left, "bottom": bottom, "right": right, "top": top})
+            # Lire les bandes RGB
+            red = dataset.read(1, resampling=Resampling.bilinear)
+            green = dataset.read(2, resampling=Resampling.bilinear)
+            blue = dataset.read(3, resampling=Resampling.bilinear)
 
-            # Calculer le centre en coordonnées géographiques
-            lat = (top + bottom) / 2
-            lon = (left + right) / 2
-            st.write(f"**Coordonnées du centre :** Latitude = {lat}, Longitude = {lon}")
+            # Normalisation 16-bit à 8-bit
+            def normalize_to_8bit(band):
+                band_min, band_max = np.min(band), np.max(band)
+                return np.uint8(255 * (band - band_min) / (band_max - band_min))
 
-            # Reprojection de l'image dans EPSG:4326
-            transform, width, height = calculate_default_transform(
-                dataset.crs, 'EPSG:4326', dataset.width, dataset.height, *dataset.bounds
+            red_8bit = normalize_to_8bit(red)
+            green_8bit = normalize_to_8bit(green)
+            blue_8bit = normalize_to_8bit(blue)
+
+            # Combiner les bandes en image RGB
+            rgb_image = Image.merge(
+                "RGB",
+                (
+                    Image.fromarray(red_8bit),
+                    Image.fromarray(green_8bit),
+                    Image.fromarray(blue_8bit),
+                ),
             )
-            kwargs = dataset.meta.copy()
-            kwargs.update({
-                'crs': 'EPSG:4326',
-                'transform': transform,
-                'width': width,
-                'height': height
-            })
 
-            # Reprojeter les données dans un fichier temporaire
-            with tempfile.NamedTemporaryFile(suffix=".tif", delete=False) as temp_tiff:
-                with rasterio.open(temp_tiff.name, 'w', **kwargs) as dst:
-                    for i in range(1, dataset.count + 1):
-                        reproject(
-                            source=rasterio.band(dataset, i),
-                            destination=rasterio.band(dst, i),
-                            src_transform=dataset.transform,
-                            src_crs=dataset.crs,
-                            dst_transform=transform,
-                            dst_crs='EPSG:4326',
-                            resampling=Resampling.nearest
-                        )
-                reproj_tiff_path = temp_tiff.name
+            # Sauvegarder les couches RGB individuellement
+            with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_rgb_file:
+                rgb_image.save(tmp_rgb_file.name, format="PNG")
+                rgb_path = tmp_rgb_file.name
 
-            # Charger les données reprojetées et créer une image PNG
-            with rasterio.open(reproj_tiff_path) as reproj_dataset:
-                # Lire les canaux RGB
-                red = reproj_dataset.read(1)
-                green = reproj_dataset.read(2)
-                blue = reproj_dataset.read(3)
+            # Extraire les bounds pour la carte
+            bounds = dataset.bounds
+            transform = dataset.transform
 
-                # Vérifier que les canaux existent
-                if reproj_dataset.count < 3:
-                    st.error("Le TIFF ne contient pas les trois couches nécessaires (R, G, B).")
-                    return None, None, None
+            # Reprojection des bounds en EPSG:4326
+            from rasterio.warp import transform_bounds
+            left, bottom, right, top = transform_bounds(dataset.crs, "EPSG:4326",
+                                                        bounds.left, bounds.bottom,
+                                                        bounds.right, bounds.top)
 
-                # Créer une image RGB
-                rgb = np.dstack((red, green, blue))
-
-                # Convertir en image PIL
-                img = Image.fromarray(rgb)
-
-                # Sauvegarder l'image en fichier temporaire
-                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_png_file:
-                    img.save(tmp_png_file, format="PNG")
-                    tmp_png_file.seek(0)
-                    png_path = tmp_png_file.name
-
-            return png_path, (left, bottom, right, top), (lat, lon)
+            return rgb_path, left, bottom, right, top
 
     except Exception as e:
         st.error(f"Erreur lors du traitement du TIFF : {e}")
-        return None, None, None
+        return None, None, None, None, None
 
-def create_map(bounds, center, png_path, altitude_path=None, flood_path=None):
-    # Créer une carte centrée sur les coordonnées
-    folium_map = folium.Map(location=center, zoom_start=12)
 
-    # Ajouter la couche RGB
-    rgb_overlay = folium.raster_layers.ImageOverlay(
-        name='Orthomosaic RGB',
-        image=png_path,
-        bounds=[[bounds[1], bounds[0]], [bounds[3], bounds[2]]],
+# Créer une carte interactive avec gestion des couches
+def create_map(rgb_path, left, bottom, right, top):
+    # Créer une carte centrée sur les bounds
+    folium_map = folium.Map(location=[(top + bottom) / 2, (left + right) / 2], zoom_start=15)
+
+    # Ajouter les couches
+    folium.raster_layers.ImageOverlay(
+        image=rgb_path,
+        bounds=[[bottom, left], [top, right]],
         opacity=1.0,
-        interactive=True,
-        cross_origin=False,
-        zindex=1
-    )
-    rgb_overlay.add_to(folium_map)
+        name="Orthomosaïque RGB",
+    ).add_to(folium_map)
 
-    # Créer un FeatureGroup pour permettre le contrôle des couches
-    fg_rgb = folium.FeatureGroup(name='Orthomosaic RGB')
-    fg_rgb.add_child(rgb_overlay)
-    folium_map.add_child(fg_rgb)
-
-    # Exemple d'ajout d'autres couches (Altitude, Inondation) si disponibles
-    if altitude_path:
-        altitude_overlay = folium.raster_layers.ImageOverlay(
-            name='Altitude',
-            image=altitude_path,
-            bounds=[[bounds[1], bounds[0]], [bounds[3], bounds[2]]],
-            opacity=0.6,
-            interactive=True,
-            cross_origin=False,
-            zindex=2
-        )
-        fg_altitude = folium.FeatureGroup(name='Altitude')
-        fg_altitude.add_child(altitude_overlay)
-        folium_map.add_child(fg_altitude)
-
-    if flood_path:
-        flood_overlay = folium.raster_layers.ImageOverlay(
-            name='Inondation',
-            image=flood_path,
-            bounds=[[bounds[1], bounds[0]], [bounds[3], bounds[2]]],
-            opacity=0.6,
-            interactive=True,
-            cross_origin=False,
-            zindex=3
-        )
-        fg_flood = folium.FeatureGroup(name='Inondation')
-        fg_flood.add_child(flood_overlay)
-        folium_map.add_child(fg_flood)
-
-    # Ajouter les contrôles de couches
+    # Ajouter un contrôle de couches
     folium.LayerControl().add_to(folium_map)
-
-    # Ajouter des contrôles de mesure
-    folium_map.add_child(plugins.MeasureControl(
-        primary_length_unit='kilometers',
-        secondary_length_unit='meters',
-        primary_area_unit='sqmeters'
-    ))
-
-    # Ajouter un outil de dessin
-    folium_map.add_child(plugins.Draw(
-        export=True,
-        draw_options={
-            'polyline': True,
-            'polygon': True,
-            'circle': True,
-            'rectangle': True,
-            'marker': True,
-            'circlemarker': False,
-        },
-        edit_options={'edit': True}
-    ))
 
     return folium_map
 
+
 # Interface Streamlit
-st.title("Carte Interactive à partir de données TIFF (Orthomosaïque RGB)")
+st.title("Orthomosaïque Interactive avec gestion des couches")
 
 # Téléchargement du fichier TIFF
-uploaded_file = st.file_uploader("Téléchargez un fichier TIFF", type=["tiff", "tif"])
+uploaded_file = st.file_uploader("Téléchargez une orthomosaïque TIFF (RGB)", type=["tiff", "tif"])
 
 if uploaded_file is not None:
     # Traiter le fichier TIFF
-    png_path, bounds, center = process_tiff(uploaded_file)
+    rgb_path, left, bottom, right, top = process_tiff(uploaded_file)
 
-    if png_path and bounds and center:
-        # Créer la carte avec les couches
-        folium_map = create_map(bounds, center, png_path)
+    if rgb_path and left and bottom and right and top:
+        # Créer la carte
+        folium_map = create_map(rgb_path, left, bottom, right, top)
 
         # Afficher la carte
-        st.markdown("### Carte Interactive")
+        st.markdown("### Carte interactive avec gestion des couches")
         folium_static(folium_map)
     else:
-        st.error("Impossible de traiter le fichier TIFF.")
+        st.error("Erreur lors de la génération de la carte.")
 
 
 
