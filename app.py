@@ -20,6 +20,7 @@ import numpy as np
 from PIL import Image
 import rasterio
 from rasterio.enums import Resampling
+from rasterio.warp import transform_bounds, calculate_default_transform, reproject, Resampling
 import tempfile
 from folium import plugins
 from streamlit_folium import folium_static
@@ -27,56 +28,86 @@ from streamlit_folium import folium_static
 def process_tiff(uploaded_file):
     try:
         with rasterio.open(uploaded_file) as dataset:
-            # Vérifier les métadonnées du TIFF
+            # Vérifier les métadonnées
             st.write("**Métadonnées TIFF :**")
             st.json(dataset.meta)
 
-            # Convertir les coordonnées des bounds en latitude/longitude (si nécessaire)
+            # Reprojection des bounds en EPSG:4326
             bounds = dataset.bounds
-            st.write("**Bounds TIFF (Raw):**", bounds)
+            left, bottom, right, top = transform_bounds(dataset.crs, 'EPSG:4326', 
+                                                        bounds.left, bounds.bottom, 
+                                                        bounds.right, bounds.top)
+            st.write("**Bounds reprojetés (EPSG:4326):**", {"left": left, "bottom": bottom, "right": right, "top": top})
 
-            # Assumer que les coordonnées sont en lat/lon (si ce n'est pas le cas, reprojection nécessaire)
-            lat = (bounds.top + bounds.bottom) / 2
-            lon = (bounds.left + bounds.right) / 2
-
+            # Calculer le centre en coordonnées géographiques
+            lat = (top + bottom) / 2
+            lon = (left + right) / 2
             st.write(f"**Coordonnées du centre :** Latitude = {lat}, Longitude = {lon}")
 
-            # Extraire les couches et effectuer les transformations
-            red = dataset.read(1)
-            green = dataset.read(2) if dataset.count > 1 else None
-            blue = dataset.read(3) if dataset.count > 2 else None
+            # Reprojection de l'image si nécessaire
+            transform, width, height = calculate_default_transform(
+                dataset.crs, 'EPSG:4326', dataset.width, dataset.height, *dataset.bounds
+            )
+            kwargs = dataset.meta.copy()
+            kwargs.update({
+                'crs': 'EPSG:4326',
+                'transform': transform,
+                'width': width,
+                'height': height
+            })
 
-            # Normaliser les valeurs 16-bit en 8-bit
-            def normalize_to_8bit(data):
-                if data is not None:
-                    return np.uint8((data / 256).clip(0, 255))
-                return None
+            # Reprojeter les données dans un fichier temporaire
+            with tempfile.NamedTemporaryFile(suffix=".tif", delete=False) as temp_tiff:
+                with rasterio.open(temp_tiff.name, 'w', **kwargs) as dst:
+                    for i in range(1, dataset.count + 1):
+                        reproject(
+                            source=rasterio.band(dataset, i),
+                            destination=rasterio.band(dst, i),
+                            src_transform=dataset.transform,
+                            src_crs=dataset.crs,
+                            dst_transform=transform,
+                            dst_crs='EPSG:4326',
+                            resampling=Resampling.nearest
+                        )
+                reproj_tiff_path = temp_tiff.name
+            
+            # Charger les données reprojetées et créer une image PNG
+            with rasterio.open(reproj_tiff_path) as reproj_dataset:
+                red = reproj_dataset.read(1)
+                green = reproj_dataset.read(2) if reproj_dataset.count > 1 else None
+                blue = reproj_dataset.read(3) if reproj_dataset.count > 2 else None
 
-            red_8bit = normalize_to_8bit(red)
-            green_8bit = normalize_to_8bit(green)
-            blue_8bit = normalize_to_8bit(blue)
+                # Normaliser les valeurs 16-bit en 8-bit
+                def normalize_to_8bit(data):
+                    if data is not None:
+                        return np.uint8((data / 256).clip(0, 255))
+                    return None
 
-            # Fusionner en image RGB si les couches existent
-            img = None
-            if green_8bit is not None and blue_8bit is not None:
-                img = Image.merge(
-                    "RGB",
-                    (
-                        Image.fromarray(red_8bit),
-                        Image.fromarray(green_8bit),
-                        Image.fromarray(blue_8bit),
-                    ),
-                )
-            else:
-                st.error("Le TIFF ne contient pas les trois couches nécessaires (R, G, B).")
+                red_8bit = normalize_to_8bit(red)
+                green_8bit = normalize_to_8bit(green)
+                blue_8bit = normalize_to_8bit(blue)
 
-            # Sauvegarder l'image en fichier temporaire
-            if img is not None:
-                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_png_file:
-                    img.save(tmp_png_file, format="PNG")
-                    tmp_png_file.seek(0)
-                    png_path = tmp_png_file.name
-                return png_path, lat, lon
+                # Fusionner en image RGB si les couches existent
+                img = None
+                if green_8bit is not None and blue_8bit is not None:
+                    img = Image.merge(
+                        "RGB",
+                        (
+                            Image.fromarray(red_8bit),
+                            Image.fromarray(green_8bit),
+                            Image.fromarray(blue_8bit),
+                        ),
+                    )
+                else:
+                    st.error("Le TIFF ne contient pas les trois couches nécessaires (R, G, B).")
+
+                # Sauvegarder l'image en fichier temporaire
+                if img is not None:
+                    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_png_file:
+                        img.save(tmp_png_file, format="PNG")
+                        tmp_png_file.seek(0)
+                        png_path = tmp_png_file.name
+                    return png_path, lat, lon
 
     except Exception as e:
         st.error(f"Erreur lors du traitement du TIFF : {e}")
@@ -127,6 +158,7 @@ if uploaded_file is not None:
         folium_static(folium_map)
     else:
         st.error("Impossible de traiter le fichier TIFF.")
+
 
 
 
