@@ -23,28 +23,45 @@ from PIL import Image
 from streamlit_folium import folium_static
 import tempfile
 
-# Fonction pour traiter le fichier TIFF
+# Fonction pour traiter l'orthomosaïque
 def process_tiff(uploaded_file):
     try:
         with rio_open(uploaded_file) as dataset:
             st.write("**Métadonnées TIFF :**")
             st.json(dataset.meta)
 
+            # Vérifiez si le TIFF contient au moins 3 bandes
+            if dataset.count < 3:
+                st.error("Le fichier TIFF ne contient pas suffisamment de bandes pour RGB.")
+                return None, None, None, None, None
+
             # Lire les bandes RGB
             red = dataset.read(1, resampling=Resampling.bilinear)
             green = dataset.read(2, resampling=Resampling.bilinear)
             blue = dataset.read(3, resampling=Resampling.bilinear)
 
-            # Normalisation 16-bit à 8-bit
+            # Vérifier les valeurs des bandes
+            st.write(f"Valeurs minimales et maximales des bandes :")
+            st.write(f"R: min={red.min()}, max={red.max()}")
+            st.write(f"G: min={green.min()}, max={green.max()}")
+            st.write(f"B: min={blue.min()}, max={blue.max()}")
+
+            # Normalisation des bandes en 8 bits
             def normalize_to_8bit(band):
                 band_min, band_max = np.min(band), np.max(band)
+                if band_min == band_max:
+                    st.error("Les bandes semblent vides ou contiennent des valeurs uniformes.")
+                    return None
                 return np.uint8(255 * (band - band_min) / (band_max - band_min))
 
             red_8bit = normalize_to_8bit(red)
             green_8bit = normalize_to_8bit(green)
             blue_8bit = normalize_to_8bit(blue)
 
-            # Combiner les bandes en image RGB
+            if red_8bit is None or green_8bit is None or blue_8bit is None:
+                return None, None, None, None, None
+
+            # Fusionner en image RGB
             rgb_image = Image.merge(
                 "RGB",
                 (
@@ -54,7 +71,7 @@ def process_tiff(uploaded_file):
                 ),
             )
 
-            # Sauvegarder les couches RGB individuellement
+            # Sauvegarder l'image temporaire
             with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_rgb_file:
                 rgb_image.save(tmp_rgb_file.name, format="PNG")
                 rgb_path = tmp_rgb_file.name
@@ -76,12 +93,11 @@ def process_tiff(uploaded_file):
         return None, None, None, None, None
 
 
-# Créer une carte interactive avec gestion des couches
+# Fonction pour créer une carte
 def create_map(rgb_path, left, bottom, right, top):
-    # Créer une carte centrée sur les bounds
     folium_map = folium.Map(location=[(top + bottom) / 2, (left + right) / 2], zoom_start=15)
 
-    # Ajouter les couches
+    # Ajouter l'image RGB
     folium.raster_layers.ImageOverlay(
         image=rgb_path,
         bounds=[[bottom, left], [top, right]],
@@ -96,25 +112,19 @@ def create_map(rgb_path, left, bottom, right, top):
 
 
 # Interface Streamlit
-st.title("Orthomosaïque Interactive avec gestion des couches")
+st.title("Orthomosaïque Interactive (TIFF)")
 
-# Téléchargement du fichier TIFF
 uploaded_file = st.file_uploader("Téléchargez une orthomosaïque TIFF (RGB)", type=["tiff", "tif"])
 
 if uploaded_file is not None:
-    # Traiter le fichier TIFF
     rgb_path, left, bottom, right, top = process_tiff(uploaded_file)
 
     if rgb_path and left and bottom and right and top:
-        # Créer la carte
         folium_map = create_map(rgb_path, left, bottom, right, top)
-
-        # Afficher la carte
-        st.markdown("### Carte interactive avec gestion des couches")
+        st.markdown("### Carte interactive")
         folium_static(folium_map)
     else:
         st.error("Erreur lors de la génération de la carte.")
-
 
 
 
