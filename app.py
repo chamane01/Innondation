@@ -22,7 +22,17 @@ from rasterio.enums import Resampling
 from PIL import Image
 from streamlit_folium import folium_static
 import tempfile
+def plot_band(band, title):
+    plt.figure(figsize=(5, 5))
+    plt.imshow(band, cmap='gray')
+    plt.title(title)
+    plt.colorbar()
+    st.pyplot(plt)
 
+with rio_open(uploaded_file) as dataset:
+    for i in range(1, min(dataset.count, 3) + 1):
+        band = dataset.read(i)
+        plot_band(band, f"Bande {i}")
 # Fonction pour traiter l'orthomosaïque
 def process_tiff(uploaded_file):
     try:
