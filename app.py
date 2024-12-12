@@ -20,7 +20,7 @@ import numpy as np
 from PIL import Image
 import rasterio
 from rasterio.enums import Resampling
-from rasterio.warp import transform_bounds, calculate_default_transform, reproject, Resampling
+from rasterio.warp import transform_bounds, calculate_default_transform, reproject
 import tempfile
 from folium import plugins
 from streamlit_folium import folium_static
@@ -28,7 +28,7 @@ from streamlit_folium import folium_static
 def process_tiff(uploaded_file):
     try:
         with rasterio.open(uploaded_file) as dataset:
-            # Vérifier les métadonnées
+            # Afficher les métadonnées du TIFF
             st.write("**Métadonnées TIFF :**")
             st.json(dataset.meta)
 
@@ -44,7 +44,7 @@ def process_tiff(uploaded_file):
             lon = (left + right) / 2
             st.write(f"**Coordonnées du centre :** Latitude = {lat}, Longitude = {lon}")
 
-            # Reprojection de l'image si nécessaire
+            # Reprojection de l'image dans EPSG:4326
             transform, width, height = calculate_default_transform(
                 dataset.crs, 'EPSG:4326', dataset.width, dataset.height, *dataset.bounds
             )
@@ -70,94 +70,133 @@ def process_tiff(uploaded_file):
                             resampling=Resampling.nearest
                         )
                 reproj_tiff_path = temp_tiff.name
-            
+
             # Charger les données reprojetées et créer une image PNG
             with rasterio.open(reproj_tiff_path) as reproj_dataset:
+                # Lire les canaux RGB
                 red = reproj_dataset.read(1)
-                green = reproj_dataset.read(2) if reproj_dataset.count > 1 else None
-                blue = reproj_dataset.read(3) if reproj_dataset.count > 2 else None
+                green = reproj_dataset.read(2)
+                blue = reproj_dataset.read(3)
 
-                # Normaliser les valeurs 16-bit en 8-bit
-                def normalize_to_8bit(data):
-                    if data is not None:
-                        return np.uint8((data / 256).clip(0, 255))
-                    return None
-
-                red_8bit = normalize_to_8bit(red)
-                green_8bit = normalize_to_8bit(green)
-                blue_8bit = normalize_to_8bit(blue)
-
-                # Fusionner en image RGB si les couches existent
-                img = None
-                if green_8bit is not None and blue_8bit is not None:
-                    img = Image.merge(
-                        "RGB",
-                        (
-                            Image.fromarray(red_8bit),
-                            Image.fromarray(green_8bit),
-                            Image.fromarray(blue_8bit),
-                        ),
-                    )
-                else:
+                # Vérifier que les canaux existent
+                if reproj_dataset.count < 3:
                     st.error("Le TIFF ne contient pas les trois couches nécessaires (R, G, B).")
+                    return None, None, None
+
+                # Créer une image RGB
+                rgb = np.dstack((red, green, blue))
+
+                # Convertir en image PIL
+                img = Image.fromarray(rgb)
 
                 # Sauvegarder l'image en fichier temporaire
-                if img is not None:
-                    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_png_file:
-                        img.save(tmp_png_file, format="PNG")
-                        tmp_png_file.seek(0)
-                        png_path = tmp_png_file.name
-                    return png_path, lat, lon
+                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_png_file:
+                    img.save(tmp_png_file, format="PNG")
+                    tmp_png_file.seek(0)
+                    png_path = tmp_png_file.name
+
+            return png_path, (left, bottom, right, top), (lat, lon)
 
     except Exception as e:
         st.error(f"Erreur lors du traitement du TIFF : {e}")
-    return None, None, None
+        return None, None, None
 
-def create_map(lat, lon, png_path):
+def create_map(bounds, center, png_path, altitude_path=None, flood_path=None):
     # Créer une carte centrée sur les coordonnées
-    folium_map = folium.Map(location=[lat, lon], zoom_start=12)
+    folium_map = folium.Map(location=center, zoom_start=12)
 
-    # Ajouter une couche de l'image PNG
-    if png_path:
-        folium.raster_layers.ImageOverlay(
-            png_path,
-            bounds=[[lat - 0.05, lon - 0.05], [lat + 0.05, lon + 0.05]],
-            opacity=0.5,
-        ).add_to(folium_map)
-    else:
-        st.error("Aucune image PNG disponible pour l'affichage.")
+    # Ajouter la couche RGB
+    rgb_overlay = folium.raster_layers.ImageOverlay(
+        name='Orthomosaic RGB',
+        image=png_path,
+        bounds=[[bounds[1], bounds[0]], [bounds[3], bounds[2]]],
+        opacity=1.0,
+        interactive=True,
+        cross_origin=False,
+        zindex=1
+    )
+    rgb_overlay.add_to(folium_map)
 
-    # Ajouter un contrôle de mesure
-    folium.plugins.MeasureControl(
-        primary_length_unit="kilometers",
-        secondary_length_unit="meters",
-        primary_area_unit="sqmeters",
-    ).add_to(folium_map)
+    # Créer un FeatureGroup pour permettre le contrôle des couches
+    fg_rgb = folium.FeatureGroup(name='Orthomosaic RGB')
+    fg_rgb.add_child(rgb_overlay)
+    folium_map.add_child(fg_rgb)
+
+    # Exemple d'ajout d'autres couches (Altitude, Inondation) si disponibles
+    if altitude_path:
+        altitude_overlay = folium.raster_layers.ImageOverlay(
+            name='Altitude',
+            image=altitude_path,
+            bounds=[[bounds[1], bounds[0]], [bounds[3], bounds[2]]],
+            opacity=0.6,
+            interactive=True,
+            cross_origin=False,
+            zindex=2
+        )
+        fg_altitude = folium.FeatureGroup(name='Altitude')
+        fg_altitude.add_child(altitude_overlay)
+        folium_map.add_child(fg_altitude)
+
+    if flood_path:
+        flood_overlay = folium.raster_layers.ImageOverlay(
+            name='Inondation',
+            image=flood_path,
+            bounds=[[bounds[1], bounds[0]], [bounds[3], bounds[2]]],
+            opacity=0.6,
+            interactive=True,
+            cross_origin=False,
+            zindex=3
+        )
+        fg_flood = folium.FeatureGroup(name='Inondation')
+        fg_flood.add_child(flood_overlay)
+        folium_map.add_child(fg_flood)
+
+    # Ajouter les contrôles de couches
+    folium.LayerControl().add_to(folium_map)
+
+    # Ajouter des contrôles de mesure
+    folium_map.add_child(plugins.MeasureControl(
+        primary_length_unit='kilometers',
+        secondary_length_unit='meters',
+        primary_area_unit='sqmeters'
+    ))
 
     # Ajouter un outil de dessin
-    folium.plugins.Draw(export=True).add_to(folium_map)
+    folium_map.add_child(plugins.Draw(
+        export=True,
+        draw_options={
+            'polyline': True,
+            'polygon': True,
+            'circle': True,
+            'rectangle': True,
+            'marker': True,
+            'circlemarker': False,
+        },
+        edit_options={'edit': True}
+    ))
 
     return folium_map
 
 # Interface Streamlit
-st.title("Carte Interactive à partir de données TIFF")
+st.title("Carte Interactive à partir de données TIFF (Orthomosaïque RGB)")
 
 # Téléchargement du fichier TIFF
 uploaded_file = st.file_uploader("Téléchargez un fichier TIFF", type=["tiff", "tif"])
 
 if uploaded_file is not None:
     # Traiter le fichier TIFF
-    png_path, lat, lon = process_tiff(uploaded_file)
+    png_path, bounds, center = process_tiff(uploaded_file)
 
-    if png_path and lat and lon:
+    if png_path and bounds and center:
         # Créer la carte avec les couches
-        folium_map = create_map(lat, lon, png_path)
+        folium_map = create_map(bounds, center, png_path)
 
         # Afficher la carte
         st.markdown("### Carte Interactive")
         folium_static(folium_map)
     else:
         st.error("Impossible de traiter le fichier TIFF.")
+
 
 
 
