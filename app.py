@@ -20,59 +20,88 @@ import numpy as np
 from PIL import Image
 import rasterio
 from rasterio.enums import Resampling
-import io
 import tempfile
 from folium import plugins
 from streamlit_folium import folium_static
-from io import BytesIO
 
 def process_tiff(uploaded_file):
-    # Charger le fichier TIFF avec rasterio
-    with rasterio.open(uploaded_file) as dataset:
-        # Convertir le fichier TIFF en LZW
-        kwargs = dataset.meta
-        kwargs.update(driver='GTiff', compress='LZW')
-        output_file = '/tmp/output_lzw.tif'
-        
-        with rasterio.open(output_file, 'w', **kwargs) as dst:
-            for i in range(1, dataset.count + 1):
-                data = dataset.read(i, resampling=Resampling.nearest)
-                dst.write(data, i)
-        
-        # Séparer les canaux R, G, B, Altitude
-        red = dataset.read(1)
-        green = dataset.read(2)
-        blue = dataset.read(3)
-        altitude = dataset.read(4) if dataset.count > 3 else None
+    try:
+        with rasterio.open(uploaded_file) as dataset:
+            # Vérifier les métadonnées du TIFF
+            st.write("**Métadonnées TIFF :**")
+            st.json(dataset.meta)
 
-    # Conversion des couleurs de 16 bits à 8 bits
-    red_8bit = np.uint8((red / 256).clip(0, 255))
-    green_8bit = np.uint8((green / 256).clip(0, 255))
-    blue_8bit = np.uint8((blue / 256).clip(0, 255))
+            # Convertir les coordonnées des bounds en latitude/longitude (si nécessaire)
+            bounds = dataset.bounds
+            st.write("**Bounds TIFF (Raw):**", bounds)
 
-    # Conversion en image PNG
-    img = Image.merge("RGB", (Image.fromarray(red_8bit), Image.fromarray(green_8bit), Image.fromarray(blue_8bit)))
-    
-    # Créer un fichier temporaire pour le PNG
-    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_png_file:
-        img.save(tmp_png_file, format="PNG")
-        tmp_png_file.seek(0)
-        png_path = tmp_png_file.name
-    
-    # Extraire les coordonnées du coin supérieur gauche pour centrer la carte
-    lat, lon = dataset.bounds[3], dataset.bounds[0]
+            # Assumer que les coordonnées sont en lat/lon (si ce n'est pas le cas, reprojection nécessaire)
+            lat = (bounds.top + bounds.bottom) / 2
+            lon = (bounds.left + bounds.right) / 2
 
-    return red_8bit, green_8bit, blue_8bit, altitude, output_file, png_path, lat, lon
+            st.write(f"**Coordonnées du centre :** Latitude = {lat}, Longitude = {lon}")
+
+            # Extraire les couches et effectuer les transformations
+            red = dataset.read(1)
+            green = dataset.read(2) if dataset.count > 1 else None
+            blue = dataset.read(3) if dataset.count > 2 else None
+
+            # Normaliser les valeurs 16-bit en 8-bit
+            def normalize_to_8bit(data):
+                if data is not None:
+                    return np.uint8((data / 256).clip(0, 255))
+                return None
+
+            red_8bit = normalize_to_8bit(red)
+            green_8bit = normalize_to_8bit(green)
+            blue_8bit = normalize_to_8bit(blue)
+
+            # Fusionner en image RGB si les couches existent
+            img = None
+            if green_8bit is not None and blue_8bit is not None:
+                img = Image.merge(
+                    "RGB",
+                    (
+                        Image.fromarray(red_8bit),
+                        Image.fromarray(green_8bit),
+                        Image.fromarray(blue_8bit),
+                    ),
+                )
+            else:
+                st.error("Le TIFF ne contient pas les trois couches nécessaires (R, G, B).")
+
+            # Sauvegarder l'image en fichier temporaire
+            if img is not None:
+                with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_png_file:
+                    img.save(tmp_png_file, format="PNG")
+                    tmp_png_file.seek(0)
+                    png_path = tmp_png_file.name
+                return png_path, lat, lon
+
+    except Exception as e:
+        st.error(f"Erreur lors du traitement du TIFF : {e}")
+    return None, None, None
 
 def create_map(lat, lon, png_path):
     # Créer une carte centrée sur les coordonnées
     folium_map = folium.Map(location=[lat, lon], zoom_start=12)
 
-    # Ajouter une couche de profondeur en PNG
-    folium.raster_layers.ImageOverlay(png_path, bounds=[[lat-0.05, lon-0.05], [lat+0.05, lon+0.05]], opacity=0.5).add_to(folium_map)
+    # Ajouter une couche de l'image PNG
+    if png_path:
+        folium.raster_layers.ImageOverlay(
+            png_path,
+            bounds=[[lat - 0.05, lon - 0.05], [lat + 0.05, lon + 0.05]],
+            opacity=0.5,
+        ).add_to(folium_map)
+    else:
+        st.error("Aucune image PNG disponible pour l'affichage.")
 
     # Ajouter un contrôle de mesure
-    folium.plugins.MeasureControl(primary_length_unit="kilometers", secondary_length_unit="meters", primary_area_unit="sqmeters").add_to(folium_map)
+    folium.plugins.MeasureControl(
+        primary_length_unit="kilometers",
+        secondary_length_unit="meters",
+        primary_area_unit="sqmeters",
+    ).add_to(folium_map)
 
     # Ajouter un outil de dessin
     folium.plugins.Draw(export=True).add_to(folium_map)
@@ -87,14 +116,17 @@ uploaded_file = st.file_uploader("Téléchargez un fichier TIFF", type=["tiff", 
 
 if uploaded_file is not None:
     # Traiter le fichier TIFF
-    red_8bit, green_8bit, blue_8bit, altitude, output_file, png_path, lat, lon = process_tiff(uploaded_file)
+    png_path, lat, lon = process_tiff(uploaded_file)
 
-    # Créer la carte avec les couches
-    folium_map = create_map(lat, lon, png_path)
+    if png_path and lat and lon:
+        # Créer la carte avec les couches
+        folium_map = create_map(lat, lon, png_path)
 
-    # Affichage de la carte
-    st.markdown("### Carte Interactive")
-    folium_static(folium_map)
+        # Afficher la carte
+        st.markdown("### Carte Interactive")
+        folium_static(folium_map)
+    else:
+        st.error("Impossible de traiter le fichier TIFF.")
 
 
 
