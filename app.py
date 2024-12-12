@@ -14,6 +14,94 @@ from datetime import datetime
 import rasterio
 
 
+
+import streamlit as st
+import folium
+import numpy as np
+from PIL import Image
+from osgeo import gdal
+import io
+from io import BytesIO
+import geopandas as gpd
+from folium import plugins
+
+def process_tiff(uploaded_file):
+    # Charger le fichier TIFF
+    dataset = gdal.Open(uploaded_file)
+    
+    # Convertir le fichier TIFF en LZW
+    driver = gdal.GetDriverByName('GTiff')
+    output_file = '/tmp/output_lzw.tif'
+    driver.CreateCopy(output_file, dataset, options=['COMPRESS=LZW'])
+    
+    # Séparer les canaux R, G, B, Altitude
+    bands = [dataset.GetRasterBand(i+1) for i in range(dataset.RasterCount)]
+    
+    # Extraire les données de chaque bande (R, G, B, Altitude)
+    red = bands[0].ReadAsArray()
+    green = bands[1].ReadAsArray()
+    blue = bands[2].ReadAsArray()
+    altitude = bands[3].ReadAsArray() if len(bands) > 3 else None
+    
+    # Conversion des couleurs de 16 bits à 8 bits
+    red_8bit = np.uint8((red / 256).clip(0, 255))
+    green_8bit = np.uint8((green / 256).clip(0, 255))
+    blue_8bit = np.uint8((blue / 256).clip(0, 255))
+    
+    # Conversion en images PNG
+    img = Image.merge("RGB", (Image.fromarray(red_8bit), Image.fromarray(green_8bit), Image.fromarray(blue_8bit)))
+    png_buffer = BytesIO()
+    img.save(png_buffer, format="PNG")
+    png_buffer.seek(0)
+    png_image = png_buffer.read()
+    
+    return red_8bit, green_8bit, blue_8bit, altitude, output_file, png_image
+
+def create_map(lat, lon, depth_png):
+    # Créer une carte centrée sur les coordonnées
+    folium_map = folium.Map(location=[lat, lon], zoom_start=12)
+
+    # Ajouter une couche de profondeur en PNG
+    img_data = io.BytesIO(depth_png)
+    folium.raster_layers.ImageOverlay(img_data, bounds=[[lat-0.05, lon-0.05], [lat+0.05, lon+0.05]], opacity=0.5).add_to(folium_map)
+
+    # Ajouter un contrôle de mesure
+    folium.plugins.MeasureControl(primary_length_unit="kilometers", secondary_length_unit="meters", primary_area_unit="sqmeters").add_to(folium_map)
+
+    # Ajouter un outil de dessin
+    folium.plugins.Draw(export=True).add_to(folium_map)
+
+    return folium_map
+
+# Streamlit interface
+st.title("Carte Interactive à partir de données TIFF")
+
+# Téléchargement du fichier TIFF
+uploaded_file = st.file_uploader("Téléchargez un fichier TIFF", type=["tiff", "tif"])
+
+if uploaded_file is not None:
+    # Traiter le fichier TIFF
+    red_8bit, green_8bit, blue_8bit, altitude, output_file, png_image = process_tiff(uploaded_file)
+
+    # Extraire les coordonnées de l'image pour la carte
+    dataset = gdal.Open(uploaded_file)
+    geotransform = dataset.GetGeoTransform()
+    lat = geotransform[3] + 0.05  # Latitude approximative de l'image
+    lon = geotransform[0] + 0.05  # Longitude approximative de l'image
+
+    # Créer la carte avec les couches
+    folium_map = create_map(lat, lon, png_image)
+
+    # Affichage de la carte
+    st.markdown("### Carte Interactive")
+    folium_static(folium_map)
+
+# Fonction pour afficher Folium dans Streamlit
+from streamlit_folium import folium_static
+
+
+
+
 import streamlit as st
 from PIL import Image
 import numpy as np
