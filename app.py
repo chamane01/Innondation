@@ -14,87 +14,69 @@ from datetime import datetime
 import rasterio
 
 
-
 import streamlit as st
 from PIL import Image
 import numpy as np
-import folium
-from streamlit_folium import st_folium
 import io
 
-# Fonction pour diviser une image en couches RGB
-# et générer une couche d'altitude fictive
-def split_image_into_layers(image):
-    array = np.array(image)
-    r, g, b = array[..., 0], array[..., 1], array[..., 2]
-    # Créer une couche d'altitude fictive basée sur une moyenne des couleurs
-    altitude = (r.astype(np.float32) + g.astype(np.float32) + b.astype(np.float32)) / 3
-    altitude = altitude.astype(np.uint8)
-    return r, g, b, altitude
+# Fonction pour appliquer la compression LZW (simulée dans ce cas)
+def apply_lzw_compression(image):
+    # Pillow ne prend pas en charge directement LZW, mais on peut simuler en optimisant le fichier.
+    output = io.BytesIO()
+    image.save(output, format='TIFF', compression='tiff_lzw')
+    output.seek(0)
+    return Image.open(output)
 
-# Fonction pour appliquer une compression simulée (par réduction de profondeur des couleurs)
-def reduce_color_depth(layer, bit_depth=4):
+# Fonction pour réduire la profondeur des couleurs
+def reduce_color_depth(image, bit_depth=4):
     factor = 2 ** (8 - bit_depth)
-    reduced_layer = (layer // factor) * factor
-    return reduced_layer
+    array = np.array(image)
+    reduced_array = (array // factor) * factor
+    return Image.fromarray(reduced_array.astype('uint8'))
 
-# Fonction pour afficher une couche comme image
-def layer_to_image(layer):
-    return Image.fromarray(layer.astype('uint8'))
+# Fonction pour convertir en PNG
+def convert_to_png(image):
+    output = io.BytesIO()
+    image.save(output, format='PNG', optimize=True)
+    output.seek(0)
+    return output
 
-# Interface Streamlit
-st.title("Transformation et visualisation de fichier TIFF sur carte OSM")
-st.write("Téléversez un fichier TIFF pour diviser en couches, appliquer des transformations, et afficher les résultats sur une carte.")
+# Interface utilisateur Streamlit
+st.title("Transformation de fichier TIFF")
+st.write("Téléversez un fichier TIFF pour appliquer des transformations : compression LZW, réduction de profondeur de couleurs, et conversion en PNG.")
 
 # Téléversement de fichier
 tiff_file = st.file_uploader("Choisissez un fichier TIFF", type=["tiff", "tif"])
 
 if tiff_file is not None:
     # Chargement du fichier TIFF
-    image = Image.open(tiff_file).convert('RGB')  # Assurer que l'image est RGB
+    image = Image.open(tiff_file)
 
-    # Division en couches RGB et couche d'altitude
-    r, g, b, altitude = split_image_into_layers(image)
+    st.write("### Aperçu de l'image originale")
+    st.image(image, caption="Image originale", use_column_width=True)
 
-    # Affichage des couches originales
-    st.write("### Couches originales")
-    st.image([layer_to_image(r), layer_to_image(g), layer_to_image(b), layer_to_image(altitude)],
-             caption=["Rouge (R)", "Vert (G)", "Bleu (B)", "Altitude"], use_column_width=True)
+    # Étape 1 : Compression LZW
+    st.write("### Compression LZW")
+    compressed_image = apply_lzw_compression(image)
+    st.image(compressed_image, caption="Image après compression LZW", use_column_width=True)
 
-    # Application des transformations (réduction de profondeur des couleurs)
-    st.write("### Couches après transformation")
-    r_transformed = reduce_color_depth(r)
-    g_transformed = reduce_color_depth(g)
-    b_transformed = reduce_color_depth(b)
-    altitude_transformed = reduce_color_depth(altitude)
+    # Étape 2 : Réduction de profondeur des couleurs
+    st.write("### Réduction de profondeur des couleurs")
+    reduced_image = reduce_color_depth(compressed_image)
+    st.image(reduced_image, caption="Image avec profondeur réduite", use_column_width=True)
 
-    st.image([layer_to_image(r_transformed), layer_to_image(g_transformed),
-              layer_to_image(b_transformed), layer_to_image(altitude_transformed)],
-             caption=["Rouge (R) transformé", "Vert (G) transformé", "Bleu (B) transformé", "Altitude transformée"],
-             use_column_width=True)
+    # Étape 3 : Conversion en PNG
+    st.write("### Conversion en PNG")
+    png_file = convert_to_png(reduced_image)
 
-    # Création de la carte avec Folium
-    st.write("### Résultat sur une carte OSM")
+    # Téléchargement du fichier final
+    st.download_button(
+        label="Télécharger l'image PNG compressée",
+        data=png_file,
+        file_name="image_compressée.png",
+        mime="image/png"
+    )
 
-    # Initialisation de la carte
-    m = folium.Map(location=[5.0, -3.0], zoom_start=12)  # Coordonnées par défaut (Côte d'Ivoire)
-
-    # Ajout des couches transformées (superposition simulée)
-    for layer, color, name in zip([r_transformed, g_transformed, b_transformed, altitude_transformed],
-                                  ["red", "green", "blue", "gray"],
-                                  ["Rouge", "Vert", "Bleu", "Altitude"]):
-        folium.raster_layers.ImageOverlay(
-            image=layer,
-            bounds=[[4.9, -3.1], [5.1, -2.9]],  # Zone de simulation
-            opacity=0.6,
-            name=name
-        ).add_to(m)
-
-    # Ajout de contrôles pour activer/désactiver les couches
-    folium.LayerControl().add_to(m)
-
-    # Affichage de la carte
-    st_folium(m, width=700, height=500)
 
 
 
