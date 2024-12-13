@@ -22,7 +22,7 @@ import numpy as np
 from folium import plugins
 from folium.plugins import MeasureControl, Draw
 from rasterio.plot import reshape_as_image
-from PIL import Image
+from PIL import Image, ImageEnhance
 from streamlit_folium import folium_static
 
 def reproject_tiff(input_tiff, target_crs):
@@ -54,34 +54,22 @@ def reproject_tiff(input_tiff, target_crs):
 
     return reprojected_tiff
 
-def adjust_color_channels(image, red_factor, green_factor, blue_factor):
-    """Adjust the red, green, and blue channels of the image independently."""
-    image = np.array(image)  # Convert the image to a numpy array
-
-    # Separate the RGB channels
-    red, green, blue = image[:,:,0], image[:,:,1], image[:,:,2]
-
-    # Apply the factors to each channel
-    red = np.clip(red * red_factor, 0, 255)
-    green = np.clip(green * green_factor, 0, 255)
-    blue = np.clip(blue * blue_factor, 0, 255)
-
-    # Recombine the channels into the adjusted image
-    adjusted_image = np.stack([red, green, blue], axis=-1)
-
-    return adjusted_image.astype(np.uint8)
-
-def add_image_overlay(map_object, tiff_path, bounds, name, red_factor, green_factor, blue_factor):
-    """Add a TIFF image overlay to a Folium map, with control over each color channel."""
+def add_image_overlay(map_object, tiff_path, bounds, name, saturation_factor=1.0):
+    """Add a TIFF image overlay to a Folium map, with control over color saturation."""
     with rasterio.open(tiff_path) as src:
         # Convert the image to RGB
         image = reshape_as_image(src.read())
-
-        # Adjust each color channel using the user-defined factors
-        adjusted_image = adjust_color_channels(image, red_factor, green_factor, blue_factor)
+        
+        # Convert the image to a PIL image
+        pil_image = Image.fromarray(image)
+        
+        # Adjust saturation with a slider (default is 1.0, full color)
+        enhancer = ImageEnhance.Color(pil_image)
+        pil_image = enhancer.enhance(saturation_factor)  # Adjust the saturation
+        image = np.array(pil_image)
 
         folium.raster_layers.ImageOverlay(
-            image=adjusted_image,
+            image=image,
             bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
             name=name
         ).add_to(map_object)
@@ -112,13 +100,17 @@ def main():
         center_lon = (bounds.left + bounds.right) / 2
         fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-        # Add sliders for each color channel
-        red_factor = st.slider("Adjust Red Channel", 0.0, 2.0, 1.0, 0.01)
-        green_factor = st.slider("Adjust Green Channel", 0.0, 2.0, 1.0, 0.01)
-        blue_factor = st.slider("Adjust Blue Channel", 0.0, 2.0, 1.0, 0.01)
+        # Add a slider to control the saturation (default to full color)
+        saturation_factor = st.slider(
+            "Adjust Saturation (0 = Black & White, 1 = Full Color)",
+            min_value=0.0,
+            max_value=1.0,
+            value=1.0,
+            step=0.1
+        )
 
-        # Add reprojected TIFF as overlay with adjusted colors
-        add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer", red_factor, green_factor, blue_factor)
+        # Add reprojected TIFF as overlay with controlled saturation
+        add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer", saturation_factor)
 
         # Add measure control
         fmap.add_child(MeasureControl())
@@ -135,6 +127,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
