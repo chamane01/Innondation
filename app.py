@@ -20,7 +20,6 @@ import rasterio.warp
 import folium
 from folium import plugins
 from folium.plugins import MeasureControl, Draw
-#◙from folium.plugins import LatLngPopup
 from rasterio.plot import reshape_as_image
 from PIL import Image
 from streamlit_folium import folium_static
