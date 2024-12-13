@@ -21,6 +21,7 @@ from folium import plugins
 from folium.plugins import MeasureControl, Draw
 from rasterio.plot import reshape_as_image
 from PIL import Image
+from streamlit_folium import folium_static
 
 def add_image_overlay(map_object, tiff_path, bounds, name):
     """Add a TIFF image overlay to a Folium map."""
