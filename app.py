@@ -24,6 +24,9 @@ from PIL import Image
 # Fonction pour normaliser les bandes en 8 bits
 def normalize_to_8bit(band):
     band_min, band_max = np.min(band), np.max(band)
+    if band_max - band_min == 0:
+        st.warning("Les valeurs de la bande sont constantes. Normalisation ignorée.")
+        return np.zeros_like(band, dtype=np.uint8)
     return np.uint8(255 * (band - band_min) / (band_max - band_min))
 
 # Fonction pour afficher une bande en niveaux de gris
@@ -32,6 +35,15 @@ def plot_band(band, title):
     plt.imshow(band, cmap="gray")
     plt.title(title)
     plt.colorbar()
+    st.pyplot(plt)
+
+# Fonction pour afficher un histogramme
+def plot_histogram(band, title):
+    plt.figure(figsize=(5, 3))
+    plt.hist(band.flatten(), bins=256, color="blue", alpha=0.7)
+    plt.title(f"Histogramme - {title}")
+    plt.xlabel("Valeurs des pixels")
+    plt.ylabel("Fréquence")
     st.pyplot(plt)
 
 # Fonction principale pour gérer les fichiers TIFF
@@ -55,6 +67,7 @@ def process_tiff(file):
         for i in range(1, dataset.count + 1):
             band = dataset.read(i)
             plot_band(band, f"Bande {i}")
+            plot_histogram(band, f"Bande {i}")
             bands.append(band)
             st.write(f"Bande {i} : min={band.min()}, max={band.max()}, moyenne={band.mean()}")
 
@@ -72,9 +85,13 @@ def process_tiff(file):
         # Reconstituer une image RGB
         rgb_image = np.dstack(normalized_bands)
 
-        # Afficher l'image RGB
-        st.write("**Aperçu de l'image RGB :**")
-        st.image(rgb_image, caption="Image RGB normalisée", clamp=True)
+        # Vérifier si l'image RGB est valide
+        if np.all(rgb_image == 0):
+            st.error("L'image RGB est entièrement noire. Vérifiez les données sources.")
+        else:
+            # Afficher l'image RGB
+            st.write("**Aperçu de l'image RGB :**")
+            st.image(rgb_image, caption="Image RGB normalisée", clamp=True)
 
         return rgb_image
 
@@ -89,7 +106,6 @@ if uploaded_file:
         rgb_image = process_tiff(uploaded_file)
     except Exception as e:
         st.error(f"Erreur lors du traitement : {e}")
-
 
 
 
