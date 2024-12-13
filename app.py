@@ -18,12 +18,14 @@ import streamlit as st
 import rasterio
 import rasterio.warp
 import folium
-import numpy as np
 from folium import plugins
 from folium.plugins import MeasureControl, Draw
 from rasterio.plot import reshape_as_image
 from PIL import Image
 from streamlit_folium import folium_static
+import numpy as np
+import pandas as pd
+from shapely.geometry import Polygon
 
 def reproject_tiff(input_tiff, target_crs):
     """Reproject a TIFF file to a target CRS."""
@@ -54,33 +56,21 @@ def reproject_tiff(input_tiff, target_crs):
 
     return reprojected_tiff
 
-def adjust_image_colors(image, red_factor, green_factor, blue_factor):
-    """Adjust the visible RGB colors of the image."""
-    image = np.array(image)  # Convert to numpy array (RGB format)
-    
-    # Apply the color adjustments based on the slider factors
-    image[:, :, 0] = np.clip(image[:, :, 0] * red_factor, 0, 255)  # Red channel
-    image[:, :, 1] = np.clip(image[:, :, 1] * green_factor, 0, 255)  # Green channel
-    image[:, :, 2] = np.clip(image[:, :, 2] * blue_factor, 0, 255)  # Blue channel
-
-    return image.astype(np.uint8)
-
-def add_image_overlay(map_object, tiff_path, bounds, name, red_factor, green_factor, blue_factor):
-    """Add the TIFF image overlay to the Folium map with color adjustments."""
+def add_image_overlay(map_object, tiff_path, bounds, name):
+    """Add a TIFF image overlay to a Folium map."""
     with rasterio.open(tiff_path) as src:
-        # Convert image to RGB
         image = reshape_as_image(src.read())
-
-        # Apply color adjustments
-        adjusted_image = adjust_image_colors(image, red_factor, green_factor, blue_factor)
-
         folium.raster_layers.ImageOverlay(
-            image=adjusted_image,
+            image=image,
             bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
             name=name
         ).add_to(map_object)
 
-# Streamlit app
+def calculate_area(polygon_coords):
+    """Calculate the area of a drawn polygon using Shapely."""
+    polygon = Polygon(polygon_coords)
+    return polygon.area
+
 def main():
     st.title("TIFF Viewer and Interactive Map")
 
@@ -106,29 +96,34 @@ def main():
         center_lon = (bounds.left + bounds.right) / 2
         fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-        # Add sliders for each color channel
-        red_factor = st.slider("Adjust Red Channel", 0.0, 2.0, 1.0, 0.01)
-        green_factor = st.slider("Adjust Green Channel", 0.0, 2.0, 1.0, 0.01)
-        blue_factor = st.slider("Adjust Blue Channel", 0.0, 2.0, 1.0, 0.01)
-
-        # Add reprojected TIFF as overlay with adjusted colors
-        add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer", red_factor, green_factor, blue_factor)
+        # Add reprojected TIFF as overlay
+        add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
 
         # Add measure control
         fmap.add_child(MeasureControl())
 
-        # Add draw control
+        # Add draw control for polygon drawing
         draw = Draw(export=True)
         fmap.add_child(draw)
 
-        # Layer control
+        # Layer control for map management
         folium.LayerControl().add_to(fmap)
 
         # Display map
         folium_static(fmap)
 
+        # Capture polygon drawing and calculate area
+        st.write("Draw a polygon and press 'Export' to calculate the area.")
+        draw_data = st.session_state.get('drawn_polygon', None)
+        
+        if draw_data is not None:
+            polygon_coords = [(point['lat'], point['lng']) for point in draw_data['geometry']['coordinates'][0]]
+            area = calculate_area(polygon_coords)
+            st.write(f"Calculated Area: {area} square units")
+
 if __name__ == "__main__":
     main()
+
 
 
 
