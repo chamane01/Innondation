@@ -22,6 +22,7 @@ from folium import plugins
 from folium.plugins import MeasureControl, Draw
 from rasterio.plot import reshape_as_image
 from PIL import Image
+import numpy as np
 from streamlit_folium import folium_static
 
 def reproject_tiff(input_tiff, target_crs):
@@ -53,6 +54,24 @@ def reproject_tiff(input_tiff, target_crs):
 
     return reprojected_tiff
 
+def convert_to_grayscale(input_tiff):
+    """Convert a TIFF image to grayscale by extracting a single channel."""
+    with rasterio.open(input_tiff) as src:
+        # Read the first band (channel) of the TIFF
+        band = src.read(1)  # Use the first band for grayscale
+        # Normalize the band to range [0, 255] for grayscale
+        band = np.interp(band, (band.min(), band.max()), (0, 255)).astype(np.uint8)
+        
+        # Save the grayscale image as a new TIFF
+        grayscale_tiff = "grayscale.tiff"
+        with rasterio.open(grayscale_tiff, 'w', driver='GTiff',
+                           count=1, dtype=band.dtype, width=src.width,
+                           height=src.height, crs=src.crs,
+                           transform=src.transform) as dst:
+            dst.write(band, 1)
+    
+    return grayscale_tiff
+
 def add_image_overlay(map_object, tiff_path, bounds, name):
     """Add a TIFF image overlay to a Folium map."""
     with rasterio.open(tiff_path) as src:
@@ -80,6 +99,9 @@ def main():
         # Reproject TIFF to target CRS (e.g., EPSG:4326)
         reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
 
+        # Convert the reprojected TIFF to grayscale
+        grayscale_tiff = convert_to_grayscale(reprojected_tiff)
+
         # Read bounds from reprojected TIFF file
         with rasterio.open(reprojected_tiff) as src:
             bounds = src.bounds
@@ -91,6 +113,9 @@ def main():
 
         # Add reprojected TIFF as overlay
         add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
+
+        # Add grayscale TIFF as overlay
+        add_image_overlay(fmap, grayscale_tiff, bounds, "Grayscale TIFF Layer")
 
         # Add measure control
         fmap.add_child(MeasureControl())
@@ -107,6 +132,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
