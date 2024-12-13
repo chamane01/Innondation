@@ -15,78 +15,88 @@ import rasterio
 
 
 import streamlit as st
+import folium
 import numpy as np
-import rasterio
-from rasterio.plot import reshape_as_image
-import matplotlib.pyplot as plt
+from rasterio import open as rio_open
+from rasterio.enums import Resampling
+from PIL import Image
+from streamlit_folium import folium_static
+import os
+import tempfile
 
-# Fonction pour normaliser une bande
+# Fonction pour normaliser une bande à 8 bits
 def normalize_to_8bit(band):
     band_min, band_max = np.min(band), np.max(band)
-    if band_max - band_min == 0:
-        st.warning("Les valeurs de la bande sont constantes. Image rendue noire.")
-        return np.zeros_like(band, dtype=np.uint8)
     return np.uint8(255 * (band - band_min) / (band_max - band_min))
 
-# Fonction pour afficher une bande
-def plot_band(band, title):
-    plt.figure(figsize=(5, 5))
-    plt.imshow(band, cmap="gray")
-    plt.title(title)
-    plt.colorbar()
-    st.pyplot(plt)
-
-# Fonction principale pour traiter le TIFF
-def process_tiff(file):
-    with rasterio.open(file) as dataset:
-        st.write("**Métadonnées TIFF :**")
-        st.write({
-            "Driver": dataset.driver,
-            "DType": dataset.dtypes,
-            "NoData": dataset.nodata,
-            "Width": dataset.width,
-            "Height": dataset.height,
-            "Count": dataset.count,
-            "CRS": dataset.crs,
-            "Bounds": dataset.bounds
-        })
-
-        bands = []
+# Fonction pour séparer les bandes et enregistrer en fichiers distincts
+def split_tiff_bands(uploaded_file):
+    band_paths = []
+    with rio_open(uploaded_file) as dataset:
         for i in range(1, dataset.count + 1):
-            band = dataset.read(i)
-            if np.all(band == 0):
-                st.warning(f"Bande {i} entièrement noire.")
-            plot_band(band, f"Bande {i}")
-            bands.append(band)
+            band = dataset.read(i, resampling=Resampling.bilinear)
+            band_8bit = normalize_to_8bit(band)
+            
+            # Sauvegarder chaque bande dans un fichier temporaire
+            with tempfile.NamedTemporaryFile(suffix=f"_band_{i}.tif", delete=False) as tmp_band_file:
+                band_image = Image.fromarray(band_8bit)
+                band_image.save(tmp_band_file.name, format="TIFF")
+                band_paths.append(tmp_band_file.name)
 
-        # Gestion des données NoData
-        nodata_value = dataset.nodata
-        if nodata_value is not None:
-            bands = [np.where(band == nodata_value, 0, band) for band in bands]
+        # Extraire les bounds pour la carte
+        bounds = dataset.bounds
+        transform = dataset.transform
 
-        # Normalisation des trois premières bandes en 8 bits
-        st.write("**Normalisation des bandes RGB (si applicables)**")
-        if len(bands) >= 3:
-            normalized_bands = [normalize_to_8bit(band) for band in bands[:3]]
-            rgb_image = np.dstack(normalized_bands)
+        # Reprojection des bounds en EPSG:4326
+        from rasterio.warp import transform_bounds
+        left, bottom, right, top = transform_bounds(dataset.crs, "EPSG:4326",
+                                                    bounds.left, bounds.bottom,
+                                                    bounds.right, bounds.top)
 
-            if np.all(rgb_image == 0):
-                st.error("L'image RGB est entièrement noire. Vérifiez les données sources.")
-            else:
-                st.image(rgb_image, caption="Image RGB Normalisée", clamp=True)
-        else:
-            st.error("Le fichier ne contient pas assez de bandes pour créer une image RGB.")
+    return band_paths, left, bottom, right, top
 
-# Streamlit UI
-st.title("Vérification et Affichage de TIFF Orthomosaïque")
+# Créer une carte interactive avec gestion des couches
+def create_map(band_paths, left, bottom, right, top):
+    # Créer une carte centrée sur les bounds
+    folium_map = folium.Map(location=[(top + bottom) / 2, (left + right) / 2], zoom_start=15)
 
-uploaded_file = st.file_uploader("Charger un fichier TIFF", type=["tif", "tiff"])
+    # Ajouter chaque bande comme une couche
+    for idx, band_path in enumerate(band_paths, start=1):
+        folium.raster_layers.ImageOverlay(
+            image=band_path,
+            bounds=[[bottom, left], [top, right]],
+            opacity=0.6,
+            name=f"Bande {idx}"
+        ).add_to(folium_map)
 
-if uploaded_file:
-    try:
-        process_tiff(uploaded_file)
-    except Exception as e:
-        st.error(f"Erreur lors du traitement : {e}")
+    # Ajouter un contrôle de couches
+    folium.LayerControl().add_to(folium_map)
+
+    return folium_map
+
+# Interface Streamlit
+st.title("Orthomosaïque Interactive avec Gestion des Bandes")
+
+# Téléchargement du fichier TIFF
+uploaded_file = st.file_uploader("Téléchargez une orthomosaïque TIFF (multibandes)", type=["tiff", "tif"])
+
+if uploaded_file is not None:
+    # Séparer les bandes et récupérer les informations de localisation
+    band_paths, left, bottom, right, top = split_tiff_bands(uploaded_file)
+
+    if band_paths and left and bottom and right and top:
+        # Créer la carte avec les bandes comme couches
+        folium_map = create_map(band_paths, left, bottom, right, top)
+
+        # Afficher la carte
+        st.markdown("### Carte Interactive avec Gestion des Bandes")
+        folium_static(folium_map)
+
+        # Nettoyer les fichiers temporaires après affichage
+        for path in band_paths:
+            os.remove(path)
+    else:
+        st.error("Erreur lors de la séparation des bandes ou de la création de la carte.")
 
 
 
