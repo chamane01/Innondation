@@ -23,9 +23,6 @@ from folium.plugins import MeasureControl, Draw
 from rasterio.plot import reshape_as_image
 from PIL import Image
 from streamlit_folium import folium_static
-import numpy as np
-import pandas as pd
-from shapely.geometry import Polygon
 
 def reproject_tiff(input_tiff, target_crs):
     """Reproject a TIFF file to a target CRS."""
@@ -66,11 +63,7 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
             name=name
         ).add_to(map_object)
 
-def calculate_area(polygon_coords):
-    """Calculate the area of a drawn polygon using Shapely."""
-    polygon = Polygon(polygon_coords)
-    return polygon.area
-
+# Streamlit app
 def main():
     st.title("TIFF Viewer and Interactive Map")
 
@@ -102,24 +95,15 @@ def main():
         # Add measure control
         fmap.add_child(MeasureControl())
 
-        # Add draw control for polygon drawing
+        # Add draw control
         draw = Draw(export=True)
         fmap.add_child(draw)
 
-        # Layer control for map management
+        # Layer control
         folium.LayerControl().add_to(fmap)
 
         # Display map
         folium_static(fmap)
-
-        # Capture polygon drawing and calculate area
-        st.write("Draw a polygon and press 'Export' to calculate the area.")
-        draw_data = st.session_state.get('drawn_polygon', None)
-        
-        if draw_data is not None:
-            polygon_coords = [(point['lat'], point['lng']) for point in draw_data['geometry']['coordinates'][0]]
-            area = calculate_area(polygon_coords)
-            st.write(f"Calculated Area: {area} square units")
 
 if __name__ == "__main__":
     main()
