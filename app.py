@@ -55,10 +55,20 @@ def reproject_tiff(input_tiff, target_crs):
     return reprojected_tiff
 
 def apply_color_filter(red_band, green_band, blue_band, red_intensity, green_intensity, blue_intensity):
-    """Apply color filter to RGB bands based on intensity sliders."""
-    red_band_filtered = np.where(red_band > 0, red_band * red_intensity, 0).astype(np.uint8)
-    green_band_filtered = np.where(green_band > 0, green_band * green_intensity, 0).astype(np.uint8)
-    blue_band_filtered = np.where(blue_band > 0, blue_band * blue_intensity, 0).astype(np.uint8)
+    """Apply color filter to RGB bands based on intensity sliders and remove white edges."""
+    red_band_filtered = np.where(red_band > 0, red_band * red_intensity, 0)
+    green_band_filtered = np.where(green_band > 0, green_band * green_intensity, 0)
+    blue_band_filtered = np.where(blue_band > 0, blue_band * blue_intensity, 0)
+
+    # Remove white edges and convert to 1-bit where intensity is 0
+    red_band_filtered = np.where(red_intensity == 0, 0, red_band_filtered)
+    green_band_filtered = np.where(green_intensity == 0, 0, green_band_filtered)
+    blue_band_filtered = np.where(blue_intensity == 0, 0, blue_band_filtered)
+
+    red_band_filtered = red_band_filtered.astype(np.uint8)
+    green_band_filtered = green_band_filtered.astype(np.uint8)
+    blue_band_filtered = blue_band_filtered.astype(np.uint8)
+
     return red_band_filtered, green_band_filtered, blue_band_filtered
 
 def add_image_overlay(map_object, image, bounds, name):
@@ -130,6 +140,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
