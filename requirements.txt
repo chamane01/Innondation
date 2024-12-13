@@ -1,3 +1,4 @@
+geojson
 scikit-image
 rasterio
 gpxpy
