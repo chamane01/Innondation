@@ -54,9 +54,12 @@ def reproject_tiff(input_tiff, target_crs):
 
     return reprojected_tiff
 
-def adjust_band_intensity(band_data, intensity):
-    """Adjust the intensity of a band based on a slider value."""
-    return np.clip(band_data * intensity, 0, 255).astype(np.uint8)
+def apply_color_filter(red_band, green_band, blue_band, red_intensity, green_intensity, blue_intensity):
+    """Apply color filter to RGB bands based on intensity sliders."""
+    red_band_filtered = np.where(red_band > 0, red_band * red_intensity, 0).astype(np.uint8)
+    green_band_filtered = np.where(green_band > 0, green_band * green_intensity, 0).astype(np.uint8)
+    blue_band_filtered = np.where(blue_band > 0, blue_band * blue_intensity, 0).astype(np.uint8)
+    return red_band_filtered, green_band_filtered, blue_band_filtered
 
 def add_image_overlay(map_object, image, bounds, name):
     """Add an image overlay to a Folium map."""
@@ -68,7 +71,7 @@ def add_image_overlay(map_object, image, bounds, name):
 
 # Streamlit app
 def main():
-    st.title("TIFF Viewer and Interactive Map with Color Adjustment")
+    st.title("TIFF Viewer and Interactive Map with Color Filters")
 
     # Upload TIFF file
     uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
@@ -91,15 +94,15 @@ def main():
             blue_band = src.read(3)
 
         # Add sliders for adjusting RGB intensity
-        st.sidebar.title("Adjust RGB Levels")
-        red_intensity = st.sidebar.slider("Red Intensity", 0.0, 2.0, 1.0, step=0.1)
-        green_intensity = st.sidebar.slider("Green Intensity", 0.0, 2.0, 1.0, step=0.1)
-        blue_intensity = st.sidebar.slider("Blue Intensity", 0.0, 2.0, 1.0, step=0.1)
+        st.sidebar.title("Adjust RGB Filters")
+        red_intensity = st.sidebar.slider("Red Intensity", 0.0, 1.0, 1.0, step=0.1)
+        green_intensity = st.sidebar.slider("Green Intensity", 0.0, 1.0, 1.0, step=0.1)
+        blue_intensity = st.sidebar.slider("Blue Intensity", 0.0, 1.0, 1.0, step=0.1)
 
-        # Adjust bands based on slider values
-        red_band = adjust_band_intensity(red_band, red_intensity)
-        green_band = adjust_band_intensity(green_band, green_intensity)
-        blue_band = adjust_band_intensity(blue_band, blue_intensity)
+        # Apply color filters to bands
+        red_band, green_band, blue_band = apply_color_filter(
+            red_band, green_band, blue_band, red_intensity, green_intensity, blue_intensity
+        )
 
         # Combine RGB bands into a single image
         rgb_image = np.dstack((red_band, green_band, blue_band))
@@ -110,7 +113,7 @@ def main():
         fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
         # Add RGB image overlay
-        add_image_overlay(fmap, rgb_image, bounds, "Adjusted RGB Layer")
+        add_image_overlay(fmap, rgb_image, bounds, "Filtered RGB Layer")
 
         # Add measure control
         fmap.add_child(MeasureControl())
@@ -127,6 +130,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
