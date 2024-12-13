@@ -17,42 +17,12 @@ import rasterio
 import streamlit as st
 import rasterio
 import rasterio.warp
-import numpy as np
 import folium
+from folium import plugins
 from folium.plugins import MeasureControl, Draw
 from rasterio.plot import reshape_as_image
-from shapely.geometry import Polygon
+from PIL import Image
 from streamlit_folium import folium_static
-
-def extract_metadata(tiff_path):
-    """Extract metadata from a TIFF file."""
-    with rasterio.open(tiff_path) as src:
-        metadata = {
-            "Width": src.width,
-            "Height": src.height,
-            "CRS": src.crs,
-            "Bounds": src.bounds,
-            "Transform": src.transform
-        }
-    return metadata
-
-def calculate_statistics(tiff_path, polygon_coords):
-    """Calculate pixel statistics within a polygon."""
-    with rasterio.open(tiff_path) as src:
-        polygon = Polygon(polygon_coords)
-        transform = src.transform
-        array = src.read(1)  # Read the first band
-        mask = rasterio.features.geometry_mask(
-            [polygon], transform=transform, invert=True, out_shape=array.shape
-        )
-        selected_pixels = array[mask]
-        stats = {
-            "Mean": np.mean(selected_pixels),
-            "StdDev": np.std(selected_pixels),
-            "Min": np.min(selected_pixels),
-            "Max": np.max(selected_pixels)
-        }
-    return stats
 
 def reproject_tiff(input_tiff, target_crs):
     """Reproject a TIFF file to a target CRS."""
@@ -67,6 +37,7 @@ def reproject_tiff(input_tiff, target_crs):
             'width': width,
             'height': height
         })
+
         reprojected_tiff = "reprojected.tiff"
         with rasterio.open(reprojected_tiff, 'w', **kwargs) as dst:
             for i in range(1, src.count + 1):
@@ -79,6 +50,7 @@ def reproject_tiff(input_tiff, target_crs):
                     dst_crs=target_crs,
                     resampling=rasterio.warp.Resampling.nearest
                 )
+
     return reprojected_tiff
 
 def add_image_overlay(map_object, tiff_path, bounds, name):
@@ -103,10 +75,6 @@ def main():
         with open(tiff_path, "wb") as f:
             f.write(uploaded_file.read())
 
-        # Extract and display metadata
-        metadata = extract_metadata(tiff_path)
-        st.json(metadata)
-
         st.write("Reprojecting TIFF file...")
 
         # Reproject TIFF to target CRS (e.g., EPSG:4326)
@@ -124,8 +92,10 @@ def main():
         # Add reprojected TIFF as overlay
         add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
 
-        # Add measure and draw controls
+        # Add measure control
         fmap.add_child(MeasureControl())
+
+        # Add draw control
         draw = Draw(export=True)
         fmap.add_child(draw)
 
@@ -135,18 +105,8 @@ def main():
         # Display map
         folium_static(fmap)
 
-        # Capture drawing for analysis
-        st.write("Draw a region on the map and analyze it.")
-        if st.button("Analyze"):
-            st.warning("This feature requires further integration of drawn data.")
-
 if __name__ == "__main__":
     main()
-
-
-
-
-
 
 
 
