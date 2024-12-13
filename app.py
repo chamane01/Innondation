@@ -23,6 +23,7 @@ from folium.plugins import MeasureControl, Draw
 from rasterio.plot import reshape_as_image
 from PIL import Image
 from streamlit_folium import folium_static
+import numpy as np
 
 def reproject_tiff(input_tiff, target_crs):
     """Reproject a TIFF file to a target CRS."""
@@ -53,19 +54,21 @@ def reproject_tiff(input_tiff, target_crs):
 
     return reprojected_tiff
 
-def add_image_overlay(map_object, tiff_path, bounds, name):
-    """Add a TIFF image overlay to a Folium map."""
-    with rasterio.open(tiff_path) as src:
-        image = reshape_as_image(src.read())
-        folium.raster_layers.ImageOverlay(
-            image=image,
-            bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
-            name=name
-        ).add_to(map_object)
+def adjust_band_intensity(band_data, intensity):
+    """Adjust the intensity of a band based on a slider value."""
+    return np.clip(band_data * intensity, 0, 255).astype(np.uint8)
+
+def add_image_overlay(map_object, image, bounds, name):
+    """Add an image overlay to a Folium map."""
+    folium.raster_layers.ImageOverlay(
+        image=image,
+        bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
+        name=name
+    ).add_to(map_object)
 
 # Streamlit app
 def main():
-    st.title("TIFF Viewer and Interactive Map")
+    st.title("TIFF Viewer and Interactive Map with Color Adjustment")
 
     # Upload TIFF file
     uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
@@ -80,17 +83,34 @@ def main():
         # Reproject TIFF to target CRS (e.g., EPSG:4326)
         reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
 
-        # Read bounds from reprojected TIFF file
+        # Read bands and bounds from TIFF
         with rasterio.open(reprojected_tiff) as src:
             bounds = src.bounds
+            red_band = src.read(1)
+            green_band = src.read(2)
+            blue_band = src.read(3)
+
+        # Add sliders for adjusting RGB intensity
+        st.sidebar.title("Adjust RGB Levels")
+        red_intensity = st.sidebar.slider("Red Intensity", 0.0, 2.0, 1.0, step=0.1)
+        green_intensity = st.sidebar.slider("Green Intensity", 0.0, 2.0, 1.0, step=0.1)
+        blue_intensity = st.sidebar.slider("Blue Intensity", 0.0, 2.0, 1.0, step=0.1)
+
+        # Adjust bands based on slider values
+        red_band = adjust_band_intensity(red_band, red_intensity)
+        green_band = adjust_band_intensity(green_band, green_intensity)
+        blue_band = adjust_band_intensity(blue_band, blue_intensity)
+
+        # Combine RGB bands into a single image
+        rgb_image = np.dstack((red_band, green_band, blue_band))
 
         # Create Folium map
         center_lat = (bounds.top + bounds.bottom) / 2
         center_lon = (bounds.left + bounds.right) / 2
         fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-        # Add reprojected TIFF as overlay
-        add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
+        # Add RGB image overlay
+        add_image_overlay(fmap, rgb_image, bounds, "Adjusted RGB Layer")
 
         # Add measure control
         fmap.add_child(MeasureControl())
