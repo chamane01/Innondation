@@ -23,7 +23,6 @@ from folium.plugins import MeasureControl, Draw
 from rasterio.plot import reshape_as_image
 from PIL import Image
 from streamlit_folium import folium_static
-import numpy as np
 
 def reproject_tiff(input_tiff, target_crs):
     """Reproject a TIFF file to a target CRS."""
@@ -54,34 +53,19 @@ def reproject_tiff(input_tiff, target_crs):
 
     return reprojected_tiff
 
-def apply_color_filter(red_band, green_band, blue_band, red_intensity, green_intensity, blue_intensity):
-    """Apply color filter to RGB bands based on intensity sliders and remove white edges."""
-    red_band_filtered = np.where(red_band > 0, red_band * red_intensity, 0)
-    green_band_filtered = np.where(green_band > 0, green_band * green_intensity, 0)
-    blue_band_filtered = np.where(blue_band > 0, blue_band * blue_intensity, 0)
-
-    # Remove white edges and convert to 1-bit where intensity is 0
-    red_band_filtered = np.where(red_intensity == 0, 0, red_band_filtered)
-    green_band_filtered = np.where(green_intensity == 0, 0, green_band_filtered)
-    blue_band_filtered = np.where(blue_intensity == 0, 0, blue_band_filtered)
-
-    red_band_filtered = red_band_filtered.astype(np.uint8)
-    green_band_filtered = green_band_filtered.astype(np.uint8)
-    blue_band_filtered = blue_band_filtered.astype(np.uint8)
-
-    return red_band_filtered, green_band_filtered, blue_band_filtered
-
-def add_image_overlay(map_object, image, bounds, name):
-    """Add an image overlay to a Folium map."""
-    folium.raster_layers.ImageOverlay(
-        image=image,
-        bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
-        name=name
-    ).add_to(map_object)
+def add_image_overlay(map_object, tiff_path, bounds, name):
+    """Add a TIFF image overlay to a Folium map."""
+    with rasterio.open(tiff_path) as src:
+        image = reshape_as_image(src.read())
+        folium.raster_layers.ImageOverlay(
+            image=image,
+            bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
+            name=name
+        ).add_to(map_object)
 
 # Streamlit app
 def main():
-    st.title("TIFF Viewer and Interactive Map with Color Filters")
+    st.title("TIFF Viewer and Interactive Map")
 
     # Upload TIFF file
     uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
@@ -96,34 +80,17 @@ def main():
         # Reproject TIFF to target CRS (e.g., EPSG:4326)
         reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
 
-        # Read bands and bounds from TIFF
+        # Read bounds from reprojected TIFF file
         with rasterio.open(reprojected_tiff) as src:
             bounds = src.bounds
-            red_band = src.read(1)
-            green_band = src.read(2)
-            blue_band = src.read(3)
-
-        # Add sliders for adjusting RGB intensity
-        st.sidebar.title("Adjust RGB Filters")
-        red_intensity = st.sidebar.slider("Red Intensity", 0.0, 1.0, 1.0, step=0.1)
-        green_intensity = st.sidebar.slider("Green Intensity", 0.0, 1.0, 1.0, step=0.1)
-        blue_intensity = st.sidebar.slider("Blue Intensity", 0.0, 1.0, 1.0, step=0.1)
-
-        # Apply color filters to bands
-        red_band, green_band, blue_band = apply_color_filter(
-            red_band, green_band, blue_band, red_intensity, green_intensity, blue_intensity
-        )
-
-        # Combine RGB bands into a single image
-        rgb_image = np.dstack((red_band, green_band, blue_band))
 
         # Create Folium map
         center_lat = (bounds.top + bounds.bottom) / 2
         center_lon = (bounds.left + bounds.right) / 2
         fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-        # Add RGB image overlay
-        add_image_overlay(fmap, rgb_image, bounds, "Filtered RGB Layer")
+        # Add reprojected TIFF as overlay
+        add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
 
         # Add measure control
         fmap.add_child(MeasureControl())
@@ -140,7 +107,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 
 
