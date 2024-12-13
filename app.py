@@ -53,25 +53,15 @@ def reproject_tiff(input_tiff, target_crs):
 
     return reprojected_tiff
 
-def extract_bands_and_bounds(tiff_path):
-    """Extract RGB and altitude bands from a TIFF file."""
+def add_image_overlay(map_object, tiff_path, bounds, name):
+    """Add a TIFF image overlay to a Folium map."""
     with rasterio.open(tiff_path) as src:
-        bands = {
-            'red': src.read(1),
-            'green': src.read(2),
-            'blue': src.read(3),
-            'altitude': src.read(4) if src.count >= 4 else None
-        }
-        bounds = src.bounds
-    return bands, bounds
-
-def add_image_overlay(map_object, band_data, bounds, name):
-    """Add a single band as an overlay to a Folium map."""
-    folium.raster_layers.ImageOverlay(
-        image=band_data,
-        bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
-        name=name
-    ).add_to(map_object)
+        image = reshape_as_image(src.read())
+        folium.raster_layers.ImageOverlay(
+            image=image,
+            bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
+            name=name
+        ).add_to(map_object)
 
 # Streamlit app
 def main():
@@ -90,18 +80,17 @@ def main():
         # Reproject TIFF to target CRS (e.g., EPSG:4326)
         reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
 
-        # Extract bands and bounds
-        bands, bounds = extract_bands_and_bounds(reprojected_tiff)
+        # Read bounds from reprojected TIFF file
+        with rasterio.open(reprojected_tiff) as src:
+            bounds = src.bounds
 
         # Create Folium map
         center_lat = (bounds.top + bounds.bottom) / 2
         center_lon = (bounds.left + bounds.right) / 2
         fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-        # Add individual bands as layers
-        for band_name, band_data in bands.items():
-            if band_data is not None:
-                add_image_overlay(fmap, band_data, bounds, f"{band_name.capitalize()} Band")
+        # Add reprojected TIFF as overlay
+        add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
 
         # Add measure control
         fmap.add_child(MeasureControl())
