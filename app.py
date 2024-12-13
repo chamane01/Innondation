@@ -15,88 +15,64 @@ import rasterio
 
 
 import streamlit as st
+import rasterio
 import folium
-import numpy as np
-from rasterio import open as rio_open
-from rasterio.enums import Resampling
+from folium import plugins
+from folium.plugins import MeasureControl, Draw
+from rasterio.plot import reshape_as_image
 from PIL import Image
-from streamlit_folium import folium_static
-import os
-import tempfile
 
-# Fonction pour normaliser une bande à 8 bits
-def normalize_to_8bit(band):
-    band_min, band_max = np.min(band), np.max(band)
-    return np.uint8(255 * (band - band_min) / (band_max - band_min))
-
-# Fonction pour séparer les bandes et enregistrer en fichiers distincts
-def split_tiff_bands(uploaded_file):
-    band_paths = []
-    with rio_open(uploaded_file) as dataset:
-        for i in range(1, dataset.count + 1):
-            band = dataset.read(i, resampling=Resampling.bilinear)
-            band_8bit = normalize_to_8bit(band)
-            
-            # Sauvegarder chaque bande dans un fichier temporaire
-            with tempfile.NamedTemporaryFile(suffix=f"_band_{i}.tif", delete=False) as tmp_band_file:
-                band_image = Image.fromarray(band_8bit)
-                band_image.save(tmp_band_file.name, format="TIFF")
-                band_paths.append(tmp_band_file.name)
-
-        # Extraire les bounds pour la carte
-        bounds = dataset.bounds
-        transform = dataset.transform
-
-        # Reprojection des bounds en EPSG:4326
-        from rasterio.warp import transform_bounds
-        left, bottom, right, top = transform_bounds(dataset.crs, "EPSG:4326",
-                                                    bounds.left, bounds.bottom,
-                                                    bounds.right, bounds.top)
-
-    return band_paths, left, bottom, right, top
-
-# Créer une carte interactive avec gestion des couches
-def create_map(band_paths, left, bottom, right, top):
-    # Créer une carte centrée sur les bounds
-    folium_map = folium.Map(location=[(top + bottom) / 2, (left + right) / 2], zoom_start=15)
-
-    # Ajouter chaque bande comme une couche
-    for idx, band_path in enumerate(band_paths, start=1):
+def add_image_overlay(map_object, tiff_path, bounds, name):
+    """Add a TIFF image overlay to a Folium map."""
+    with rasterio.open(tiff_path) as src:
+        image = reshape_as_image(src.read())
         folium.raster_layers.ImageOverlay(
-            image=band_path,
-            bounds=[[bottom, left], [top, right]],
-            opacity=0.6,
-            name=f"Bande {idx}"
-        ).add_to(folium_map)
+            image=image,
+            bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
+            name=name
+        ).add_to(map_object)
 
-    # Ajouter un contrôle de couches
-    folium.LayerControl().add_to(folium_map)
+# Streamlit app
+def main():
+    st.title("TIFF Viewer and Interactive Map")
 
-    return folium_map
+    # Upload TIFF file
+    uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
 
-# Interface Streamlit
-st.title("Orthomosaïque Interactive avec Gestion des Bandes")
+    if uploaded_file is not None:
+        tiff_path = uploaded_file.name
+        with open(tiff_path, "wb") as f:
+            f.write(uploaded_file.read())
 
-# Téléchargement du fichier TIFF
-uploaded_file = st.file_uploader("Téléchargez une orthomosaïque TIFF (multibandes)", type=["tiff", "tif"])
+        st.write("Displaying TIFF file on map...")
 
-if uploaded_file is not None:
-    # Séparer les bandes et récupérer les informations de localisation
-    band_paths, left, bottom, right, top = split_tiff_bands(uploaded_file)
+        # Read bounds from TIFF file
+        with rasterio.open(tiff_path) as src:
+            bounds = src.bounds
 
-    if band_paths and left and bottom and right and top:
-        # Créer la carte avec les bandes comme couches
-        folium_map = create_map(band_paths, left, bottom, right, top)
+        # Create Folium map
+        center_lat = (bounds.top + bounds.bottom) / 2
+        center_lon = (bounds.left + bounds.right) / 2
+        fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-        # Afficher la carte
-        st.markdown("### Carte Interactive avec Gestion des Bandes")
-        folium_static(folium_map)
+        # Add TIFF as overlay
+        add_image_overlay(fmap, tiff_path, bounds, "TIFF Layer")
 
-        # Nettoyer les fichiers temporaires après affichage
-        for path in band_paths:
-            os.remove(path)
-    else:
-        st.error("Erreur lors de la séparation des bandes ou de la création de la carte.")
+        # Add measure control
+        fmap.add_child(MeasureControl())
+
+        # Add draw control
+        draw = Draw(export=True)
+        fmap.add_child(draw)
+
+        # Layer control
+        folium.LayerControl().add_to(fmap)
+
+        # Display map
+        folium_static(fmap)
+
+if __name__ == "__main__":
+    main()
 
 
 
