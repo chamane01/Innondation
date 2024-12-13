@@ -124,12 +124,14 @@ def main():
         draw = Draw(export=True)
         fmap.add_child(draw)
 
-        # Add point-click functionality and measure distances/surfaces
+        # List of points clicked on the map
         points = []
 
-        # Function to add points on click
-        def on_map_click(event):
-            lat, lon = event['latlng']['lat'], event['latlng']['lng']
+        # Add click event for adding markers and calculating area/distance
+        folium.plugins.ClickForMarker(popup="Click to add point").add_to(fmap)
+
+        def on_marker_click(marker):
+            lat, lon = marker.location
             points.append((lat, lon))
             fmap.add_child(folium.Marker([lat, lon]))
 
@@ -137,8 +139,6 @@ def main():
             total_distance, area = calculate_area_and_distance(points)
             st.write(f"Total Distance: {total_distance:.2f} meters")
             st.write(f"Area: {area:.2f} hectares" if area > 0 else "Area: Not enough points to calculate")
-
-        fmap.on('click', on_map_click)
 
         # Layer control
         folium.LayerControl().add_to(fmap)
@@ -148,6 +148,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
