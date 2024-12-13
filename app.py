@@ -19,17 +19,16 @@ import numpy as np
 import rasterio
 from rasterio.plot import reshape_as_image
 import matplotlib.pyplot as plt
-from PIL import Image
 
-# Fonction pour normaliser les bandes en 8 bits
+# Fonction pour normaliser une bande
 def normalize_to_8bit(band):
     band_min, band_max = np.min(band), np.max(band)
     if band_max - band_min == 0:
-        st.warning("Les valeurs de la bande sont constantes. Normalisation ignorée.")
+        st.warning("Les valeurs de la bande sont constantes. Image rendue noire.")
         return np.zeros_like(band, dtype=np.uint8)
     return np.uint8(255 * (band - band_min) / (band_max - band_min))
 
-# Fonction pour afficher une bande en niveaux de gris
+# Fonction pour afficher une bande
 def plot_band(band, title):
     plt.figure(figsize=(5, 5))
     plt.imshow(band, cmap="gray")
@@ -37,16 +36,7 @@ def plot_band(band, title):
     plt.colorbar()
     st.pyplot(plt)
 
-# Fonction pour afficher un histogramme
-def plot_histogram(band, title):
-    plt.figure(figsize=(5, 3))
-    plt.hist(band.flatten(), bins=256, color="blue", alpha=0.7)
-    plt.title(f"Histogramme - {title}")
-    plt.xlabel("Valeurs des pixels")
-    plt.ylabel("Fréquence")
-    st.pyplot(plt)
-
-# Fonction principale pour gérer les fichiers TIFF
+# Fonction principale pour traiter le TIFF
 def process_tiff(file):
     with rasterio.open(file) as dataset:
         st.write("**Métadonnées TIFF :**")
@@ -61,39 +51,31 @@ def process_tiff(file):
             "Bounds": dataset.bounds
         })
 
-        # Lire et afficher les valeurs de chaque bande
-        st.write("**Valeurs des bandes :**")
         bands = []
         for i in range(1, dataset.count + 1):
             band = dataset.read(i)
+            if np.all(band == 0):
+                st.warning(f"Bande {i} entièrement noire.")
             plot_band(band, f"Bande {i}")
-            plot_histogram(band, f"Bande {i}")
             bands.append(band)
-            st.write(f"Bande {i} : min={band.min()}, max={band.max()}, moyenne={band.mean()}")
 
-        # Gérer la valeur NoData
+        # Gestion des données NoData
         nodata_value = dataset.nodata
         if nodata_value is not None:
-            st.write(f"Valeur NoData détectée : {nodata_value}. Remplacement par 0.")
-            for i in range(len(bands)):
-                bands[i][bands[i] == nodata_value] = 0
+            bands = [np.where(band == nodata_value, 0, band) for band in bands]
 
-        # Normaliser les bandes pour les convertir en 8 bits si nécessaire
-        st.write("**Normalisation des bandes en 8 bits**")
-        normalized_bands = [normalize_to_8bit(band) for band in bands[:3]]  # Utiliser les 3 premières bandes
+        # Normalisation des trois premières bandes en 8 bits
+        st.write("**Normalisation des bandes RGB (si applicables)**")
+        if len(bands) >= 3:
+            normalized_bands = [normalize_to_8bit(band) for band in bands[:3]]
+            rgb_image = np.dstack(normalized_bands)
 
-        # Reconstituer une image RGB
-        rgb_image = np.dstack(normalized_bands)
-
-        # Vérifier si l'image RGB est valide
-        if np.all(rgb_image == 0):
-            st.error("L'image RGB est entièrement noire. Vérifiez les données sources.")
+            if np.all(rgb_image == 0):
+                st.error("L'image RGB est entièrement noire. Vérifiez les données sources.")
+            else:
+                st.image(rgb_image, caption="Image RGB Normalisée", clamp=True)
         else:
-            # Afficher l'image RGB
-            st.write("**Aperçu de l'image RGB :**")
-            st.image(rgb_image, caption="Image RGB normalisée", clamp=True)
-
-        return rgb_image
+            st.error("Le fichier ne contient pas assez de bandes pour créer une image RGB.")
 
 # Streamlit UI
 st.title("Vérification et Affichage de TIFF Orthomosaïque")
@@ -101,9 +83,8 @@ st.title("Vérification et Affichage de TIFF Orthomosaïque")
 uploaded_file = st.file_uploader("Charger un fichier TIFF", type=["tif", "tiff"])
 
 if uploaded_file:
-    st.write("**Traitement du fichier...**")
     try:
-        rgb_image = process_tiff(uploaded_file)
+        process_tiff(uploaded_file)
     except Exception as e:
         st.error(f"Erreur lors du traitement : {e}")
 
