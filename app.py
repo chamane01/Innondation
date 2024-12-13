@@ -18,6 +18,7 @@ import streamlit as st
 import rasterio
 import rasterio.warp
 import folium
+import numpy as np
 from folium import plugins
 from folium.plugins import MeasureControl, Draw
 from rasterio.plot import reshape_as_image
@@ -53,16 +54,18 @@ def reproject_tiff(input_tiff, target_crs):
 
     return reprojected_tiff
 
-def add_image_overlay(map_object, tiff_path, bounds, name):
-    """Add a TIFF image overlay to a Folium map."""
+def add_image_overlay(map_object, tiff_path, bounds, name, saturation_factor=1.0):
+    """Add a TIFF image overlay to a Folium map, with control over color saturation."""
     with rasterio.open(tiff_path) as src:
         # Convert the image to RGB
         image = reshape_as_image(src.read())
         
-        # Convert the image to grayscale (black and white)
+        # Convert the image to a PIL image
         pil_image = Image.fromarray(image)
+        
+        # Adjust saturation with a slider (default is 1.0, full color)
         enhancer = ImageEnhance.Color(pil_image)
-        pil_image = enhancer.enhance(0)  # Set the saturation to 0 to get grayscale
+        pil_image = enhancer.enhance(saturation_factor)  # Adjust the saturation
         image = np.array(pil_image)
 
         folium.raster_layers.ImageOverlay(
@@ -97,8 +100,17 @@ def main():
         center_lon = (bounds.left + bounds.right) / 2
         fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-        # Add reprojected TIFF as overlay
-        add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
+        # Add a slider to control the saturation (default to full color)
+        saturation_factor = st.slider(
+            "Adjust Saturation (0 = Black & White, 1 = Full Color)",
+            min_value=0.0,
+            max_value=1.0,
+            value=1.0,
+            step=0.1
+        )
+
+        # Add reprojected TIFF as overlay with controlled saturation
+        add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer", saturation_factor)
 
         # Add measure control
         fmap.add_child(MeasureControl())
