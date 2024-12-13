@@ -17,9 +17,9 @@ import rasterio
 import streamlit as st
 import rasterio
 import folium
-from folium.plugins import MeasureControl, Draw
-from rasterio.plot import reshape_as_image
+from folium.plugins import Draw, MeasureControl
 from streamlit_folium import folium_static
+import json
 
 def reproject_tiff(input_tiff, target_crs):
     """Reproject a TIFF file to a target CRS."""
@@ -50,21 +50,11 @@ def reproject_tiff(input_tiff, target_crs):
 
     return reprojected_tiff
 
-def add_image_overlay(map_object, tiff_path, bounds, name):
-    """Add a TIFF image overlay to a Folium map."""
-    with rasterio.open(tiff_path) as src:
-        image = reshape_as_image(src.read())
-        folium.raster_layers.ImageOverlay(
-            image=image,
-            bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
-            name=name
-        ).add_to(map_object)
-
 def get_value_at_coords(tiff_path, lat, lon):
     """Get the altitude value at specific coordinates."""
     with rasterio.open(tiff_path) as src:
         row, col = src.index(lon, lat)
-        if src.count >= 3:
+        if src.count >= 1:
             altitude = src.read(1)[row, col]  # Assuming the first band contains relevant data
         else:
             altitude = None
@@ -72,7 +62,7 @@ def get_value_at_coords(tiff_path, lat, lon):
 
 # Streamlit app
 def main():
-    st.title("TIFF Viewer with Altitude and Coordinate Tool")
+    st.title("TIFF Viewer with Altitude Retrieval from Markers")
 
     # Upload TIFF file
     uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
@@ -81,15 +71,6 @@ def main():
         tiff_path = uploaded_file.name
         with open(tiff_path, "wb") as f:
             f.write(uploaded_file.read())
-
-        st.write("Analyzing TIFF file...")
-
-        # Check for altitude data
-        with rasterio.open(tiff_path) as src:
-            if src.count >= 3:
-                st.success("The TIFF file contains altitude data (z).")
-            else:
-                st.warning("The TIFF file does not contain altitude data (z).")
 
         st.write("Reprojecting TIFF file...")
 
@@ -105,33 +86,55 @@ def main():
         center_lon = (bounds.left + bounds.right) / 2
         fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-        # Add reprojected TIFF as overlay
-        add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
+        # Add TIFF overlay
+        with rasterio.open(reprojected_tiff) as src:
+            bounds = [[src.bounds.bottom, src.bounds.left], [src.bounds.top, src.bounds.right]]
+            image = src.read(1)
+            folium.raster_layers.ImageOverlay(
+                name="TIFF Layer",
+                image=image,
+                bounds=bounds,
+                opacity=0.7
+            ).add_to(fmap)
 
-        # Add measure control
+        # Add measure and draw controls
         fmap.add_child(MeasureControl())
-
-        # Add draw control
-        draw = Draw(export=True)
+        draw = Draw(
+            export=True,
+            draw_options={"marker": True, "polyline": False, "polygon": False, "circle": False, "rectangle": False},
+            edit_options={"edit": False, "remove": True},
+        )
         fmap.add_child(draw)
 
-        # Add click event using JavaScript
-        fmap.add_child(folium.ClickForMarker(popup="Click Location"))
-
         # Display map
-        folium_static(fmap)
+        st.write("Add markers to the map, then export them to retrieve their altitudes.")
+        output = folium_static(fmap, width=700, height=500)
 
-        # Coordinates input for querying altitude
-        st.write("Click on the map to get coordinates and enter them below:")
-        lat = st.number_input("Latitude", format="%.6f")
-        lon = st.number_input("Longitude", format="%.6f")
+        # Process GeoJSON output from Draw plugin
+        geojson_input = st.text_area("Exported GeoJSON (Paste Here):")
+        if geojson_input:
+            try:
+                geojson_data = json.loads(geojson_input)
+                st.write("Processing marker coordinates...")
+                coordinates = []
+                for feature in geojson_data.get("features", []):
+                    if feature["geometry"]["type"] == "Point":
+                        coordinates.append(feature["geometry"]["coordinates"])
 
-        if st.button("Get Altitude"):
-            altitude = get_value_at_coords(reprojected_tiff, lat, lon)
-            if altitude is not None:
-                st.success(f"Altitude at ({lat}, {lon}): {altitude}")
-            else:
-                st.error("No altitude data available at this location.")
+                if coordinates:
+                    st.success(f"Found {len(coordinates)} marker(s).")
+                    for i, (lon, lat) in enumerate(coordinates):
+                        altitude = get_value_at_coords(reprojected_tiff, lat, lon)
+                        if altitude is not None:
+                            st.write(f"Marker {i+1}:")
+                            st.write(f"- Latitude: {lat:.6f}, Longitude: {lon:.6f}")
+                            st.write(f"- Altitude: {altitude} meters")
+                        else:
+                            st.error(f"No altitude data for Marker {i+1}.")
+                else:
+                    st.error("No valid markers found in the GeoJSON data.")
+            except json.JSONDecodeError:
+                st.error("Invalid GeoJSON format. Please paste valid GeoJSON data.")
 
 if __name__ == "__main__":
     main()
