@@ -14,7 +14,7 @@ from datetime import datetime
 import rasterio
 
 
-import streamlit as st
+import streamlit as st 
 import rasterio
 import rasterio.warp
 import folium
@@ -74,6 +74,15 @@ def main():
         tiff_path = uploaded_file.name
         with open(tiff_path, "wb") as f:
             f.write(uploaded_file.read())
+
+        st.write("Analyzing TIFF file...")
+
+        # Check for altitude data
+        with rasterio.open(tiff_path) as src:
+            if src.count >= 3:
+                st.success("The TIFF file contains altitude data (z).")
+            else:
+                st.warning("The TIFF file does not contain altitude data (z).")
 
         st.write("Reprojecting TIFF file...")
 
