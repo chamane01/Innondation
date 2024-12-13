@@ -65,22 +65,14 @@ def adjust_image_colors(image, red_factor, green_factor, blue_factor):
 
     return image.astype(np.uint8)
 
-def convert_to_grayscale(image):
-    """Convert the image to grayscale."""
-    return np.array(Image.fromarray(image).convert("L"))
-
-def add_image_overlay(map_object, tiff_path, bounds, name, red_factor, green_factor, blue_factor, grayscale=False):
-    """Add the TIFF image overlay to the Folium map with color adjustments or grayscale."""
+def add_image_overlay(map_object, tiff_path, bounds, name, red_factor, green_factor, blue_factor):
+    """Add the TIFF image overlay to the Folium map with color adjustments."""
     with rasterio.open(tiff_path) as src:
         # Convert image to RGB
         image = reshape_as_image(src.read())
 
         # Apply color adjustments
         adjusted_image = adjust_image_colors(image, red_factor, green_factor, blue_factor)
-
-        # If grayscale is True, convert the image to grayscale
-        if grayscale:
-            adjusted_image = convert_to_grayscale(adjusted_image)
 
         folium.raster_layers.ImageOverlay(
             image=adjusted_image,
@@ -120,10 +112,7 @@ def main():
         blue_factor = st.slider("Adjust Blue Channel", 0.0, 2.0, 1.0, 0.01)
 
         # Add reprojected TIFF as overlay with adjusted colors
-        add_image_overlay(fmap, reprojected_tiff, bounds, "Color TIFF Layer", red_factor, green_factor, blue_factor, grayscale=False)
-
-        # Add a grayscale TIFF overlay (black and white layer)
-        add_image_overlay(fmap, reprojected_tiff, bounds, "Grayscale TIFF Layer", red_factor, green_factor, blue_factor, grayscale=True)
+        add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer", red_factor, green_factor, blue_factor)
 
         # Add measure control
         fmap.add_child(MeasureControl())
@@ -132,7 +121,7 @@ def main():
         draw = Draw(export=True)
         fmap.add_child(draw)
 
-        # Layer control (allow toggling between color and grayscale)
+        # Layer control
         folium.LayerControl().add_to(fmap)
 
         # Display map
@@ -140,6 +129,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
