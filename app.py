@@ -23,9 +23,6 @@ from folium.plugins import MeasureControl, Draw
 from rasterio.plot import reshape_as_image
 from PIL import Image
 from streamlit_folium import folium_static
-import geopy.distance
-import geopandas as gpd
-from shapely.geometry import Polygon
 
 def reproject_tiff(input_tiff, target_crs):
     """Reproject a TIFF file to a target CRS."""
@@ -66,27 +63,6 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
             name=name
         ).add_to(map_object)
 
-def calculate_area_and_distance(points):
-    """Calculate the area of a polygon and the distances between consecutive points."""
-    if len(points) < 2:
-        return 0, 0  # Cannot calculate area or distance with fewer than 2 points
-    # Calculate distance between consecutive points
-    total_distance = 0
-    for i in range(1, len(points)):
-        coords_1 = (points[i-1][0], points[i-1][1])
-        coords_2 = (points[i][0], points[i][1])
-        total_distance += geopy.distance.distance(coords_1, coords_2).meters
-
-    # If there are more than 2 points, calculate the area
-    if len(points) > 2:
-        polygon = Polygon(points)
-        area = polygon.area  # Area in square degrees, can be converted to hectares if needed
-        area = area * 111320 * 111320 / 10000  # Approximation to convert to hectares (note: not accurate near poles)
-    else:
-        area = 0
-
-    return total_distance, area
-
 # Streamlit app
 def main():
     st.title("TIFF Viewer and Interactive Map")
@@ -117,28 +93,11 @@ def main():
         add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
 
         # Add measure control
-        measure_control = MeasureControl(primary_length_unit='meters', secondary_length_unit='kilometers', primary_area_unit='m²', secondary_area_unit='hectares')
-        fmap.add_child(measure_control)
+        fmap.add_child(MeasureControl())
 
         # Add draw control
         draw = Draw(export=True)
         fmap.add_child(draw)
-
-        # List of points clicked on the map
-        points = []
-
-        # Add click event for adding markers and calculating area/distance
-        folium.plugins.ClickForMarker(popup="Click to add point").add_to(fmap)
-
-        def on_marker_click(marker):
-            lat, lon = marker.location
-            points.append((lat, lon))
-            fmap.add_child(folium.Marker([lat, lon]))
-
-            # Calculate and display the total distance and area
-            total_distance, area = calculate_area_and_distance(points)
-            st.write(f"Total Distance: {total_distance:.2f} meters")
-            st.write(f"Area: {area:.2f} hectares" if area > 0 else "Area: Not enough points to calculate")
 
         # Layer control
         folium.LayerControl().add_to(fmap)
@@ -148,8 +107,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
-
 
 
 
