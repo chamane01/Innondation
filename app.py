@@ -146,7 +146,9 @@ def calculate_heights(mns, mnt):
     return np.maximum(0, mns - mnt)  # Évite les valeurs négatives
 
 # Fonction pour détecter les arbres avec DBSCAN
-def detect_trees(heights, threshold, eps, min_samples):
+def detect_trees(heights, threshold_cm, eps_cm, min_samples):
+    threshold = threshold_cm / 100  # Conversion en mètres
+    eps = eps_cm / 100  # Conversion en mètres
     tree_mask = heights > threshold
     coords = np.column_stack(np.where(tree_mask))
     clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
@@ -175,12 +177,12 @@ if mnt_file and mns_file:
         heights = calculate_heights(mns, mnt)
         st.write("Hauteurs calculées (MNS - MNT)")
 
-        st.sidebar.title("Paramètres de détection")
-        height_threshold = st.sidebar.slider("Seuil de hauteur des arbres (m)", min_value=1, max_value=20, value=2)
-        eps = st.sidebar.slider("Rayon de voisinage (m)", min_value=1, max_value=10, value=2)
+        st.sidebar.title("Paramètres de détection (en centimètres)")
+        height_threshold_cm = st.sidebar.slider("Seuil de hauteur des arbres (cm)", min_value=10, max_value=2000, value=50)
+        eps_cm = st.sidebar.slider("Rayon de voisinage (cm)", min_value=10, max_value=1000, value=50)
         min_samples = st.sidebar.slider("Nombre minimum de points pour un arbre", min_value=1, max_value=10, value=5)
 
-        coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
+        coords, tree_clusters = detect_trees(heights, height_threshold_cm, eps_cm, min_samples)
         num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
         st.write(f"Nombre d'arbres détectés : {num_trees}")
 
@@ -221,6 +223,7 @@ if mnt_file and mns_file:
 
         folium.LayerControl().add_to(m)
         st_folium(m, width=800, height=600)
+
 
 
 
