@@ -14,9 +14,11 @@ from datetime import datetime
 import rasterio
 
 
-import streamlit as st
+import streamlit as st 
 import rasterio
 import folium
+from folium.plugins import MeasureControl, Draw
+from rasterio.plot import reshape_as_image
 from streamlit_folium import folium_static
 
 def reproject_tiff(input_tiff, target_crs):
@@ -48,36 +50,29 @@ def reproject_tiff(input_tiff, target_crs):
 
     return reprojected_tiff
 
+def add_image_overlay(map_object, tiff_path, bounds, name):
+    """Add a TIFF image overlay to a Folium map."""
+    with rasterio.open(tiff_path) as src:
+        image = reshape_as_image(src.read())
+        folium.raster_layers.ImageOverlay(
+            image=image,
+            bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
+            name=name
+        ).add_to(map_object)
+
 def get_value_at_coords(tiff_path, lat, lon):
     """Get the altitude value at specific coordinates."""
     with rasterio.open(tiff_path) as src:
         row, col = src.index(lon, lat)
-        altitude = src.read(1)[row, col] if src.count >= 1 else None
+        if src.count >= 3:
+            altitude = src.read(3)[row, col]  # Assuming the third band is altitude
+        else:
+            altitude = None
     return altitude
-
-def add_click_handler(map_object, reprojected_tiff):
-    """Add JavaScript to the map for click handling and retrieving altitude."""
-    click_script = """
-    function addClickHandler(map, tiffPath) {
-        map.on('click', function(e) {
-            const lat = e.latlng.lat;
-            const lon = e.latlng.lng;
-            fetch(`/get_altitude?lat=${lat}&lon=${lon}`)
-                .then(response => response.json())
-                .then(data => {
-                    L.popup()
-                        .setLatLng(e.latlng)
-                        .setContent(`Coordinates: ${lat.toFixed(6)}, ${lon.toFixed(6)}<br>Altitude: ${data.altitude || 'No data available'}`)
-                        .openOn(map);
-                });
-        });
-    }
-    """
-    map_object.get_root().script.add_child(folium.Element(click_script))
 
 # Streamlit app
 def main():
-    st.title("TIFF Viewer with Interactive Altitude Retrieval")
+    st.title("TIFF Viewer with Altitude and Coordinate Tool")
 
     # Upload TIFF file
     uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
@@ -86,6 +81,15 @@ def main():
         tiff_path = uploaded_file.name
         with open(tiff_path, "wb") as f:
             f.write(uploaded_file.read())
+
+        st.write("Analyzing TIFF file...")
+
+        # Check for altitude data
+        with rasterio.open(tiff_path) as src:
+            if src.count >= 3:
+                st.success("The TIFF file contains altitude data (z).")
+            else:
+                st.warning("The TIFF file does not contain altitude data (z).")
 
         st.write("Reprojecting TIFF file...")
 
@@ -101,19 +105,45 @@ def main():
         center_lon = (bounds.left + bounds.right) / 2
         fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-        # Add TIFF overlay
-        folium.raster_layers.ImageOverlay(
-            name="TIFF Layer",
-            image=rasterio.open(reprojected_tiff).read(1),
-            bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
-            opacity=0.7,
-        ).add_to(fmap)
+        # Add reprojected TIFF as overlay
+        add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
 
-        # Add JavaScript click handler
-        add_click_handler(fmap, reprojected_tiff)
+        # Add measure control
+        fmap.add_child(MeasureControl())
+
+        # Add draw control
+        draw = Draw(export=True)
+        fmap.add_child(draw)
+
+        # Add click event to get coordinates and altitude
+        click_callback = """
+        function(e) {
+            var lat = e.latlng.lat;
+            var lon = e.latlng.lng;
+            fetch(`/get_altitude?lat=${lat}&lon=${lon}`)
+                .then(response => response.json())
+                .then(data => {
+                    alert(`Coordinates: ${lat.toFixed(6)}, ${lon.toFixed(6)}\\nAltitude: ${data.altitude || "N/A"}`);
+                });
+        }
+        """
+        fmap.add_child(folium.LatLngPopup())
+        fmap.on("click", click_callback)
+
+        # Layer control
+        folium.LayerControl().add_to(fmap)
 
         # Display map
         folium_static(fmap)
+
+        # Serve altitude data dynamically
+        if st.experimental_get_query_params():
+            params = st.experimental_get_query_params()
+            if "lat" in params and "lon" in params:
+                lat = float(params["lat"][0])
+                lon = float(params["lon"][0])
+                altitude = get_value_at_coords(reprojected_tiff, lat, lon)
+                st.json({"altitude": altitude})
 
 if __name__ == "__main__":
     main()
