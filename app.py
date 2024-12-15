@@ -103,89 +103,38 @@ if tiff_file:
 
 
 import streamlit as st
-import numpy as np
 import rasterio
-from rasterio.warp import transform, calculate_default_transform, reproject, Resampling
-from sklearn.cluster import DBSCAN
-import folium
-from folium import plugins
-from streamlit_folium import st_folium
+import numpy as np
+from rasterio.enums import Resampling
 import matplotlib.pyplot as plt
 
 # Fonction pour charger un fichier TIFF
-def load_tiff(file_path):
-    with rasterio.open(file_path) as src:
-        data = src.read(1)  # Lire la première bande
-        profile = src.profile  # Profil du fichier (métadonnées)
+def load_tiff(file):
+    with rasterio.open(file) as src:
+        data = src.read(1)  # Charger uniquement la première bande
+        profile = src.profile  # Métadonnées
         bounds = src.bounds  # Limites géographiques
         crs = src.crs  # Système de coordonnées
     return data, profile, bounds, crs
 
-# Fonction pour reprojeter un raster si nécessaire
-def reproject_raster(input_data, input_profile, target_crs):
-    transform, width, height = calculate_default_transform(
-        input_profile['crs'], target_crs, input_profile['width'], input_profile['height'], 
-        *input_profile['bounds']
-    )
-    new_profile = input_profile.copy()
-    new_profile.update({
-        'crs': target_crs,
-        'transform': transform,
-        'width': width,
-        'height': height
-    })
+# Fonction pour rééchantillonner un raster
+def resample_to_match(source, target_profile):
+    with rasterio.MemoryFile() as memfile:
+        with memfile.open(**target_profile) as dest:
+            rasterio.warp.reproject(
+                source,
+                rasterio.band(dest, 1),
+                src_transform=target_profile['transform'],
+                src_crs=target_profile['crs'],
+                dst_transform=target_profile['transform'],
+                dst_crs=target_profile['crs'],
+                resampling=Resampling.bilinear
+            )
+            return dest.read(1)
 
-    reprojected_data = np.zeros((height, width), dtype=input_data.dtype)
-    reproject(
-        source=input_data,
-        destination=reprojected_data,
-        src_transform=input_profile['transform'],
-        src_crs=input_profile['crs'],
-        dst_transform=transform,
-        dst_crs=target_crs,
-        resampling=Resampling.nearest
-    )
-    return reprojected_data, new_profile
-
-# Fonction pour reprojeter les limites géographiques en EPSG:4326
-def reproject_bounds(bounds, src_crs):
-    src_coords = [
-        [bounds.left, bounds.bottom],
-        [bounds.right, bounds.top]
-    ]
-    dest_coords = transform(src_crs, 'EPSG:4326', [p[0] for p in src_coords], [p[1] for p in src_coords])
-    return dest_coords[1][1], dest_coords[1][0], dest_coords[0][1], dest_coords[0][0]
-
-# Fonction pour reprojeter des coordonnées (x, y) en EPSG:4326
-def reproject_coords(coords, bounds, src_crs, raster_shape):
-    # Conversion des indices (y, x) en coordonnées spatiales
-    x_pixels, y_pixels = coords[:, 1], coords[:, 0]
-    x_coords = bounds.left + x_pixels * (bounds.right - bounds.left) / raster_shape[1]
-    y_coords = bounds.top - y_pixels * (bounds.top - bounds.bottom) / raster_shape[0]
-    
-    # Reprojection en EPSG:4326
-    lon, lat = transform(src_crs, 'EPSG:4326', x_coords, y_coords)
-    return lat, lon
-
-# Fonction pour calculer la hauteur relative (MNS - MNT)
+# Fonction pour calculer les hauteurs (MNS - MNT)
 def calculate_heights(mns, mnt):
     return np.maximum(0, mns - mnt)  # Évite les valeurs négatives
-
-# Fonction pour détecter les arbres avec DBSCAN
-def detect_trees(heights, threshold_cm, eps_cm, min_samples):
-    threshold = threshold_cm / 100  # Conversion en mètres
-    eps = eps_cm / 100  # Conversion en mètres
-    tree_mask = heights > threshold
-    coords = np.column_stack(np.where(tree_mask))
-    clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
-    tree_clusters = clustering.labels_
-    return coords, tree_clusters
-
-# Fonction pour normaliser les données pour affichage sur une carte
-def normalize(array):
-    array = array.astype(float)
-    array_min, array_max = np.nanmin(array), np.nanmax(array)
-    return (array - array_min) / (array_max - array_min)
 
 # Interface Streamlit
 st.title("Détection d'arbres avec DBSCAN et carte interactive")
@@ -194,63 +143,57 @@ mnt_file = st.file_uploader("Téléchargez le fichier MNT (Modèle Numérique de
 mns_file = st.file_uploader("Téléchargez le fichier MNS (Modèle Numérique de Surface) en TIFF", type=["tif", "tiff"])
 
 if mnt_file and mns_file:
+    # Chargement des fichiers
     mnt, mnt_profile, mnt_bounds, mnt_crs = load_tiff(mnt_file)
     mns, mns_profile, mns_bounds, mns_crs = load_tiff(mns_file)
 
+    # Vérification des CRS
     if mnt_crs != mns_crs:
-        st.warning("Les CRS des fichiers MNT et MNS ne correspondent pas. Reprojection en cours...")
-        mns, mns_profile = reproject_raster(mns, mns_profile, mnt_crs)
-        mns_crs = mnt_crs
+        st.error("Les CRS des fichiers MNT et MNS doivent correspondre.")
+    else:
+        # Vérification des dimensions
+        if mnt.shape != mns.shape:
+            st.warning("Les dimensions des rasters ne correspondent pas. Rééchantillonnage du MNT pour correspondre au MNS...")
+            mnt = resample_to_match(mnt, mns_profile)
 
-    heights = calculate_heights(mns, mnt)
-    st.write("Hauteurs calculées (MNS - MNT)")
+        # Gestion des valeurs NaN ou nodata
+        mnt = np.nan_to_num(mnt, nan=0)
+        mns = np.nan_to_num(mns, nan=0)
 
-    st.sidebar.title("Paramètres de détection (en centimètres)")
-    height_threshold_cm = st.sidebar.slider("Seuil de hauteur des arbres (cm)", min_value=10, max_value=2000, value=50)
-    eps_cm = st.sidebar.slider("Rayon de voisinage (cm)", min_value=10, max_value=1000, value=50)
-    min_samples = st.sidebar.slider("Nombre minimum de points pour un arbre", min_value=1, max_value=10, value=5)
+        # Affichage des dimensions et des statistiques
+        st.write("Dimensions du MNT :", mnt.shape)
+        st.write("Dimensions du MNS :", mns.shape)
+        st.write("MNT - Min :", np.min(mnt), "Max :", np.max(mnt))
+        st.write("MNS - Min :", np.min(mns), "Max :", np.max(mns))
 
-    coords, tree_clusters = detect_trees(heights, height_threshold_cm, eps_cm, min_samples)
-    num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
-    st.write(f"Nombre d'arbres détectés : {num_trees}")
+        # Calcul des hauteurs
+        heights = calculate_heights(mns, mnt)
+        st.write("Hauteurs calculées (MNS - MNT)")
 
-    mnt_normalized = normalize(mnt)
-    mns_normalized = normalize(mns)
+        # Affichage du résultat sous forme d'image
+        fig, ax = plt.subplots()
+        cax = ax.imshow(heights, cmap='terrain')
+        fig.colorbar(cax, ax=ax, label='Hauteur (m)')
+        ax.set_title("Carte des hauteurs (MNS - MNT)")
+        st.pyplot(fig)
 
-    bounds_geo = reproject_bounds(mnt_bounds, mnt_crs)
-    center_lat = (bounds_geo[0] + bounds_geo[2]) / 2
-    center_lon = (bounds_geo[1] + bounds_geo[3]) / 2
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=15)
-
-    folium.raster_layers.ImageOverlay(
-        image=mnt_normalized,
-        bounds=[[bounds_geo[0], bounds_geo[1]], [bounds_geo[2], bounds_geo[3]]],
-        opacity=0.6,
-        colormap=lambda x: (1 - x, x, 0),
-        name="MNT"
-    ).add_to(m)
-
-    folium.raster_layers.ImageOverlay(
-        image=mns_normalized,
-        bounds=[[bounds_geo[0], bounds_geo[1]], [bounds_geo[2], bounds_geo[3]]],
-        opacity=0.6,
-        colormap=lambda x: (0, x, 1 - x),
-        name="MNS"
-    ).add_to(m)
-
-    lat, lon = reproject_coords(coords, mnt_bounds, mnt_crs, mnt.shape)
-    for lat_, lon_, cluster in zip(lat, lon, tree_clusters):
-        if cluster != -1:
-            folium.CircleMarker(
-                location=[lat_, lon_],
-                radius=2,
-                color="red",
-                fill=True,
-                fill_opacity=1.0
-            ).add_to(m)
-
-    folium.LayerControl().add_to(m)
-    st_folium(m, width=800, height=600)
+        # Sauvegarde du fichier résultat si nécessaire
+        save_option = st.checkbox("Enregistrer le raster des hauteurs")
+        if save_option:
+            output_file = "heights.tif"
+            with rasterio.open(
+                output_file,
+                "w",
+                driver="GTiff",
+                height=heights.shape[0],
+                width=heights.shape[1],
+                count=1,
+                dtype=heights.dtype,
+                crs=mnt_profile['crs'],
+                transform=mnt_profile['transform'],
+            ) as dst:
+                dst.write(heights, 1)
+            st.success(f"Fichier des hauteurs sauvegardé sous le nom {output_file}.")
 
 
 
