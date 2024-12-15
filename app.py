@@ -1,4 +1,5 @@
 
+
 # Importer les bibliothèques nécessaires
 import streamlit as st
 import pandas as pd
@@ -23,7 +24,6 @@ from folium.plugins import MeasureControl, Draw
 from rasterio.plot import reshape_as_image
 from PIL import Image
 from streamlit_folium import folium_static
-import geojson
 
 def reproject_tiff(input_tiff, target_crs):
     """Reproject a TIFF file to a target CRS."""
@@ -64,19 +64,6 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
             name=name
         ).add_to(map_object)
 
-# Function to create a GeoJSON feature collection from drawn points
-def create_geojson_from_drawn_features(features):
-    geojson_data = {"type": "FeatureCollection", "features": []}
-    for feature in features:
-        geometry = feature['geometry']
-        if geometry['type'] == 'Point':
-            geojson_data['features'].append({
-                "type": "Feature",
-                "geometry": geometry,
-                "properties": {}
-            })
-    return geojson_data
-
 # Streamlit app
 def main():
     st.title("TIFF Viewer and Interactive Map")
@@ -109,40 +96,18 @@ def main():
         # Add measure control
         fmap.add_child(MeasureControl())
 
-        # Add draw control (for points, lines, and polygons)
-        draw = Draw(export=True, draw_options={
-            'polyline': {'shapeOptions': {'color': 'red'}},
-            'polygon': {'shapeOptions': {'color': 'blue'}},
-            'circle': False,
-            'marker': {'icon': 'circle'}
-        })
+        # Add draw control
+        draw = Draw(export=True)
         fmap.add_child(draw)
 
         # Layer control
         folium.LayerControl().add_to(fmap)
-
-        # Button for validation and creating a points layer
-        validate_button = st.button("Validate and Create Points Layer")
-        
-        if validate_button:
-            # Extract the drawn features (assuming the export feature gives the required data)
-            features = draw.get_geojson()
-            geojson_data = create_geojson_from_drawn_features(features['features'])
-            # Display GeoJSON for download or further use
-            st.write("GeoJSON for Points Layer:")
-            st.json(geojson_data)
-
-            # Optionally, save the GeoJSON to a file for download
-            with open("points_layer.geojson", "w") as f:
-                geojson.dump(geojson_data, f)
-            st.download_button("Download Points Layer", "points_layer.geojson")
 
         # Display map
         folium_static(fmap)
 
 if __name__ == "__main__":
     main()
-
 
 
 
