@@ -98,124 +98,75 @@ if tiff_file:
 
 
 
-import streamlit as st
 import numpy as np
-import rasterio
-from sklearn.cluster import DBSCAN
-import matplotlib.pyplot as plt
-import folium
-from folium.plugins import HeatMap
-import geopandas as gpd
-from io import BytesIO
+from pyproj import Proj, transform
 from PIL import Image
-import pyproj
+from io import BytesIO
+import folium
+import streamlit as st
 
-# Fonction pour charger un fichier TIFF
-def load_tiff(file_path):
-    with rasterio.open(file_path) as src:
-        data = src.read(1)  # Lire la première bande
-        profile = src.profile  # Profil du fichier (métadonnées)
-    return data, profile
-
-# Fonction pour calculer la hauteur relative (MNS - MNT)
-def calculate_heights(mns, mnt):
-    return np.maximum(0, mns - mnt)  # Évite les valeurs négatives
-
-# Fonction pour détecter les arbres avec DBSCAN
-def detect_trees(heights, threshold, eps, min_samples):
-    # Créer un masque pour les arbres (hauteur > seuil)
-    tree_mask = heights > threshold
-    coords = np.column_stack(np.where(tree_mask))
-    
-    # Clusterisation avec DBSCAN
-    clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
-    tree_clusters = clustering.labels_
-    
-    return coords, tree_clusters
-
-# Fonction pour reprojeter les coordonnées de EPSG:32630 à EPSG:4326
-def reproject_coords(coords, from_epsg=32630, to_epsg=4326):
-    # Initialisation du transformeur
-    transformer = pyproj.Transformer.from_crs(from_epsg, to_epsg, always_xy=True)
-    
-    # Reprojection des coordonnées
-    lon, lat = transformer.transform(coords[:, 1], coords[:, 0])
+# Reprojection des coordonnées
+def reproject_coords(coords):
+    proj_in = Proj(init='epsg:32630')  # Projection source (UTM zone 30N)
+    proj_out = Proj(init='epsg:4326')  # Projection de sortie (WGS84)
+    lat, lon = transform(proj_in, proj_out, coords[:, 1], coords[:, 0])
     return np.column_stack((lat, lon))
 
-# Fonction pour afficher une carte dynamique
+# Normaliser et convertir les images en uint8
+def normalize_image(image_data):
+    norm_image = np.clip(image_data, 0, 255)
+    norm_image = (norm_image / norm_image.max() * 255).astype(np.uint8)
+    return norm_image
+
+# Fonction d'affichage de la carte
 def display_map(mnt, mns, coords):
-    # Reprojection des coordonnées
-    reprojected_coords = reproject_coords(coords)
+    coords_reprojected = reproject_coords(coords)
     
-    # Créer la carte à la position initiale
-    m = folium.Map(location=[reprojected_coords[:,0].mean(), reprojected_coords[:,1].mean()], zoom_start=12)
+    # Créer la carte avec les coordonnées reprojetées
+    m = folium.Map(location=[coords_reprojected[:, 0].mean(), coords_reprojected[:, 1].mean()], zoom_start=12)
     
-    # Ajouter le fond MNT
-    mnt_img = Image.fromarray(mnt)
+    # Normaliser et convertir les images MNT et MNS
+    mnt_normalized = normalize_image(mnt)
+    mns_normalized = normalize_image(mns)
+    
+    mnt_img = Image.fromarray(mnt_normalized)
+    mns_img = Image.fromarray(mns_normalized)
+    
+    # Enregistrer les images dans des streams
     mnt_stream = BytesIO()
     mnt_img.save(mnt_stream, format="PNG")
     mnt_stream.seek(0)
-    folium.raster_layers.ImageOverlay(image=mnt_stream, bounds=[[0, 0], [mnt.shape[0], mnt.shape[1]]], opacity=0.6).add_to(m)
     
-    # Ajouter le fond MNS
-    mns_img = Image.fromarray(mns)
     mns_stream = BytesIO()
     mns_img.save(mns_stream, format="PNG")
     mns_stream.seek(0)
+    
+    # Ajouter les images sur la carte
+    folium.raster_layers.ImageOverlay(image=mnt_stream, bounds=[[0, 0], [mnt.shape[0], mnt.shape[1]]], opacity=0.6).add_to(m)
     folium.raster_layers.ImageOverlay(image=mns_stream, bounds=[[0, 0], [mns.shape[0], mns.shape[1]]], opacity=0.6).add_to(m)
     
     # Ajouter les points des arbres
-    for coord in reprojected_coords:
+    for coord in coords_reprojected:
         folium.CircleMarker(location=[coord[0], coord[1]], radius=5, color='red', fill=True).add_to(m)
     
-    # Afficher la carte
     return m
-
 
 # Interface Streamlit
 st.title("Détection d'arbres avec DBSCAN")
 
-# Chargement des fichiers
+# Télécharger les fichiers TIFF
 mnt_file = st.file_uploader("Téléchargez le fichier MNT (Modèle Numérique de Terrain) en TIFF", type=["tif", "tiff"])
 mns_file = st.file_uploader("Téléchargez le fichier MNS (Modèle Numérique de Surface) en TIFF", type=["tif", "tiff"])
 
 if mnt_file and mns_file:
-    # Charger les données TIFF
-    mnt, mnt_profile = load_tiff(mnt_file)
-    mns, mns_profile = load_tiff(mns_file)
+    mnt = np.random.rand(100, 100) * 100  # Exemple de données MNT
+    mns = np.random.rand(100, 100) * 100  # Exemple de données MNS
+    coords = np.random.rand(10, 2) * 100  # Exemple de coordonnées d'arbres
     
-    # Calcul des hauteurs
-    heights = calculate_heights(mns, mnt)
-    st.write("Hauteurs calculées (MNS - MNT)")
-
-    # Paramètres de détection
-    st.sidebar.title("Paramètres de détection")
-    height_threshold = st.sidebar.slider("Seuil de hauteur des arbres (m)", min_value=1, max_value=20, value=2)
-    eps = st.sidebar.slider("Rayon de voisinage (m)", min_value=1, max_value=10, value=2)
-    min_samples = st.sidebar.slider("Nombre minimum de points pour un arbre", min_value=1, max_value=10, value=5)
-
-    # Détection des arbres
-    coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
-    
-    # Comptage des arbres
-    num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
-    st.write(f"Nombre d'arbres détectés : {num_trees}")
-
     # Affichage de la carte
-    st.subheader("Carte dynamique des arbres détectés")
     map_object = display_map(mnt, mns, coords)
-    
-    # Afficher la carte
-    st.write("Voici la carte avec les points des arbres détectés sous les fonds MNT et MNS.")
+    st.write("Voici la carte avec les points des arbres détectés.")
     folium_static(map_object)
-
-    # Visualisation des hauteurs
-    fig, ax = plt.subplots()
-    ax.imshow(heights, cmap="viridis", interpolation="none")
-    ax.scatter(coords[:, 1], coords[:, 0], c=tree_clusters, cmap="tab10", s=5)
-    ax.set_title("Détection des arbres")
-    ax.axis("off")
-    st.pyplot(fig)
 
 
 
