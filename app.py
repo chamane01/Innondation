@@ -20,6 +20,7 @@ import numpy as np
 import rasterio
 from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
+import DBSCAN
 
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path):
