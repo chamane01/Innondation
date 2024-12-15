@@ -22,85 +22,75 @@ import rasterio
 from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
 
-
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path):
     with rasterio.open(file_path) as src:
-        data = src.read(1)  # Lire la première bande
-        profile = src.profile  # Profil du fichier (métadonnées)
+        data = src.read(1)
+        profile = src.profile
     return data, profile
 
-# Fonction pour calculer la hauteur relative (MNS - MNT)
-def calculate_heights(mns, mnt):
-    return np.maximum(0, mns - mnt)  # Évite les valeurs négatives
+# Fonction pour rééchantillonner un raster
+def resample_to_match(source, target_profile):
+    with rasterio.open(source) as src:
+        data = src.read(1)
+        data_resampled = rasterio.warp.reproject(
+            source=data,
+            destination=rasterio.io.MemoryFile().open(**target_profile),
+            src_transform=src.transform,
+            src_crs=src.crs,
+            dst_transform=target_profile['transform'],
+            dst_crs=target_profile['crs'],
+            resampling=rasterio.enums.Resampling.bilinear
+        )[0]
+    return data_resampled
 
-# Fonction pour détecter les arbres avec DBSCAN
+# Fonction pour calculer les hauteurs
+def calculate_heights(mns, mnt):
+    return np.maximum(0, mns - mnt)
+
+# Fonction pour détecter les arbres
 def detect_trees(heights, threshold, eps, min_samples):
-    # Créer un masque pour les arbres (hauteur > seuil)
     tree_mask = heights > threshold
     coords = np.column_stack(np.where(tree_mask))
-    
-    # Clusterisation avec DBSCAN
     clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
     tree_clusters = clustering.labels_
-    
     return coords, tree_clusters
 
 # Interface Streamlit
 st.title("Détection d'arbres avec DBSCAN")
 
-# Chargement des fichiers
-mnt_file = st.file_uploader("Téléchargez le fichier MNT (Modèle Numérique de Terrain) en TIFF", type=["tif", "tiff"])
-mns_file = st.file_uploader("Téléchargez le fichier MNS (Modèle Numérique de Surface) en TIFF", type=["tif", "tiff"])
+mnt_file = st.file_uploader("Téléchargez le fichier MNT", type=["tif", "tiff"])
+mns_file = st.file_uploader("Téléchargez le fichier MNS", type=["tif", "tiff"])
 
 if mnt_file and mns_file:
-    # Charger les données TIFF
     mnt, mnt_profile = load_tiff(mnt_file)
     mns, mns_profile = load_tiff(mns_file)
-    
-    # Calcul des hauteurs
+
+    if mnt.shape != mns.shape:
+        st.warning("Dimensions différentes, rééchantillonnage du MNT...")
+        mnt = resample_to_match(mnt_file, mns_profile)
+
+    mnt = np.nan_to_num(mnt, nan=0)
+    mns = np.nan_to_num(mns, nan=0)
+
     heights = calculate_heights(mns, mnt)
-    st.write("Hauteurs calculées (MNS - MNT)")
+    st.write("Hauteurs calculées.")
 
-    st.sidebar.title("Paramètres de détection")
-    height_threshold = st.sidebar.slider(
-    "Seuil de hauteur des arbres (m)",
-    min_value=0.1,  # Flottant requis car step est un flottant
-    max_value=20.0,  # Flottant requis pour correspondre à step
-    value=2.0,       # La valeur par défaut doit être un flottant
-    step=0.1         # Intervalle en flottants
-    )
-    eps = st.sidebar.slider(
-    "Rayon de voisinage (m)",
-    min_value=0.1,
-    max_value=10.0,
-    value=2.0,
-    step=0.1
-    )
-    min_samples = st.sidebar.slider(
-    "Nombre minimum de points pour un arbre",
-    min_value=1,     # Entiers ici
-    max_value=10,
-    value=5,
-    step=1           # Step entier
-    )
+    height_threshold = st.sidebar.slider("Seuil hauteur arbres (m)", 0.1, 20.0, 2.0, 0.1)
+    eps = st.sidebar.slider("Rayon voisinage (m)", 0.1, 10.0, 2.0, 0.1)
+    min_samples = st.sidebar.slider("Nombre min. points", 1, 10, 5)
 
-   
-
-    # Détection des arbres
     coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
-    
-    # Comptage des arbres
     num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
     st.write(f"Nombre d'arbres détectés : {num_trees}")
 
-    # Visualisation
     fig, ax = plt.subplots()
     ax.imshow(heights, cmap="viridis", interpolation="none")
     ax.scatter(coords[:, 1], coords[:, 0], c=tree_clusters, cmap="tab10", s=5)
     ax.set_title("Détection des arbres")
     ax.axis("off")
     st.pyplot(fig)
+
 
 
 
