@@ -143,6 +143,12 @@ def reproject_coords(coords, from_epsg=32630, to_epsg=4326):
     return np.column_stack((lat, lon))
 
 # Fonction pour afficher une carte dynamique
+import folium
+from folium.plugins import HeatMap
+from PIL import Image
+from io import BytesIO
+
+# Fonction pour afficher une carte dynamique
 def display_map(mnt, mns, coords):
     # Reprojection des coordonnées
     reprojected_coords = reproject_coords(coords)
@@ -150,19 +156,33 @@ def display_map(mnt, mns, coords):
     # Créer la carte à la position initiale
     m = folium.Map(location=[reprojected_coords[:,0].mean(), reprojected_coords[:,1].mean()], zoom_start=12)
     
-    # Convertir les données MNT en image (et normaliser si nécessaire)
-    mnt_img = Image.fromarray(np.uint8(mnt))  # Assurez-vous que les données sont dans un format compatible
+    # Convertir MNT en image PNG et l'ajouter à la carte
+    mnt_img = Image.fromarray(mnt)
     mnt_stream = BytesIO()
     mnt_img.save(mnt_stream, format="PNG")
     mnt_stream.seek(0)
-    folium.raster_layers.ImageOverlay(image=mnt_stream, bounds=[[0, 0], [mnt.shape[0], mnt.shape[1]]], opacity=0.6).add_to(m)
+
+    # Utiliser ImageOverlay avec BytesIO pour l'image
+    folium.raster_layers.ImageOverlay(
+        image=mnt_stream,
+        bounds=[[0, 0], [mnt.shape[0], mnt.shape[1]]],
+        opacity=0.6,
+        origin='upper'  # Spécifier l'origine pour l'interprétation des coordonnées
+    ).add_to(m)
     
-    # Convertir les données MNS en image (et normaliser si nécessaire)
-    mns_img = Image.fromarray(np.uint8(mns))  # Idem ici
+    # Convertir MNS en image PNG et l'ajouter à la carte
+    mns_img = Image.fromarray(mns)
     mns_stream = BytesIO()
     mns_img.save(mns_stream, format="PNG")
     mns_stream.seek(0)
-    folium.raster_layers.ImageOverlay(image=mns_stream, bounds=[[0, 0], [mns.shape[0], mns.shape[1]]], opacity=0.6).add_to(m)
+
+    # Utiliser ImageOverlay pour l'image MNS
+    folium.raster_layers.ImageOverlay(
+        image=mns_stream,
+        bounds=[[0, 0], [mns.shape[0], mns.shape[1]]],
+        opacity=0.6,
+        origin='upper'  # Spécifier l'origine pour l'interprétation des coordonnées
+    ).add_to(m)
     
     # Ajouter les points des arbres
     for coord in reprojected_coords:
@@ -170,6 +190,7 @@ def display_map(mnt, mns, coords):
     
     # Afficher la carte
     return m
+
 
 
 # Interface Streamlit
