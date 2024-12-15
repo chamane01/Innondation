@@ -157,6 +157,7 @@ def display_map(mnt, mns, coords):
     m = folium.Map(location=[reprojected_coords[:,0].mean(), reprojected_coords[:,1].mean()], zoom_start=12)
     
     # Convertir MNT en image PNG et l'ajouter à la carte
+    mnt = np.uint8(mnt)  # Conversion en entiers 8 bits pour l'image PNG
     mnt_img = Image.fromarray(mnt)
     mnt_stream = BytesIO()
     mnt_img.save(mnt_stream, format="PNG")
@@ -171,6 +172,7 @@ def display_map(mnt, mns, coords):
     ).add_to(m)
     
     # Convertir MNS en image PNG et l'ajouter à la carte
+    mns = np.uint8(mns)  # Conversion en entiers 8 bits pour l'image PNG
     mns_img = Image.fromarray(mns)
     mns_stream = BytesIO()
     mns_img.save(mns_stream, format="PNG")
