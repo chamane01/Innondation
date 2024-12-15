@@ -105,19 +105,47 @@ if tiff_file:
 import streamlit as st
 import numpy as np
 import rasterio
+from rasterio.warp import reproject, Resampling
 from sklearn.cluster import DBSCAN
 import folium
 from folium import plugins
 from streamlit_folium import st_folium
 import matplotlib.pyplot as plt
+from pyproj import Proj, transform
 
-# Fonction pour charger un fichier TIFF
-def load_tiff(file_path):
+# Fonction pour charger et reprojeter un fichier TIFF
+def load_and_reproject_tiff(file_path, dst_crs='EPSG:4326'):
     with rasterio.open(file_path) as src:
         data = src.read(1)  # Lire la première bande
         profile = src.profile  # Profil du fichier (métadonnées)
         bounds = src.bounds  # Limites géographiques
-    return data, profile, bounds
+        
+        # Reprojection des données (de EPSG: 32630 à EPSG: 4326)
+        transform, width, height = rasterio.warp.calculate_default_transform(
+            src.crs, dst_crs, src.width, src.height, *src.bounds
+        )
+        
+        # Créer un profil de sortie pour la nouvelle projection
+        out_profile = src.profile.copy()
+        out_profile.update({
+            'crs': dst_crs,
+            'transform': transform,
+            'width': width,
+            'height': height
+        })
+        
+        # Créer un tableau pour les données reprojetées
+        reprojected_data = np.empty((height, width), dtype=np.float32)
+        
+        # Reprojection des données
+        reproject(
+            source=data, destination=reprojected_data,
+            src_transform=src.transform, src_crs=src.crs,
+            dst_transform=transform, dst_crs=dst_crs,
+            resampling=Resampling.nearest
+        )
+        
+        return reprojected_data, out_profile, bounds
 
 # Fonction pour calculer la hauteur relative (MNS - MNT)
 def calculate_heights(mns, mnt):
@@ -149,9 +177,9 @@ mnt_file = st.file_uploader("Téléchargez le fichier MNT (Modèle Numérique de
 mns_file = st.file_uploader("Téléchargez le fichier MNS (Modèle Numérique de Surface) en TIFF", type=["tif", "tiff"])
 
 if mnt_file and mns_file:
-    # Charger les données TIFF
-    mnt, mnt_profile, mnt_bounds = load_tiff(mnt_file)
-    mns, mns_profile, mns_bounds = load_tiff(mns_file)
+    # Charger et reprojeter les données TIFF
+    mnt, mnt_profile, mnt_bounds = load_and_reproject_tiff(mnt_file)
+    mns, mns_profile, mns_bounds = load_and_reproject_tiff(mns_file)
     
     # Calcul des hauteurs
     heights = calculate_heights(mns, mnt)
@@ -203,9 +231,10 @@ if mnt_file and mns_file:
     # Ajouter les points des arbres
     for (y, x), cluster in zip(coords, tree_clusters):
         if cluster != -1:  # Ignorer le bruit
+            # Conversion des coordonnées locales (X, Y) en latitude et longitude
+            lon, lat = Proj(init='epsg:32630')(x, y, inverse=True)
             folium.CircleMarker(
-                location=[bounds.top - y * (bounds.top - bounds.bottom) / mnt.shape[0],
-                          bounds.left + x * (bounds.right - bounds.left) / mnt.shape[1]],
+                location=[lat, lon],
                 radius=2,
                 color="red",
                 fill=True,
@@ -217,6 +246,7 @@ if mnt_file and mns_file:
 
     # Afficher la carte
     st_folium(m, width=800, height=600)
+
 
 
 
