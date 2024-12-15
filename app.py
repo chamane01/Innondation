@@ -112,7 +112,7 @@ from folium.plugins import HeatMap
 import geopandas as gpd
 from io import BytesIO
 from PIL import Image
-import pyproj
+
 
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path):
@@ -137,40 +137,27 @@ def detect_trees(heights, threshold, eps, min_samples):
     
     return coords, tree_clusters
 
-# Fonction pour reprojeter les coordonnées de EPSG:32630 à EPSG:4326
-def reproject_coords(coords, from_epsg=32630, to_epsg=4326):
-    # Initialisation du transformeur
-    transformer = pyproj.Transformer.from_crs(from_epsg, to_epsg, always_xy=True)
-    
-    # Reprojection des coordonnées
-    lon, lat = transformer.transform(coords[:, 1], coords[:, 0])
-    return np.column_stack((lat, lon))
-
 # Fonction pour afficher une carte dynamique
 def display_map(mnt, mns, coords):
-    # Reprojection des coordonnées
-    reprojected_coords = reproject_coords(coords)
-    
     # Créer la carte à la position initiale
-    m = folium.Map(location=[reprojected_coords[:,0].mean(), reprojected_coords[:,1].mean()], zoom_start=12)
+    m = folium.Map(location=[coords[:,0].mean(), coords[:,1].mean()], zoom_start=12)
     
-    # Convertir les données MNT en image (et normaliser si nécessaire)
-    mnt_img = Image.fromarray(np.uint8(mnt))  # Assurez-vous que les données sont dans un format compatible
+    # Ajouter le fond MNT
+    mnt_img = Image.fromarray(mnt)
     mnt_stream = BytesIO()
     mnt_img.save(mnt_stream, format="PNG")
     mnt_stream.seek(0)
     folium.raster_layers.ImageOverlay(image=mnt_stream, bounds=[[0, 0], [mnt.shape[0], mnt.shape[1]]], opacity=0.6).add_to(m)
     
-    # Convertir les données MNS en image (et normaliser si nécessaire)
-    mns_img = Image.fromarray(np.uint8(mns))  # Idem ici
+    # Ajouter le fond MNS
+    mns_img = Image.fromarray(mns)
     mns_stream = BytesIO()
     mns_img.save(mns_stream, format="PNG")
     mns_stream.seek(0)
     folium.raster_layers.ImageOverlay(image=mns_stream, bounds=[[0, 0], [mns.shape[0], mns.shape[1]]], opacity=0.6).add_to(m)
     
     # Ajouter les points des arbres
-    for coord in reprojected_coords:
-        folium.CircleMarker(location=[coord[0], coord[1]], radius=5, color='red', fill=True).add_to(m)
+    folium.CircleMarker(location=[coords[0,0], coords[0,1]], radius=5, color='red', fill=True).add_to(m)
     
     # Afficher la carte
     return m
@@ -220,6 +207,7 @@ if mnt_file and mns_file:
     ax.set_title("Détection des arbres")
     ax.axis("off")
     st.pyplot(fig)
+
 
 
 
