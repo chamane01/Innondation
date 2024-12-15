@@ -19,77 +19,153 @@ import rasterio
 import streamlit as st
 import numpy as np
 import rasterio
+from rasterio.warp import calculate_default_transform, reproject, Resampling
 from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
 
+
 # Fonction pour charger un fichier TIFF
-def load_tiff(file_path):
-    with rasterio.open(file_path) as src:
-        data = src.read(1)
-        profile = src.profile
-    return data, profile
+def load_tiff(file):
+    try:
+        with rasterio.open(file) as src:
+            data = src.read(1)  # Lire la première bande
+            profile = src.profile  # Métadonnées
+        return data, profile
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier TIFF : {e}")
+        return None, None
 
-# Fonction pour rééchantillonner un raster
-def resample_to_match(source, target_profile):
-    with rasterio.open(source) as src:
-        data = src.read(1)
-        data_resampled = rasterio.warp.reproject(
-            source=data,
-            destination=rasterio.io.MemoryFile().open(**target_profile),
-            src_transform=src.transform,
-            src_crs=src.crs,
-            dst_transform=target_profile['transform'],
-            dst_crs=target_profile['crs'],
-            resampling=rasterio.enums.Resampling.bilinear
-        )[0]
-    return data_resampled
 
-# Fonction pour calculer les hauteurs
+# Fonction pour rééchantillonner un raster pour qu'il corresponde à un autre
+def resample_to_match(source_file, target_profile):
+    try:
+        with rasterio.open(source_file) as src:
+            transform, width, height = calculate_default_transform(
+                src.crs, target_profile["crs"],
+                target_profile["width"], target_profile["height"],
+                *target_profile["transform"]
+            )
+            profile = src.profile.copy()
+            profile.update({
+                "crs": target_profile["crs"],
+                "transform": transform,
+                "width": width,
+                "height": height
+            })
+
+            data_resampled = np.empty((height, width), dtype=src.meta['dtype'])
+            reproject(
+                source=src.read(1),
+                destination=data_resampled,
+                src_transform=src.transform,
+                src_crs=src.crs,
+                dst_transform=transform,
+                dst_crs=target_profile["crs"],
+                resampling=Resampling.bilinear
+            )
+        return data_resampled
+    except Exception as e:
+        st.error(f"Erreur lors du rééchantillonnage : {e}")
+        return None
+
+
+# Fonction pour calculer la hauteur relative (MNS - MNT)
 def calculate_heights(mns, mnt):
-    return np.maximum(0, mns - mnt)
+    try:
+        return np.maximum(0, mns - mnt)  # Évite les valeurs négatives
+    except ValueError as e:
+        st.error(f"Erreur dans le calcul des hauteurs : {e}")
+        return None
 
-# Fonction pour détecter les arbres
+
+# Fonction pour détecter les arbres avec DBSCAN
 def detect_trees(heights, threshold, eps, min_samples):
-    tree_mask = heights > threshold
-    coords = np.column_stack(np.where(tree_mask))
-    clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
-    tree_clusters = clustering.labels_
-    return coords, tree_clusters
+    try:
+        # Créer un masque pour les arbres (hauteur > seuil)
+        tree_mask = heights > threshold
+        coords = np.column_stack(np.where(tree_mask))
+        
+        # Clusterisation avec DBSCAN
+        clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
+        tree_clusters = clustering.labels_
+        
+        return coords, tree_clusters
+    except Exception as e:
+        st.error(f"Erreur lors de la détection des arbres : {e}")
+        return None, None
+
 
 # Interface Streamlit
 st.title("Détection d'arbres avec DBSCAN")
 
-mnt_file = st.file_uploader("Téléchargez le fichier MNT", type=["tif", "tiff"])
-mns_file = st.file_uploader("Téléchargez le fichier MNS", type=["tif", "tiff"])
+# Chargement des fichiers
+mnt_file = st.file_uploader("Téléchargez le fichier MNT (Modèle Numérique de Terrain) en TIFF", type=["tif", "tiff"])
+mns_file = st.file_uploader("Téléchargez le fichier MNS (Modèle Numérique de Surface) en TIFF", type=["tif", "tiff"])
 
 if mnt_file and mns_file:
+    # Charger les données TIFF
     mnt, mnt_profile = load_tiff(mnt_file)
     mns, mns_profile = load_tiff(mns_file)
+    
+    if mnt is not None and mns is not None:
+        # Rééchantillonner le MNT pour qu'il corresponde au MNS
+        mnt_resampled = resample_to_match(mnt_file, mns_profile)
 
-    if mnt.shape != mns.shape:
-        st.warning("Dimensions différentes, rééchantillonnage du MNT...")
-        mnt = resample_to_match(mnt_file, mns_profile)
+        if mnt_resampled is not None:
+            # Calcul des hauteurs
+            heights = calculate_heights(mns, mnt_resampled)
 
-    mnt = np.nan_to_num(mnt, nan=0)
-    mns = np.nan_to_num(mns, nan=0)
+            if heights is not None:
+                st.write("Hauteurs calculées (MNS - MNT)")
 
-    heights = calculate_heights(mns, mnt)
-    st.write("Hauteurs calculées.")
+                # Paramètres utilisateur
+                st.sidebar.title("Paramètres de détection")
+                height_threshold = st.sidebar.slider(
+                    "Seuil de hauteur des arbres (m)",
+                    min_value=0.1,
+                    max_value=20.0,
+                    value=2.0,
+                    step=0.1
+                )
+                eps = st.sidebar.slider(
+                    "Rayon de voisinage (m)",
+                    min_value=0.1,
+                    max_value=10.0,
+                    value=2.0,
+                    step=0.1
+                )
+                min_samples = st.sidebar.slider(
+                    "Nombre minimum de points pour un arbre",
+                    min_value=1,
+                    max_value=10,
+                    value=5,
+                    step=1
+                )
 
-    height_threshold = st.sidebar.slider("Seuil hauteur arbres (m)", 0.1, 20.0, 2.0, 0.1)
-    eps = st.sidebar.slider("Rayon voisinage (m)", 0.1, 10.0, 2.0, 0.1)
-    min_samples = st.sidebar.slider("Nombre min. points", 1, 10, 5)
+                # Détection des arbres
+                coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
+                
+                if coords is not None and tree_clusters is not None:
+                    # Comptage des arbres
+                    num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
+                    st.write(f"Nombre d'arbres détectés : {num_trees}")
 
-    coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
-    num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
-    st.write(f"Nombre d'arbres détectés : {num_trees}")
+                    # Visualisation
+                    fig, ax = plt.subplots()
+                    ax.imshow(heights, cmap="viridis", interpolation="none")
+                    ax.scatter(coords[:, 1], coords[:, 0], c=tree_clusters, cmap="tab10", s=5)
+                    ax.set_title("Détection des arbres")
+                    ax.axis("off")
+                    st.pyplot(fig)
+                else:
+                    st.error("Erreur dans la détection des arbres.")
+            else:
+                st.error("Erreur dans le calcul des hauteurs.")
+        else:
+            st.error("Erreur lors du rééchantillonnage du MNT.")
+    else:
+        st.error("Erreur lors du chargement des fichiers MNT et MNS.")
 
-    fig, ax = plt.subplots()
-    ax.imshow(heights, cmap="viridis", interpolation="none")
-    ax.scatter(coords[:, 1], coords[:, 0], c=tree_clusters, cmap="tab10", s=5)
-    ax.set_title("Détection des arbres")
-    ax.axis("off")
-    st.pyplot(fig)
 
 
 
