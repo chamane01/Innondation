@@ -222,16 +222,30 @@ def calculer_taille_pixel(transform):
 
 # Taille réelle d'une unité (pixel)
 def calculer_taille_unite(bounds_tiff, largeur_pixels, hauteur_pixels):
-    point1 = (bounds_tiff[1], bounds_tiff[0])
-    point2 = (bounds_tiff[1], bounds_tiff[2])
-    distance_x = geodesic(point1, point2).meters
+    try:
+        point1 = (bounds_tiff[3], bounds_tiff[0])  # Latitude max, Longitude min
+        point2 = (bounds_tiff[3], bounds_tiff[2])  # Latitude max, Longitude max
+        point3 = (bounds_tiff[1], bounds_tiff[0])  # Latitude min, Longitude min
 
-    point3 = (bounds_tiff[3], bounds_tiff[0])
-    distance_y = geodesic(point1, point3).meters
+        # Validation des coordonnées
+        if not (-90 <= point1[0] <= 90 and -90 <= point3[0] <= 90):
+            raise ValueError("Latitude hors plage valide [-90, 90].")
+        if not (-180 <= point1[1] <= 180 and -180 <= point2[1] <= 180):
+            raise ValueError("Longitude hors plage valide [-180, 180].")
 
-    taille_x = distance_x / largeur_pixels
-    taille_y = distance_y / hauteur_pixels
-    return (taille_x + taille_y) / 2
+        # Calcul des distances
+        distance_x = geodesic(point1, point2).meters
+        distance_y = geodesic(point1, point3).meters
+
+        # Calcul de la taille moyenne d'un pixel
+        taille_x = distance_x / largeur_pixels
+        taille_y = distance_y / hauteur_pixels
+        return (taille_x + taille_y) / 2
+
+    except Exception as e:
+        st.error(f"Erreur dans calculer_taille_unite : {e}")
+        return None
+
 
 # Pixels inondés
 def calculer_pixels_inondes(data, niveau_inondation):
