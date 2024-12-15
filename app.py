@@ -23,7 +23,6 @@ from rasterio.warp import reproject, Resampling, calculate_default_transform
 from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
 
-
 # Fonction pour charger un fichier TIFF
 def load_tiff(file):
     try:
@@ -35,37 +34,20 @@ def load_tiff(file):
         st.error(f"Erreur lors du chargement du fichier TIFF : {e}")
         return None, None
 
-
 # Fonction pour rééchantillonner un raster
 def resample_to_match(source_file, target_profile):
     try:
         with rasterio.open(source_file) as src:
-            # Calculer la transformation par défaut pour correspondre au profil cible
-            transform, width, height = calculate_default_transform(
-                src.crs,
-                target_profile["crs"],
-                src.width,
-                src.height,
-                *src.bounds
+            destination = np.empty(
+                (target_profile["height"], target_profile["width"]),
+                dtype=src.read(1).dtype
             )
-
-            # Mettre à jour les métadonnées du profil source
-            new_profile = src.profile.copy()
-            new_profile.update({
-                "crs": target_profile["crs"],
-                "transform": transform,
-                "width": width,
-                "height": height
-            })
-
-            # Rééchantillonnage
-            destination = np.empty((height, width), dtype=src.read(1).dtype)
             reproject(
                 source=src.read(1),
                 destination=destination,
                 src_transform=src.transform,
                 src_crs=src.crs,
-                dst_transform=transform,
+                dst_transform=target_profile["transform"],
                 dst_crs=target_profile["crs"],
                 resampling=Resampling.bilinear,
             )
@@ -74,6 +56,11 @@ def resample_to_match(source_file, target_profile):
         st.error(f"Erreur lors du rééchantillonnage : {e}")
         return None
 
+# Fonction pour recadrer les rasters pour les rendre compatibles
+def crop_to_match(raster1, raster2):
+    min_height = min(raster1.shape[0], raster2.shape[0])
+    min_width = min(raster1.shape[1], raster2.shape[1])
+    return raster1[:min_height, :min_width], raster2[:min_height, :min_width]
 
 # Fonction pour calculer les hauteurs
 def calculate_heights(mns, mnt):
@@ -82,7 +69,6 @@ def calculate_heights(mns, mnt):
     except ValueError as e:
         st.error(f"Erreur dans le calcul des hauteurs : {e}")
         return None
-
 
 # Fonction pour détecter les arbres
 def detect_trees(heights, threshold, eps, min_samples):
@@ -98,7 +84,6 @@ def detect_trees(heights, threshold, eps, min_samples):
     except Exception as e:
         st.error(f"Erreur lors de la détection des arbres : {e}")
         return None, None
-
 
 # Interface utilisateur Streamlit
 st.title("Détection d'arbres avec DBSCAN")
@@ -119,6 +104,10 @@ if mnt_file and mns_file:
             # Rééchantillonner le MNT pour correspondre au MNS
             mnt_resampled = resample_to_match(mnt_file, mns_profile)
             if mnt_resampled is not None:
+                # Vérifier les dimensions
+                if mnt_resampled.shape != mns.shape:
+                    mnt_resampled, mns = crop_to_match(mnt_resampled, mns)
+
                 # Calcul des hauteurs
                 heights = calculate_heights(mns, mnt_resampled)
                 if heights is not None:
