@@ -1,5 +1,6 @@
 geojson
 scikit-image
+scikit-learn
 rasterio
 gpxpy
 streamlit
