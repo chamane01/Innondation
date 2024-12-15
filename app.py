@@ -1,4 +1,5 @@
 
+
 # Importer les bibliothèques nécessaires
 import streamlit as st
 import pandas as pd
@@ -16,9 +17,12 @@ import rasterio
 
 import streamlit as st 
 import rasterio
+import rasterio.warp
 import folium
+from folium import plugins
 from folium.plugins import MeasureControl, Draw
 from rasterio.plot import reshape_as_image
+from PIL import Image
 from streamlit_folium import folium_static
 
 def reproject_tiff(input_tiff, target_crs):
@@ -60,19 +64,9 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
             name=name
         ).add_to(map_object)
 
-def get_value_at_coords(tiff_path, lat, lon):
-    """Get the altitude value at specific coordinates."""
-    with rasterio.open(tiff_path) as src:
-        row, col = src.index(lon, lat)
-        if src.count >= 3:
-            altitude = src.read(3)[row, col]  # Assuming the third band is altitude
-        else:
-            altitude = None
-    return altitude
-
 # Streamlit app
 def main():
-    st.title("TIFF Viewer with Altitude and Coordinate Tool")
+    st.title("TIFF Viewer and Interactive Map")
 
     # Upload TIFF file
     uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
@@ -115,35 +109,11 @@ def main():
         draw = Draw(export=True)
         fmap.add_child(draw)
 
-        # Add click event to get coordinates and altitude
-        click_callback = """
-        function(e) {
-            var lat = e.latlng.lat;
-            var lon = e.latlng.lng;
-            fetch(`/get_altitude?lat=${lat}&lon=${lon}`)
-                .then(response => response.json())
-                .then(data => {
-                    alert(`Coordinates: ${lat.toFixed(6)}, ${lon.toFixed(6)}\\nAltitude: ${data.altitude || "N/A"}`);
-                });
-        }
-        """
-        fmap.add_child(folium.LatLngPopup())
-        fmap.on("click", click_callback)
-
         # Layer control
         folium.LayerControl().add_to(fmap)
 
         # Display map
         folium_static(fmap)
-
-        # Serve altitude data dynamically
-        if st.experimental_get_query_params():
-            params = st.experimental_get_query_params()
-            if "lat" in params and "lon" in params:
-                lat = float(params["lat"][0])
-                lon = float(params["lon"][0])
-                altitude = get_value_at_coords(reprojected_tiff, lat, lon)
-                st.json({"altitude": altitude})
 
 if __name__ == "__main__":
     main()
