@@ -40,6 +40,7 @@ def load_tiff(file):
 def resample_to_match(source_file, target_profile):
     try:
         with rasterio.open(source_file) as src:
+            # Assurer la compatibilité avec le profil cible
             transform, width, height = calculate_default_transform(
                 src.crs, target_profile["crs"],
                 target_profile["width"], target_profile["height"],
@@ -53,7 +54,10 @@ def resample_to_match(source_file, target_profile):
                 "height": height
             })
 
+            # Destination des données rééchantillonnées
             data_resampled = np.empty((height, width), dtype=src.meta['dtype'])
+
+            # Effectuer le rééchantillonnage
             reproject(
                 source=src.read(1),
                 destination=data_resampled,
@@ -108,63 +112,68 @@ if mnt_file and mns_file:
     mns, mns_profile = load_tiff(mns_file)
     
     if mnt is not None and mns is not None:
-        # Rééchantillonner le MNT pour qu'il corresponde au MNS
-        mnt_resampled = resample_to_match(mnt_file, mns_profile)
-
-        if mnt_resampled is not None:
-            # Calcul des hauteurs
-            heights = calculate_heights(mns, mnt_resampled)
-
-            if heights is not None:
-                st.write("Hauteurs calculées (MNS - MNT)")
-
-                # Paramètres utilisateur
-                st.sidebar.title("Paramètres de détection")
-                height_threshold = st.sidebar.slider(
-                    "Seuil de hauteur des arbres (m)",
-                    min_value=0.1,
-                    max_value=20.0,
-                    value=2.0,
-                    step=0.1
-                )
-                eps = st.sidebar.slider(
-                    "Rayon de voisinage (m)",
-                    min_value=0.1,
-                    max_value=10.0,
-                    value=2.0,
-                    step=0.1
-                )
-                min_samples = st.sidebar.slider(
-                    "Nombre minimum de points pour un arbre",
-                    min_value=1,
-                    max_value=10,
-                    value=5,
-                    step=1
-                )
-
-                # Détection des arbres
-                coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
-                
-                if coords is not None and tree_clusters is not None:
-                    # Comptage des arbres
-                    num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
-                    st.write(f"Nombre d'arbres détectés : {num_trees}")
-
-                    # Visualisation
-                    fig, ax = plt.subplots()
-                    ax.imshow(heights, cmap="viridis", interpolation="none")
-                    ax.scatter(coords[:, 1], coords[:, 0], c=tree_clusters, cmap="tab10", s=5)
-                    ax.set_title("Détection des arbres")
-                    ax.axis("off")
-                    st.pyplot(fig)
-                else:
-                    st.error("Erreur dans la détection des arbres.")
-            else:
-                st.error("Erreur dans le calcul des hauteurs.")
+        # Vérification des CRS
+        if mnt_profile["crs"] != mns_profile["crs"]:
+            st.error("Les systèmes de coordonnées (CRS) du MNT et du MNS ne correspondent pas.")
         else:
-            st.error("Erreur lors du rééchantillonnage du MNT.")
+            # Rééchantillonner le MNT pour qu'il corresponde au MNS
+            mnt_resampled = resample_to_match(mnt_file, mns_profile)
+
+            if mnt_resampled is not None:
+                # Calcul des hauteurs
+                heights = calculate_heights(mns, mnt_resampled)
+
+                if heights is not None:
+                    st.write("Hauteurs calculées (MNS - MNT)")
+
+                    # Paramètres utilisateur
+                    st.sidebar.title("Paramètres de détection")
+                    height_threshold = st.sidebar.slider(
+                        "Seuil de hauteur des arbres (m)",
+                        min_value=0.1,
+                        max_value=20.0,
+                        value=2.0,
+                        step=0.1
+                    )
+                    eps = st.sidebar.slider(
+                        "Rayon de voisinage (m)",
+                        min_value=0.1,
+                        max_value=10.0,
+                        value=2.0,
+                        step=0.1
+                    )
+                    min_samples = st.sidebar.slider(
+                        "Nombre minimum de points pour un arbre",
+                        min_value=1,
+                        max_value=10,
+                        value=5,
+                        step=1
+                    )
+
+                    # Détection des arbres
+                    coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
+                    
+                    if coords is not None and tree_clusters is not None:
+                        # Comptage des arbres
+                        num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
+                        st.write(f"Nombre d'arbres détectés : {num_trees}")
+
+                        # Visualisation
+                        fig, ax = plt.subplots()
+                        ax.imshow(heights, cmap="viridis", interpolation="none")
+                        ax.scatter(coords[:, 1], coords[:, 0], c=tree_clusters, cmap="tab10", s=5)
+                        ax.set_title("Détection des arbres")
+                        ax.axis("off")
+                        st.pyplot(fig)
+                    else:
+                        st.error("Erreur dans la détection des arbres.")
+                else:
+                    st.error("Erreur dans le calcul des hauteurs.")
+            else:
+                st.error("Erreur lors du rééchantillonnage du MNT.")
     else:
         st.error("Erreur lors du chargement des fichiers MNT et MNS.")
+
 
 
 
