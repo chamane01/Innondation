@@ -221,30 +221,30 @@ def calculer_taille_pixel(transform):
     return transform[0], -transform[4]
 
 # Taille réelle d'une unité (pixel)
-def calculer_taille_unite(bounds_tiff, largeur_pixels, hauteur_pixels):
+def calculer_taille_unite(latitude):
+    if not -90 <= latitude <= 90:
+        raise ValueError(f"Latitude hors plage valide : {latitude}.")
+    # Exemple de logique pour calculer la taille moyenne
+    rayon_terre = 6378137  # Rayon moyen de la Terre en mètres
+    taille_unite = 2 * 3.14159 * rayon_terre * abs(latitude) / 360
+    return taille_unite
+
+def main():
+    # Exemple de récupération d'une latitude (à adapter selon votre source)
     try:
-        point1 = (bounds_tiff[3], bounds_tiff[0])  # Latitude max, Longitude min
-        point2 = (bounds_tiff[3], bounds_tiff[2])  # Latitude max, Longitude max
-        point3 = (bounds_tiff[1], bounds_tiff[0])  # Latitude min, Longitude min
-
-        # Validation des coordonnées
-        if not (-90 <= point1[0] <= 90 and -90 <= point3[0] <= 90):
-            raise ValueError("Latitude hors plage valide [-90, 90].")
-        if not (-180 <= point1[1] <= 180 and -180 <= point2[1] <= 180):
-            raise ValueError("Longitude hors plage valide [-180, 180].")
-
-        # Calcul des distances
-        distance_x = geodesic(point1, point2).meters
-        distance_y = geodesic(point1, point3).meters
-
-        # Calcul de la taille moyenne d'un pixel
-        taille_x = distance_x / largeur_pixels
-        taille_y = distance_y / hauteur_pixels
-        return (taille_x + taille_y) / 2
-
+        latitude = float(st.text_input("Entrez la latitude : "))
+        if not -90 <= latitude <= 90:
+            st.error(f"Latitude invalide : {latitude}. La latitude doit être entre -90 et 90.")
+        else:
+            taille_unite = calculer_taille_unite(latitude)
+            st.write(f"Taille moyenne d'une unité : {taille_unite:.2f} m")
+    except ValueError as e:
+        st.error(f"Erreur dans la conversion ou le calcul : {e}")
     except Exception as e:
-        st.error(f"Erreur dans calculer_taille_unite : {e}")
-        return None
+        st.error(f"Erreur inattendue : {e}")
+
+if __name__ == "__main__":
+    main()
 
 
 # Pixels inondés
