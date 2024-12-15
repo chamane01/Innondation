@@ -105,7 +105,7 @@ if tiff_file:
 import streamlit as st
 import numpy as np
 import rasterio
-from rasterio.warp import transform
+from rasterio.warp import transform, calculate_default_transform, reproject, Resampling
 from sklearn.cluster import DBSCAN
 import folium
 from folium import plugins
@@ -120,6 +120,32 @@ def load_tiff(file_path):
         bounds = src.bounds  # Limites géographiques
         crs = src.crs  # Système de coordonnées
     return data, profile, bounds, crs
+
+# Fonction pour reprojeter un raster si nécessaire
+def reproject_raster(input_data, input_profile, target_crs):
+    transform, width, height = calculate_default_transform(
+        input_profile['crs'], target_crs, input_profile['width'], input_profile['height'], 
+        *input_profile['bounds']
+    )
+    new_profile = input_profile.copy()
+    new_profile.update({
+        'crs': target_crs,
+        'transform': transform,
+        'width': width,
+        'height': height
+    })
+
+    reprojected_data = np.zeros((height, width), dtype=input_data.dtype)
+    reproject(
+        source=input_data,
+        destination=reprojected_data,
+        src_transform=input_profile['transform'],
+        src_crs=input_profile['crs'],
+        dst_transform=transform,
+        dst_crs=target_crs,
+        resampling=Resampling.nearest
+    )
+    return reprojected_data, new_profile
 
 # Fonction pour reprojeter les limites géographiques en EPSG:4326
 def reproject_bounds(bounds, src_crs):
@@ -172,57 +198,59 @@ if mnt_file and mns_file:
     mns, mns_profile, mns_bounds, mns_crs = load_tiff(mns_file)
 
     if mnt_crs != mns_crs:
-        st.error("Les CRS des fichiers MNT et MNS doivent correspondre.")
-    else:
-        heights = calculate_heights(mns, mnt)
-        st.write("Hauteurs calculées (MNS - MNT)")
+        st.warning("Les CRS des fichiers MNT et MNS ne correspondent pas. Reprojection en cours...")
+        mns, mns_profile = reproject_raster(mns, mns_profile, mnt_crs)
+        mns_crs = mnt_crs
 
-        st.sidebar.title("Paramètres de détection (en centimètres)")
-        height_threshold_cm = st.sidebar.slider("Seuil de hauteur des arbres (cm)", min_value=10, max_value=2000, value=50)
-        eps_cm = st.sidebar.slider("Rayon de voisinage (cm)", min_value=10, max_value=1000, value=50)
-        min_samples = st.sidebar.slider("Nombre minimum de points pour un arbre", min_value=1, max_value=10, value=5)
+    heights = calculate_heights(mns, mnt)
+    st.write("Hauteurs calculées (MNS - MNT)")
 
-        coords, tree_clusters = detect_trees(heights, height_threshold_cm, eps_cm, min_samples)
-        num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
-        st.write(f"Nombre d'arbres détectés : {num_trees}")
+    st.sidebar.title("Paramètres de détection (en centimètres)")
+    height_threshold_cm = st.sidebar.slider("Seuil de hauteur des arbres (cm)", min_value=10, max_value=2000, value=50)
+    eps_cm = st.sidebar.slider("Rayon de voisinage (cm)", min_value=10, max_value=1000, value=50)
+    min_samples = st.sidebar.slider("Nombre minimum de points pour un arbre", min_value=1, max_value=10, value=5)
 
-        mnt_normalized = normalize(mnt)
-        mns_normalized = normalize(mns)
+    coords, tree_clusters = detect_trees(heights, height_threshold_cm, eps_cm, min_samples)
+    num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
+    st.write(f"Nombre d'arbres détectés : {num_trees}")
 
-        bounds_geo = reproject_bounds(mnt_bounds, mnt_crs)
-        center_lat = (bounds_geo[0] + bounds_geo[2]) / 2
-        center_lon = (bounds_geo[1] + bounds_geo[3]) / 2
-        m = folium.Map(location=[center_lat, center_lon], zoom_start=15)
+    mnt_normalized = normalize(mnt)
+    mns_normalized = normalize(mns)
 
-        folium.raster_layers.ImageOverlay(
-            image=mnt_normalized,
-            bounds=[[bounds_geo[0], bounds_geo[1]], [bounds_geo[2], bounds_geo[3]]],
-            opacity=0.6,
-            colormap=lambda x: (1 - x, x, 0),
-            name="MNT"
-        ).add_to(m)
+    bounds_geo = reproject_bounds(mnt_bounds, mnt_crs)
+    center_lat = (bounds_geo[0] + bounds_geo[2]) / 2
+    center_lon = (bounds_geo[1] + bounds_geo[3]) / 2
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=15)
 
-        folium.raster_layers.ImageOverlay(
-            image=mns_normalized,
-            bounds=[[bounds_geo[0], bounds_geo[1]], [bounds_geo[2], bounds_geo[3]]],
-            opacity=0.6,
-            colormap=lambda x: (0, x, 1 - x),
-            name="MNS"
-        ).add_to(m)
+    folium.raster_layers.ImageOverlay(
+        image=mnt_normalized,
+        bounds=[[bounds_geo[0], bounds_geo[1]], [bounds_geo[2], bounds_geo[3]]],
+        opacity=0.6,
+        colormap=lambda x: (1 - x, x, 0),
+        name="MNT"
+    ).add_to(m)
 
-        lat, lon = reproject_coords(coords, mnt_bounds, mnt_crs, mnt.shape)
-        for lat_, lon_, cluster in zip(lat, lon, tree_clusters):
-            if cluster != -1:
-                folium.CircleMarker(
-                    location=[lat_, lon_],
-                    radius=2,
-                    color="red",
-                    fill=True,
-                    fill_opacity=1.0
-                ).add_to(m)
+    folium.raster_layers.ImageOverlay(
+        image=mns_normalized,
+        bounds=[[bounds_geo[0], bounds_geo[1]], [bounds_geo[2], bounds_geo[3]]],
+        opacity=0.6,
+        colormap=lambda x: (0, x, 1 - x),
+        name="MNS"
+    ).add_to(m)
 
-        folium.LayerControl().add_to(m)
-        st_folium(m, width=800, height=600)
+    lat, lon = reproject_coords(coords, mnt_bounds, mnt_crs, mnt.shape)
+    for lat_, lon_, cluster in zip(lat, lon, tree_clusters):
+        if cluster != -1:
+            folium.CircleMarker(
+                location=[lat_, lon_],
+                radius=2,
+                color="red",
+                fill=True,
+                fill_opacity=1.0
+            ).add_to(m)
+
+    folium.LayerControl().add_to(m)
+    st_folium(m, width=800, height=600)
 
 
 
