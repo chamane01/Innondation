@@ -101,40 +101,14 @@ if tiff_file:
 import streamlit as st
 import numpy as np
 import rasterio
-from rasterio.warp import calculate_default_transform, reproject, Resampling
 from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
 import folium
 from folium.plugins import HeatMap
-from streamlit_folium import folium_static
+import geopandas as gpd
 from io import BytesIO
 from PIL import Image
-
-
-# Fonction pour reprojeter un fichier TIFF
-def reproject_tiff(src_data, src_profile, dst_crs="EPSG:4326"):
-    transform, width, height = calculate_default_transform(
-        src_profile['crs'], dst_crs, src_profile['width'], src_profile['height'], *src_profile['transform']
-    )
-    dst_profile = src_profile.copy()
-    dst_profile.update({
-        'crs': dst_crs,
-        'transform': transform,
-        'width': width,
-        'height': height
-    })
-    
-    dst_data = np.empty((height, width), dtype=src_data.dtype)
-    reproject(
-        source=src_data,
-        destination=dst_data,
-        src_transform=src_profile['transform'],
-        src_crs=src_profile['crs'],
-        dst_transform=transform,
-        dst_crs=dst_crs,
-        resampling=Resampling.nearest
-    )
-    return dst_data, dst_profile
+import pyproj
 
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path):
@@ -159,29 +133,40 @@ def detect_trees(heights, threshold, eps, min_samples):
     
     return coords, tree_clusters
 
-# Fonction pour transformer des coordonnées pixel (ligne, colonne) en latitude/longitude
-def pixel_to_latlon(coords, transform):
-    latlon_coords = [
-        rasterio.transform.xy(transform, row, col, offset="center")
-        for row, col in coords
-    ]
-    return np.array(latlon_coords)
+# Fonction pour reprojeter les coordonnées de EPSG:32630 à EPSG:4326
+def reproject_coords(coords, from_epsg=32630, to_epsg=4326):
+    # Initialisation du transformeur
+    transformer = pyproj.Transformer.from_crs(from_epsg, to_epsg, always_xy=True)
+    
+    # Reprojection des coordonnées
+    lon, lat = transformer.transform(coords[:, 1], coords[:, 0])
+    return np.column_stack((lat, lon))
 
 # Fonction pour afficher une carte dynamique
-def display_map(mnt, coords, tree_clusters):
-    # Convertir les coordonnées des arbres en latitude/longitude
-    m = folium.Map(location=[coords[:, 1].mean(), coords[:, 0].mean()], zoom_start=12)
+def display_map(mnt, mns, coords):
+    # Reprojection des coordonnées
+    reprojected_coords = reproject_coords(coords)
+    
+    # Créer la carte à la position initiale
+    m = folium.Map(location=[reprojected_coords[:,0].mean(), reprojected_coords[:,1].mean()], zoom_start=12)
+    
+    # Ajouter le fond MNT
+    mnt_img = Image.fromarray(mnt)
+    mnt_stream = BytesIO()
+    mnt_img.save(mnt_stream, format="PNG")
+    mnt_stream.seek(0)
+    folium.raster_layers.ImageOverlay(image=mnt_stream, bounds=[[0, 0], [mnt.shape[0], mnt.shape[1]]], opacity=0.6).add_to(m)
+    
+    # Ajouter le fond MNS
+    mns_img = Image.fromarray(mns)
+    mns_stream = BytesIO()
+    mns_img.save(mns_stream, format="PNG")
+    mns_stream.seek(0)
+    folium.raster_layers.ImageOverlay(image=mns_stream, bounds=[[0, 0], [mns.shape[0], mns.shape[1]]], opacity=0.6).add_to(m)
     
     # Ajouter les points des arbres
-    for i, (lat, lon) in enumerate(coords):
-        cluster_color = f"#{np.random.randint(0, 0xFFFFFF):06x}"  # Couleur aléatoire
-        folium.CircleMarker(
-            location=[lat, lon],
-            radius=5,
-            color=cluster_color,
-            fill=True,
-            fill_opacity=0.7
-        ).add_to(m)
+    for coord in reprojected_coords:
+        folium.CircleMarker(location=[coord[0], coord[1]], radius=5, color='red', fill=True).add_to(m)
     
     # Afficher la carte
     return m
@@ -198,10 +183,6 @@ if mnt_file and mns_file:
     # Charger les données TIFF
     mnt, mnt_profile = load_tiff(mnt_file)
     mns, mns_profile = load_tiff(mns_file)
-
-    # Reprojeter les données en EPSG:4326
-    mnt, mnt_profile = reproject_tiff(mnt, mnt_profile, "EPSG:4326")
-    mns, mns_profile = reproject_tiff(mns, mns_profile, "EPSG:4326")
     
     # Calcul des hauteurs
     heights = calculate_heights(mns, mnt)
@@ -215,9 +196,6 @@ if mnt_file and mns_file:
 
     # Détection des arbres
     coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
-
-    # Transformer les coordonnées en lat/lon
-    latlon_coords = pixel_to_latlon(coords, mnt_profile['transform'])
     
     # Comptage des arbres
     num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
@@ -225,10 +203,10 @@ if mnt_file and mns_file:
 
     # Affichage de la carte
     st.subheader("Carte dynamique des arbres détectés")
-    map_object = display_map(mnt, latlon_coords, tree_clusters)
+    map_object = display_map(mnt, mns, coords)
     
     # Afficher la carte
-    st.write("Voici la carte avec les points des arbres détectés.")
+    st.write("Voici la carte avec les points des arbres détectés sous les fonds MNT et MNS.")
     folium_static(map_object)
 
     # Visualisation des hauteurs
@@ -238,6 +216,7 @@ if mnt_file and mns_file:
     ax.set_title("Détection des arbres")
     ax.axis("off")
     st.pyplot(fig)
+
 
 
 
