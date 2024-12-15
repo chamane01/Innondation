@@ -19,11 +19,11 @@ import streamlit as st
 import rasterio
 import rasterio.warp
 import folium
-import numpy as np
 from folium import plugins
 from folium.plugins import MeasureControl, Draw
 from rasterio.plot import reshape_as_image
-from PIL import Image, ImageEnhance
+from PIL import Image
+import numpy as np
 from streamlit_folium import folium_static
 
 def reproject_tiff(input_tiff, target_crs):
@@ -55,20 +55,28 @@ def reproject_tiff(input_tiff, target_crs):
 
     return reprojected_tiff
 
-def add_image_overlay(map_object, tiff_path, bounds, name, saturation_factor=1.0):
-    """Add a TIFF image overlay to a Folium map, with control over color saturation."""
-    with rasterio.open(tiff_path) as src:
-        # Convert the image to RGB
-        image = reshape_as_image(src.read())
+def convert_to_grayscale(input_tiff):
+    """Convert a TIFF image to grayscale by extracting a single channel."""
+    with rasterio.open(input_tiff) as src:
+        # Read the first band (channel) of the TIFF
+        band = src.read(1)  # Use the first band for grayscale
+        # Normalize the band to range [0, 255] for grayscale
+        band = np.interp(band, (band.min(), band.max()), (0, 255)).astype(np.uint8)
         
-        # Convert the image to a PIL image
-        pil_image = Image.fromarray(image)
-        
-        # Adjust saturation with a slider (default is 1.0, full color)
-        enhancer = ImageEnhance.Color(pil_image)
-        pil_image = enhancer.enhance(saturation_factor)  # Adjust the saturation
-        image = np.array(pil_image)
+        # Save the grayscale image as a new TIFF
+        grayscale_tiff = "grayscale.tiff"
+        with rasterio.open(grayscale_tiff, 'w', driver='GTiff',
+                           count=1, dtype=band.dtype, width=src.width,
+                           height=src.height, crs=src.crs,
+                           transform=src.transform) as dst:
+            dst.write(band, 1)
+    
+    return grayscale_tiff
 
+def add_image_overlay(map_object, tiff_path, bounds, name):
+    """Add a TIFF image overlay to a Folium map."""
+    with rasterio.open(tiff_path) as src:
+        image = reshape_as_image(src.read())
         folium.raster_layers.ImageOverlay(
             image=image,
             bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
@@ -92,6 +100,9 @@ def main():
         # Reproject TIFF to target CRS (e.g., EPSG:4326)
         reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
 
+        # Convert the reprojected TIFF to grayscale
+        grayscale_tiff = convert_to_grayscale(reprojected_tiff)
+
         # Read bounds from reprojected TIFF file
         with rasterio.open(reprojected_tiff) as src:
             bounds = src.bounds
@@ -101,17 +112,11 @@ def main():
         center_lon = (bounds.left + bounds.right) / 2
         fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-        # Add a slider to control the saturation (default to full color)
-        saturation_factor = st.slider(
-            "Adjust Saturation (0 = Black & White, 1 = Full Color)",
-            min_value=0.0,
-            max_value=1.0,
-            value=1.0,
-            step=0.1
-        )
+        # Add reprojected TIFF as overlay
+        add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
 
-        # Add reprojected TIFF as overlay with controlled saturation
-        add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer", saturation_factor)
+        # Add grayscale TIFF as overlay
+        add_image_overlay(fmap, grayscale_tiff, bounds, "Grayscale TIFF Layer")
 
         # Add measure control
         fmap.add_child(MeasureControl())
@@ -128,7 +133,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 
 
