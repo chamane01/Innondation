@@ -62,11 +62,30 @@ if mnt_file and mns_file:
     heights = calculate_heights(mns, mnt)
     st.write("Hauteurs calculées (MNS - MNT)")
 
-    # Paramètres de détection
     st.sidebar.title("Paramètres de détection")
-    height_threshold = st.sidebar.slider("Seuil de hauteur des arbres (m)", min_value=0.1, max_value=20, value=2, step=0.1 )
-    eps = st.sidebar.slider("Rayon de voisinage (m)", min_value=0.1, max_value=10, value=2, step=0.1 )
-    min_samples = st.sidebar.slider("Nombre minimum de points pour un arbre", min_value=1, max_value=10, value=5)
+    height_threshold = st.sidebar.slider(
+    "Seuil de hauteur des arbres (m)",
+    min_value=0.1,  # Flottant requis car step est un flottant
+    max_value=20.0,  # Flottant requis pour correspondre à step
+    value=2.0,       # La valeur par défaut doit être un flottant
+    step=0.1         # Intervalle en flottants
+    )
+    eps = st.sidebar.slider(
+    "Rayon de voisinage (m)",
+    min_value=0.1,
+    max_value=10.0,
+    value=2.0,
+    step=0.1
+    )
+    min_samples = st.sidebar.slider(
+    "Nombre minimum de points pour un arbre",
+    min_value=1,     # Entiers ici
+    max_value=10,
+    value=5,
+    step=1           # Step entier
+    )
+
+   
 
     # Détection des arbres
     coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
