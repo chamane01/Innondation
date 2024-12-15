@@ -16,65 +16,86 @@ import rasterio
 
 
 import streamlit as st
-import rasterio
 import folium
-from folium import plugins
-from folium.plugins import MeasureControl, Draw
-from rasterio.plot import reshape_as_image
+import numpy as np
 from PIL import Image
+import rasterio
+from rasterio.enums import Resampling
+import io
+import tempfile
+from folium import plugins
 from streamlit_folium import folium_static
+from io import BytesIO
 
-def add_image_overlay(map_object, tiff_path, bounds, name):
-    """Add a TIFF image overlay to a Folium map."""
-    with rasterio.open(tiff_path) as src:
-        image = reshape_as_image(src.read())
-        folium.raster_layers.ImageOverlay(
-            image=image,
-            bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
-            name=name
-        ).add_to(map_object)
+def process_tiff(uploaded_file):
+    # Charger le fichier TIFF avec rasterio
+    with rasterio.open(uploaded_file) as dataset:
+        # Convertir le fichier TIFF en LZW
+        kwargs = dataset.meta
+        kwargs.update(driver='GTiff', compress='LZW')
+        output_file = '/tmp/output_lzw.tif'
+        
+        with rasterio.open(output_file, 'w', **kwargs) as dst:
+            for i in range(1, dataset.count + 1):
+                data = dataset.read(i, resampling=Resampling.nearest)
+                dst.write(data, i)
+        
+        # Séparer les canaux R, G, B, Altitude
+        red = dataset.read(1)
+        green = dataset.read(2)
+        blue = dataset.read(3)
+        altitude = dataset.read(4) if dataset.count > 3 else None
 
-# Streamlit app
-def main():
-    st.title("TIFF Viewer and Interactive Map")
+    # Conversion des couleurs de 16 bits à 8 bits
+    red_8bit = np.uint8((red / 256).clip(0, 255))
+    green_8bit = np.uint8((green / 256).clip(0, 255))
+    blue_8bit = np.uint8((blue / 256).clip(0, 255))
 
-    # Upload TIFF file
-    uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
+    # Conversion en image PNG
+    img = Image.merge("RGB", (Image.fromarray(red_8bit), Image.fromarray(green_8bit), Image.fromarray(blue_8bit)))
+    
+    # Créer un fichier temporaire pour le PNG
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp_png_file:
+        img.save(tmp_png_file, format="PNG")
+        tmp_png_file.seek(0)
+        png_path = tmp_png_file.name
+    
+    # Extraire les coordonnées du coin supérieur gauche pour centrer la carte
+    lat, lon = dataset.bounds[3], dataset.bounds[0]
 
-    if uploaded_file is not None:
-        tiff_path = uploaded_file.name
-        with open(tiff_path, "wb") as f:
-            f.write(uploaded_file.read())
+    return red_8bit, green_8bit, blue_8bit, altitude, output_file, png_path, lat, lon
 
-        st.write("Displaying TIFF file on map...")
+def create_map(lat, lon, png_path):
+    # Créer une carte centrée sur les coordonnées
+    folium_map = folium.Map(location=[lat, lon], zoom_start=12)
 
-        # Read bounds from TIFF file
-        with rasterio.open(tiff_path) as src:
-            bounds = src.bounds
+    # Ajouter une couche de profondeur en PNG
+    folium.raster_layers.ImageOverlay(png_path, bounds=[[lat-0.05, lon-0.05], [lat+0.05, lon+0.05]], opacity=0.5).add_to(folium_map)
 
-        # Create Folium map
-        center_lat = (bounds.top + bounds.bottom) / 2
-        center_lon = (bounds.left + bounds.right) / 2
-        fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+    # Ajouter un contrôle de mesure
+    folium.plugins.MeasureControl(primary_length_unit="kilometers", secondary_length_unit="meters", primary_area_unit="sqmeters").add_to(folium_map)
 
-        # Add TIFF as overlay
-        add_image_overlay(fmap, tiff_path, bounds, "TIFF Layer")
+    # Ajouter un outil de dessin
+    folium.plugins.Draw(export=True).add_to(folium_map)
 
-        # Add measure control
-        fmap.add_child(MeasureControl())
+    return folium_map
 
-        # Add draw control
-        draw = Draw(export=True)
-        fmap.add_child(draw)
+# Interface Streamlit
+st.title("Carte Interactive à partir de données TIFF")
 
-        # Layer control
-        folium.LayerControl().add_to(fmap)
+# Téléchargement du fichier TIFF
+uploaded_file = st.file_uploader("Téléchargez un fichier TIFF", type=["tiff", "tif"])
 
-        # Display map
-        folium_static(fmap)
+if uploaded_file is not None:
+    # Traiter le fichier TIFF
+    red_8bit, green_8bit, blue_8bit, altitude, output_file, png_path, lat, lon = process_tiff(uploaded_file)
 
-if __name__ == "__main__":
-    main()
+    # Créer la carte avec les couches
+    folium_map = create_map(lat, lon, png_path)
+
+    # Affichage de la carte
+    st.markdown("### Carte Interactive")
+    folium_static(folium_map)
 
 
 
