@@ -14,6 +14,77 @@ from datetime import datetime
 import rasterio
 
 
+
+import streamlit as st
+import numpy as np
+import rasterio
+from sklearn.cluster import DBSCAN
+import matplotlib.pyplot as plt
+
+# Fonction pour charger un fichier TIFF
+def load_tiff(file_path):
+    with rasterio.open(file_path) as src:
+        data = src.read(1)  # Lire la première bande
+        profile = src.profile  # Profil du fichier (métadonnées)
+    return data, profile
+
+# Fonction pour calculer la hauteur relative (MNS - MNT)
+def calculate_heights(mns, mnt):
+    return np.maximum(0, mns - mnt)  # Évite les valeurs négatives
+
+# Fonction pour détecter les arbres avec DBSCAN
+def detect_trees(heights, threshold, eps, min_samples):
+    # Créer un masque pour les arbres (hauteur > seuil)
+    tree_mask = heights > threshold
+    coords = np.column_stack(np.where(tree_mask))
+    
+    # Clusterisation avec DBSCAN
+    clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
+    tree_clusters = clustering.labels_
+    
+    return coords, tree_clusters
+
+# Interface Streamlit
+st.title("Détection d'arbres avec DBSCAN")
+
+# Chargement des fichiers
+mnt_file = st.file_uploader("Téléchargez le fichier MNT (Modèle Numérique de Terrain) en TIFF", type=["tif", "tiff"])
+mns_file = st.file_uploader("Téléchargez le fichier MNS (Modèle Numérique de Surface) en TIFF", type=["tif", "tiff"])
+
+if mnt_file and mns_file:
+    # Charger les données TIFF
+    mnt, mnt_profile = load_tiff(mnt_file)
+    mns, mns_profile = load_tiff(mns_file)
+    
+    # Calcul des hauteurs
+    heights = calculate_heights(mns, mnt)
+    st.write("Hauteurs calculées (MNS - MNT)")
+
+    # Paramètres de détection
+    st.sidebar.title("Paramètres de détection")
+    height_threshold = st.sidebar.slider("Seuil de hauteur des arbres (m)", min_value=1, max_value=20, value=2)
+    eps = st.sidebar.slider("Rayon de voisinage (m)", min_value=1, max_value=10, value=2)
+    min_samples = st.sidebar.slider("Nombre minimum de points pour un arbre", min_value=1, max_value=10, value=5)
+
+    # Détection des arbres
+    coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
+    
+    # Comptage des arbres
+    num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
+    st.write(f"Nombre d'arbres détectés : {num_trees}")
+
+    # Visualisation
+    fig, ax = plt.subplots()
+    ax.imshow(heights, cmap="viridis", interpolation="none")
+    ax.scatter(coords[:, 1], coords[:, 0], c=tree_clusters, cmap="tab10", s=5)
+    ax.set_title("Détection des arbres")
+    ax.axis("off")
+    st.pyplot(fig)
+
+
+
+
+
 import streamlit as st
 import rasterio
 import rasterio.warp
