@@ -221,31 +221,17 @@ def calculer_taille_pixel(transform):
     return transform[0], -transform[4]
 
 # Taille réelle d'une unité (pixel)
-def calculer_taille_unite(latitude):
-    if not -90 <= latitude <= 90:
-        raise ValueError(f"Latitude hors plage valide : {latitude}.")
-    # Exemple de logique pour calculer la taille moyenne
-    rayon_terre = 6378137  # Rayon moyen de la Terre en mètres
-    taille_unite = 2 * 3.14159 * rayon_terre * abs(latitude) / 360
-    return taille_unite
+def calculer_taille_unite(bounds_tiff, largeur_pixels, hauteur_pixels):
+    point1 = (bounds_tiff[1], bounds_tiff[0])
+    point2 = (bounds_tiff[1], bounds_tiff[2])
+    distance_x = geodesic(point1, point2).meters
 
-def main():
-    # Exemple de récupération d'une latitude (à adapter selon votre source)
-    try:
-        latitude = float(st.text_input("Entrez la latitude : "))
-        if not -90 <= latitude <= 90:
-            st.error(f"Latitude invalide : {latitude}. La latitude doit être entre -90 et 90.")
-        else:
-            taille_unite = calculer_taille_unite(latitude)
-            st.write(f"Taille moyenne d'une unité : {taille_unite:.2f} m")
-    except ValueError as e:
-        st.error(f"Erreur dans la conversion ou le calcul : {e}")
-    except Exception as e:
-        st.error(f"Erreur inattendue : {e}")
+    point3 = (bounds_tiff[3], bounds_tiff[0])
+    distance_y = geodesic(point1, point3).meters
 
-if __name__ == "__main__":
-    main()
-
+    taille_x = distance_x / largeur_pixels
+    taille_y = distance_y / hauteur_pixels
+    return (taille_x + taille_y) / 2
 
 # Pixels inondés
 def calculer_pixels_inondes(data, niveau_inondation):
