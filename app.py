@@ -150,15 +150,15 @@ def display_map(mnt, mns, coords):
     # Créer la carte à la position initiale
     m = folium.Map(location=[reprojected_coords[:,0].mean(), reprojected_coords[:,1].mean()], zoom_start=12)
     
-    # Ajouter le fond MNT
-    mnt_img = Image.fromarray(mnt)
+    # Convertir les données MNT en image (et normaliser si nécessaire)
+    mnt_img = Image.fromarray(np.uint8(mnt))  # Assurez-vous que les données sont dans un format compatible
     mnt_stream = BytesIO()
     mnt_img.save(mnt_stream, format="PNG")
     mnt_stream.seek(0)
     folium.raster_layers.ImageOverlay(image=mnt_stream, bounds=[[0, 0], [mnt.shape[0], mnt.shape[1]]], opacity=0.6).add_to(m)
     
-    # Ajouter le fond MNS
-    mns_img = Image.fromarray(mns)
+    # Convertir les données MNS en image (et normaliser si nécessaire)
+    mns_img = Image.fromarray(np.uint8(mns))  # Idem ici
     mns_stream = BytesIO()
     mns_img.save(mns_stream, format="PNG")
     mns_stream.seek(0)
