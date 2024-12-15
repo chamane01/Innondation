@@ -64,8 +64,8 @@ if mnt_file and mns_file:
 
     # Paramètres de détection
     st.sidebar.title("Paramètres de détection")
-    height_threshold = st.sidebar.slider("Seuil de hauteur des arbres (m)", min_value=1, max_value=20, value=2)
-    eps = st.sidebar.slider("Rayon de voisinage (m)", min_value=1, max_value=10, value=2)
+    height_threshold = st.sidebar.slider("Seuil de hauteur des arbres (m)", min_value=0.01, max_value=20, value=2)
+    eps = st.sidebar.slider("Rayon de voisinage (m)", min_value=0.01, max_value=10, value=2)
     min_samples = st.sidebar.slider("Nombre minimum de points pour un arbre", min_value=1, max_value=10, value=5)
 
     # Détection des arbres
