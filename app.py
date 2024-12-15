@@ -13,6 +13,80 @@ import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
 import rasterio
 
+import streamlit as st
+import numpy as np
+import rasterio
+from scipy.ndimage import binary_erosion, binary_dilation
+from scipy.interpolate import griddata
+import matplotlib.pyplot as plt
+
+# Fonction pour charger un fichier TIFF
+def load_tiff(file_path):
+    with rasterio.open(file_path) as src:
+        data = src.read(1)
+        profile = src.profile
+    return data, profile
+
+# Fonction pour générer un MNT
+def generate_mnt(elevation_data, structure_size=3):
+    """
+    Génère un MNT en filtrant les objets élevés et en interpolant les données manquantes.
+    """
+    # Étape 1 : Filtrage morphologique (érosion pour détecter le sol)
+    ground_mask = binary_erosion(elevation_data > 0, structure=np.ones((structure_size, structure_size)))
+
+    # Étape 2 : Interpolation pour combler les trous
+    x, y = np.meshgrid(np.arange(elevation_data.shape[1]), np.arange(elevation_data.shape[0]))
+    points = np.column_stack((x[ground_mask], y[ground_mask]))
+    values = elevation_data[ground_mask]
+    grid_z = griddata(points, values, (x, y), method='linear', fill_value=np.nan)
+
+    # Étape 3 : Remplissage des valeurs NaN par des moyennes locales
+    grid_z_filled = np.nan_to_num(grid_z, nan=np.nanmean(grid_z))
+    return grid_z_filled
+
+# Interface Streamlit
+st.title("Génération d'un MNT à partir d'un TIFF")
+
+# Chargement du fichier
+tiff_file = st.file_uploader("Téléchargez un fichier TIFF contenant des données d'altitude", type=["tif", "tiff"])
+
+if tiff_file:
+    # Charger les données TIFF
+    elevation_data, profile = load_tiff(tiff_file)
+    st.write("Données d'altitude chargées :")
+    st.image(elevation_data, caption="Image d'altitude", use_column_width=True, clamp=True)
+
+    # Générer le MNT
+    structure_size = st.sidebar.slider("Taille du filtre morphologique (px)", 1, 10, 3)
+    mnt = generate_mnt(elevation_data, structure_size=structure_size)
+
+    # Affichage des résultats
+    st.write("Modèle Numérique de Terrain (MNT) généré :")
+    fig, ax = plt.subplots(1, 2, figsize=(12, 6))
+    ax[0].imshow(elevation_data, cmap="terrain", interpolation="none")
+    ax[0].set_title("Données originales")
+    ax[1].imshow(mnt, cmap="terrain", interpolation="none")
+    ax[1].set_title("MNT généré")
+    st.pyplot(fig)
+
+    # Option d'exportation
+    export = st.button("Exporter le MNT en TIFF")
+    if export:
+        output_path = "mnt_generated.tif"
+        with rasterio.open(
+            output_path,
+            "w",
+            driver="GTiff",
+            height=mnt.shape[0],
+            width=mnt.shape[1],
+            count=1,
+            dtype=mnt.dtype,
+            crs=profile["crs"],
+            transform=profile["transform"],
+        ) as dst:
+            dst.write(mnt, 1)
+        st.success(f"MNT exporté sous le nom {output_path}")
 
 
 import streamlit as st
