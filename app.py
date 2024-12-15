@@ -103,12 +103,7 @@ import numpy as np
 import rasterio
 from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
-import folium
-from folium.plugins import HeatMap
-import geopandas as gpd
-from io import BytesIO
-from PIL import Image
-import pyproj
+
 
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path):
@@ -132,68 +127,6 @@ def detect_trees(heights, threshold, eps, min_samples):
     tree_clusters = clustering.labels_
     
     return coords, tree_clusters
-
-# Fonction pour reprojeter les coordonnées de EPSG:32630 à EPSG:4326
-def reproject_coords(coords, from_epsg=32630, to_epsg=4326):
-    # Initialisation du transformeur
-    transformer = pyproj.Transformer.from_crs(from_epsg, to_epsg, always_xy=True)
-    
-    # Reprojection des coordonnées
-    lon, lat = transformer.transform(coords[:, 1], coords[:, 0])
-    return np.column_stack((lat, lon))
-
-# Fonction pour afficher une carte dynamique
-import folium
-from folium.plugins import HeatMap
-from PIL import Image
-from io import BytesIO
-
-# Fonction pour afficher une carte dynamique
-def display_map(mnt, mns, coords):
-    # Reprojection des coordonnées
-    reprojected_coords = reproject_coords(coords)
-    
-    # Créer la carte à la position initiale
-    m = folium.Map(location=[reprojected_coords[:,0].mean(), reprojected_coords[:,1].mean()], zoom_start=12)
-    
-    # Convertir MNT en image PNG et l'ajouter à la carte
-    mnt = np.uint8(mnt)  # Conversion en entiers 8 bits pour l'image PNG
-    mnt_img = Image.fromarray(mnt)
-    mnt_stream = BytesIO()
-    mnt_img.save(mnt_stream, format="PNG")
-    mnt_stream.seek(0)
-
-    # Utiliser ImageOverlay avec BytesIO pour l'image
-    folium.raster_layers.ImageOverlay(
-        image=mnt_stream,
-        bounds=[[0, 0], [mnt.shape[0], mnt.shape[1]]],
-        opacity=0.6,
-        origin='upper'  # Spécifier l'origine pour l'interprétation des coordonnées
-    ).add_to(m)
-    
-    # Convertir MNS en image PNG et l'ajouter à la carte
-    mns = np.uint8(mns)  # Conversion en entiers 8 bits pour l'image PNG
-    mns_img = Image.fromarray(mns)
-    mns_stream = BytesIO()
-    mns_img.save(mns_stream, format="PNG")
-    mns_stream.seek(0)
-
-    # Utiliser ImageOverlay pour l'image MNS
-    folium.raster_layers.ImageOverlay(
-        image=mns_stream,
-        bounds=[[0, 0], [mns.shape[0], mns.shape[1]]],
-        opacity=0.6,
-        origin='upper'  # Spécifier l'origine pour l'interprétation des coordonnées
-    ).add_to(m)
-    
-    # Ajouter les points des arbres
-    for coord in reprojected_coords:
-        folium.CircleMarker(location=[coord[0], coord[1]], radius=5, color='red', fill=True).add_to(m)
-    
-    # Afficher la carte
-    return m
-
-
 
 # Interface Streamlit
 st.title("Détection d'arbres avec DBSCAN")
@@ -224,26 +157,13 @@ if mnt_file and mns_file:
     num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
     st.write(f"Nombre d'arbres détectés : {num_trees}")
 
-    # Affichage de la carte
-    st.subheader("Carte dynamique des arbres détectés")
-    map_object = display_map(mnt, mns, coords)
-    
-    # Afficher la carte
-    st.write("Voici la carte avec les points des arbres détectés sous les fonds MNT et MNS.")
-    folium_static(map_object)
-
-    # Visualisation des hauteurs
+    # Visualisation
     fig, ax = plt.subplots()
     ax.imshow(heights, cmap="viridis", interpolation="none")
     ax.scatter(coords[:, 1], coords[:, 0], c=tree_clusters, cmap="tab10", s=5)
     ax.set_title("Détection des arbres")
     ax.axis("off")
     st.pyplot(fig)
-
-
-
-
-
 
 
 
