@@ -104,96 +104,117 @@ if tiff_file:
 
 import streamlit as st
 import rasterio
-import numpy as np
-from rasterio.enums import Resampling
-import matplotlib.pyplot as plt
+import rasterio.warp
+import folium
+from folium import plugins
+from folium.plugins import MeasureControl, Draw
+from rasterio.plot import reshape_as_image
+from PIL import Image
+from streamlit_folium import folium_static
 
-# Fonction pour charger un fichier TIFF
-def load_tiff(file):
-    with rasterio.open(file) as src:
-        data = src.read(1)  # Charger uniquement la première bande
-        profile = src.profile  # Métadonnées
-        bounds = src.bounds  # Limites géographiques
-        crs = src.crs  # Système de coordonnées
-    return data, profile, bounds, crs
+# Fonction pour reprojeter un fichier TIFF
+def reproject_tiff(input_tiff, target_crs):
+    """
+    Reprojeter un fichier TIFF vers un CRS cible.
+    :param input_tiff: Chemin du fichier TIFF d'entrée
+    :param target_crs: CRS cible (ex: "EPSG:4326")
+    :return: Chemin du fichier TIFF reprojeté
+    """
+    with rasterio.open(input_tiff) as src:
+        transform, width, height = rasterio.warp.calculate_default_transform(
+            src.crs, target_crs, src.width, src.height, *src.bounds
+        )
+        kwargs = src.meta.copy()
+        kwargs.update({
+            'crs': target_crs,
+            'transform': transform,
+            'width': width,
+            'height': height
+        })
 
-# Fonction pour rééchantillonner un raster
-def resample_to_match(source, target_profile):
-    with rasterio.MemoryFile() as memfile:
-        with memfile.open(**target_profile) as dest:
-            rasterio.warp.reproject(
-                source,
-                rasterio.band(dest, 1),
-                src_transform=target_profile['transform'],
-                src_crs=target_profile['crs'],
-                dst_transform=target_profile['transform'],
-                dst_crs=target_profile['crs'],
-                resampling=Resampling.bilinear
-            )
-            return dest.read(1)
+        reprojected_tiff = "reprojected.tiff"
+        with rasterio.open(reprojected_tiff, 'w', **kwargs) as dst:
+            for i in range(1, src.count + 1):
+                rasterio.warp.reproject(
+                    source=rasterio.band(src, i),
+                    destination=rasterio.band(dst, i),
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    dst_transform=transform,
+                    dst_crs=target_crs,
+                    resampling=rasterio.warp.Resampling.nearest
+                )
 
-# Fonction pour calculer les hauteurs (MNS - MNT)
-def calculate_heights(mns, mnt):
-    return np.maximum(0, mns - mnt)  # Évite les valeurs négatives
+    return reprojected_tiff
 
-# Interface Streamlit
-st.title("Détection d'arbres avec DBSCAN et carte interactive")
+# Fonction pour ajouter une image TIFF en tant qu'overlay sur une carte Folium
+def add_image_overlay(map_object, tiff_path, bounds, name):
+    """
+    Ajouter une superposition d'image TIFF à une carte Folium.
+    :param map_object: Carte Folium
+    :param tiff_path: Chemin du fichier TIFF
+    :param bounds: Limites géographiques du raster
+    :param name: Nom de la couche
+    """
+    with rasterio.open(tiff_path) as src:
+        # Convertir le raster en image
+        image = reshape_as_image(src.read())
+        # Ajouter l'image en overlay
+        folium.raster_layers.ImageOverlay(
+            image=image,
+            bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
+            name=name
+        ).add_to(map_object)
 
-mnt_file = st.file_uploader("Téléchargez le fichier MNT (Modèle Numérique de Terrain) en TIFF", type=["tif", "tiff"])
-mns_file = st.file_uploader("Téléchargez le fichier MNS (Modèle Numérique de Surface) en TIFF", type=["tif", "tiff"])
+# Fonction principale pour l'application Streamlit
+def main():
+    st.title("Visualiseur TIFF et Carte Interactive")
+    st.markdown("""
+    Cette application permet de :
+    - Charger un fichier TIFF
+    - Reprojeter le fichier au format géographique (EPSG:4326)
+    - Afficher le raster sur une carte interactive
+    - Ajouter des outils de mesure et de dessin
+    """)
 
-if mnt_file and mns_file:
-    # Chargement des fichiers
-    mnt, mnt_profile, mnt_bounds, mnt_crs = load_tiff(mnt_file)
-    mns, mns_profile, mns_bounds, mns_crs = load_tiff(mns_file)
+    # Chargement du fichier TIFF
+    uploaded_file = st.file_uploader("Téléchargez un fichier TIFF", type=["tif", "tiff"])
 
-    # Vérification des CRS
-    if mnt_crs != mns_crs:
-        st.error("Les CRS des fichiers MNT et MNS doivent correspondre.")
-    else:
-        # Vérification des dimensions
-        if mnt.shape != mns.shape:
-            st.warning("Les dimensions des rasters ne correspondent pas. Rééchantillonnage du MNT pour correspondre au MNS...")
-            mnt = resample_to_match(mnt, mns_profile)
+    if uploaded_file is not None:
+        # Sauvegarde temporaire du fichier
+        tiff_path = uploaded_file.name
+        with open(tiff_path, "wb") as f:
+            f.write(uploaded_file.read())
 
-        # Gestion des valeurs NaN ou nodata
-        mnt = np.nan_to_num(mnt, nan=0)
-        mns = np.nan_to_num(mns, nan=0)
+        st.write("Reprojection du fichier TIFF...")
 
-        # Affichage des dimensions et des statistiques
-        st.write("Dimensions du MNT :", mnt.shape)
-        st.write("Dimensions du MNS :", mns.shape)
-        st.write("MNT - Min :", np.min(mnt), "Max :", np.max(mnt))
-        st.write("MNS - Min :", np.min(mns), "Max :", np.max(mns))
+        # Reprojection du fichier vers EPSG:4326
+        reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
 
-        # Calcul des hauteurs
-        heights = calculate_heights(mns, mnt)
-        st.write("Hauteurs calculées (MNS - MNT)")
+        # Lecture des limites du fichier reprojeté
+        with rasterio.open(reprojected_tiff) as src:
+            bounds = src.bounds
 
-        # Affichage du résultat sous forme d'image
-        fig, ax = plt.subplots()
-        cax = ax.imshow(heights, cmap='terrain')
-        fig.colorbar(cax, ax=ax, label='Hauteur (m)')
-        ax.set_title("Carte des hauteurs (MNS - MNT)")
-        st.pyplot(fig)
+        # Calcul du centre de la carte
+        center_lat = (bounds.top + bounds.bottom) / 2
+        center_lon = (bounds.left + bounds.right) / 2
 
-        # Sauvegarde du fichier résultat si nécessaire
-        save_option = st.checkbox("Enregistrer le raster des hauteurs")
-        if save_option:
-            output_file = "heights.tif"
-            with rasterio.open(
-                output_file,
-                "w",
-                driver="GTiff",
-                height=heights.shape[0],
-                width=heights.shape[1],
-                count=1,
-                dtype=heights.dtype,
-                crs=mnt_profile['crs'],
-                transform=mnt_profile['transform'],
-            ) as dst:
-                dst.write(heights, 1)
-            st.success(f"Fichier des hauteurs sauvegardé sous le nom {output_file}.")
+        # Création de la carte Folium
+        fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+
+        # Ajout du TIFF reprojeté en tant que superposition
+        add_image_overlay(fmap, reprojected_tiff, bounds, "Couche TIFF")
+
+        # Ajout d'outils interactifs
+        fmap.add_child(MeasureControl())  # Outils de mesure
+        fmap.add_child(Draw(export=True))  # Outils de dessin
+        folium.LayerControl().add_to(fmap)  # Contrôle des couches
+
+        # Affichage de la carte
+        folium_static(fmap)
+
+if __name__ == "__main__":
+    main()
 
 
 
