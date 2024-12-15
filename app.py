@@ -15,137 +15,90 @@ from datetime import datetime
 import rasterio
 
 
+
 import streamlit as st
-import rasterio
-import numpy as np
-from rasterio.enums import Resampling
-from rasterio.plot import reshape_as_image
 import folium
-from folium import plugins
-from folium.plugins import MeasureControl, Draw
-from io import BytesIO
+import numpy as np
 from PIL import Image
+from osgeo import gdal
+import io
+from io import BytesIO
 import geopandas as gpd
-from shapely.geometry import shape
-import json
+from folium import plugins
 
-# Helper functions
-def save_as_lzw(tiff_path, output_path):
-    """Convert TIFF file to LZW compression."""
-    with rasterio.open(tiff_path) as src:
-        profile = src.profile
-        profile.update(compression='LZW')
-        with rasterio.open(output_path, 'w', **profile) as dst:
-            dst.write(src.read())
+def process_tiff(uploaded_file):
+    # Charger le fichier TIFF
+    dataset = gdal.Open(uploaded_file)
+    
+    # Convertir le fichier TIFF en LZW
+    driver = gdal.GetDriverByName('GTiff')
+    output_file = '/tmp/output_lzw.tif'
+    driver.CreateCopy(output_file, dataset, options=['COMPRESS=LZW'])
+    
+    # Séparer les canaux R, G, B, Altitude
+    bands = [dataset.GetRasterBand(i+1) for i in range(dataset.RasterCount)]
+    
+    # Extraire les données de chaque bande (R, G, B, Altitude)
+    red = bands[0].ReadAsArray()
+    green = bands[1].ReadAsArray()
+    blue = bands[2].ReadAsArray()
+    altitude = bands[3].ReadAsArray() if len(bands) > 3 else None
+    
+    # Conversion des couleurs de 16 bits à 8 bits
+    red_8bit = np.uint8((red / 256).clip(0, 255))
+    green_8bit = np.uint8((green / 256).clip(0, 255))
+    blue_8bit = np.uint8((blue / 256).clip(0, 255))
+    
+    # Conversion en images PNG
+    img = Image.merge("RGB", (Image.fromarray(red_8bit), Image.fromarray(green_8bit), Image.fromarray(blue_8bit)))
+    png_buffer = BytesIO()
+    img.save(png_buffer, format="PNG")
+    png_buffer.seek(0)
+    png_image = png_buffer.read()
+    
+    return red_8bit, green_8bit, blue_8bit, altitude, output_file, png_image
 
-    return output_path
+def create_map(lat, lon, depth_png):
+    # Créer une carte centrée sur les coordonnées
+    folium_map = folium.Map(location=[lat, lon], zoom_start=12)
 
-def extract_bands(tiff_path):
-    """Extract RGB and altitude bands from a TIFF file."""
-    with rasterio.open(tiff_path) as src:
-        bands = {
-            'red': src.read(1),
-            'green': src.read(2),
-            'blue': src.read(3),
-            'altitude': src.read(4) if src.count >= 4 else None
-        }
-        transform = src.transform
-        bounds = src.bounds
-    return bands, transform, bounds
+    # Ajouter une couche de profondeur en PNG
+    img_data = io.BytesIO(depth_png)
+    folium.raster_layers.ImageOverlay(img_data, bounds=[[lat-0.05, lon-0.05], [lat+0.05, lon+0.05]], opacity=0.5).add_to(folium_map)
 
-def scale_to_8bit(array):
-    """Scale a 16-bit array to 8-bit."""
-    array = np.clip(array, 0, 65535)  # Ensure no values exceed 16-bit range
-    return ((array / 256).astype(np.uint8))
+    # Ajouter un contrôle de mesure
+    folium.plugins.MeasureControl(primary_length_unit="kilometers", secondary_length_unit="meters", primary_area_unit="sqmeters").add_to(folium_map)
 
-def convert_to_png(array):
-    """Convert a numpy array to a PNG image."""
-    image = Image.fromarray(array)
-    buffer = BytesIO()
-    image.save(buffer, format="PNG")
-    buffer.seek(0)
-    return buffer
+    # Ajouter un outil de dessin
+    folium.plugins.Draw(export=True).add_to(folium_map)
 
-def add_image_overlay(map_object, image_path, bounds, name):
-    """Add an image overlay to a Folium map."""
-    image = Image.open(image_path)
-    folium.raster_layers.ImageOverlay(
-        image=np.array(image),
-        bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
-        name=name
-    ).add_to(map_object)
+    return folium_map
 
-# Streamlit app
-def main():
-    st.title("TIFF Processor and Interactive Map")
+# Streamlit interface
+st.title("Carte Interactive à partir de données TIFF")
 
-    # Upload TIFF file
-    uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
+# Téléchargement du fichier TIFF
+uploaded_file = st.file_uploader("Téléchargez un fichier TIFF", type=["tiff", "tif"])
 
-    if uploaded_file is not None:
-        tiff_path = uploaded_file.name
-        with open(tiff_path, "wb") as f:
-            f.write(uploaded_file.read())
+if uploaded_file is not None:
+    # Traiter le fichier TIFF
+    red_8bit, green_8bit, blue_8bit, altitude, output_file, png_image = process_tiff(uploaded_file)
 
-        st.write("Processing TIFF file...")
+    # Extraire les coordonnées de l'image pour la carte
+    dataset = gdal.Open(uploaded_file)
+    geotransform = dataset.GetGeoTransform()
+    lat = geotransform[3] + 0.05  # Latitude approximative de l'image
+    lon = geotransform[0] + 0.05  # Longitude approximative de l'image
 
-        # Save as LZW compressed TIFF
-        lzw_path = "compressed_lzw.tiff"
-        save_as_lzw(tiff_path, lzw_path)
+    # Créer la carte avec les couches
+    folium_map = create_map(lat, lon, png_image)
 
-        # Extract bands
-        bands, transform, bounds = extract_bands(lzw_path)
+    # Affichage de la carte
+    st.markdown("### Carte Interactive")
+    folium_static(folium_map)
 
-        # Scale bands to 8-bit and convert to PNG
-        png_files = {}
-        for band_name, band_data in bands.items():
-            if band_data is not None:
-                scaled_data = scale_to_8bit(band_data)
-                png_files[band_name] = convert_to_png(scaled_data)
-
-        # Show previews of PNGs
-        for band_name, png in png_files.items():
-            st.image(png, caption=f"{band_name.capitalize()} Band", use_column_width=True)
-
-        # Create Folium map
-        center_lat = (bounds.top + bounds.bottom) / 2
-        center_lon = (bounds.left + bounds.right) / 2
-        fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-
-        # Add bands as overlays
-        for band_name, png in png_files.items():
-            add_image_overlay(fmap, png, bounds, f"{band_name.capitalize()} Band")
-
-        # Add measure control
-        fmap.add_child(MeasureControl())
-
-        # Add draw control
-        draw = Draw(export=True)
-        fmap.add_child(draw)
-
-        # Display GeoJSON layers
-        geojson_files = st.file_uploader("Upload GeoJSON files", type=["geojson"], accept_multiple_files=True)
-        if geojson_files:
-            for geojson_file in geojson_files:
-                gdf = gpd.read_file(geojson_file)
-                folium.GeoJson(
-                    data=json.loads(gdf.to_json()),
-                    name=geojson_file.name,
-                    style_function=lambda x: {
-                        'color': 'blue',
-                        'weight': 2
-                    }
-                ).add_to(fmap)
-
-        # Layer control
-        folium.LayerControl().add_to(fmap)
-
-        # Display map
-        folium_static(fmap)
-
-if __name__ == "__main__":
-    main()
-
+# Fonction pour afficher Folium dans Streamlit
+from streamlit_folium import folium_static
 
 
 
