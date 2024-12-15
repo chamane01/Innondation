@@ -106,6 +106,7 @@ import streamlit as st
 import rasterio
 import numpy as np
 from rasterio.enums import Resampling
+from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
 
 # Fonction pour charger un fichier TIFF
@@ -136,6 +137,18 @@ def resample_to_match(source, target_profile):
 def calculate_heights(mns, mnt):
     return np.maximum(0, mns - mnt)  # Évite les valeurs négatives
 
+# Fonction pour détecter les arbres avec DBSCAN
+def detect_trees(heights, threshold, eps, min_samples):
+    # Créer un masque pour les arbres (hauteur > seuil)
+    tree_mask = heights > threshold
+    coords = np.column_stack(np.where(tree_mask))
+
+    # Clusterisation avec DBSCAN
+    clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
+    tree_clusters = clustering.labels_
+
+    return coords, tree_clusters
+
 # Interface Streamlit
 st.title("Détection d'arbres avec DBSCAN et carte interactive")
 
@@ -160,12 +173,6 @@ if mnt_file and mns_file:
         mnt = np.nan_to_num(mnt, nan=0)
         mns = np.nan_to_num(mns, nan=0)
 
-        # Affichage des dimensions et des statistiques
-        st.write("Dimensions du MNT :", mnt.shape)
-        st.write("Dimensions du MNS :", mns.shape)
-        st.write("MNT - Min :", np.min(mnt), "Max :", np.max(mnt))
-        st.write("MNS - Min :", np.min(mns), "Max :", np.max(mns))
-
         # Calcul des hauteurs
         heights = calculate_heights(mns, mnt)
         st.write("Hauteurs calculées (MNS - MNT)")
@@ -175,6 +182,27 @@ if mnt_file and mns_file:
         cax = ax.imshow(heights, cmap='terrain')
         fig.colorbar(cax, ax=ax, label='Hauteur (m)')
         ax.set_title("Carte des hauteurs (MNS - MNT)")
+        st.pyplot(fig)
+
+        # Paramètres de détection des arbres
+        st.sidebar.title("Paramètres de détection")
+        height_threshold = st.sidebar.slider("Seuil de hauteur des arbres (m)", min_value=1, max_value=20, value=2)
+        eps = st.sidebar.slider("Rayon de voisinage (m)", min_value=1, max_value=10, value=2)
+        min_samples = st.sidebar.slider("Nombre minimum de points pour un arbre", min_value=1, max_value=10, value=5)
+
+        # Détection des arbres
+        coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
+
+        # Comptage des arbres
+        num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
+        st.write(f"Nombre d'arbres détectés : {num_trees}")
+
+        # Visualisation des clusters d'arbres
+        fig, ax = plt.subplots()
+        ax.imshow(heights, cmap="viridis", interpolation="none")
+        ax.scatter(coords[:, 1], coords[:, 0], c=tree_clusters, cmap="tab10", s=5)
+        ax.set_title("Détection des arbres")
+        ax.axis("off")
         st.pyplot(fig)
 
         # Sauvegarde du fichier résultat si nécessaire
@@ -194,7 +222,6 @@ if mnt_file and mns_file:
             ) as dst:
                 dst.write(heights, 1)
             st.success(f"Fichier des hauteurs sauvegardé sous le nom {output_file}.")
-
 
 
 
