@@ -151,10 +151,7 @@ if mnt_file and mns_file:
         fmap.add_child(folium.LayerControl(position='topright'))
 
         # Ajouter un bouton d'export en bas de la carte
-        export_button = folium.plugins.FloatImage(
-            "https://cdn-icons-png.flaticon.com/512/25/25231.png", 
-            bottom=30, left=30, opacity=0.6
-        )
+        
         fmap.add_child(export_button)
       
         folium.LayerControl().add_to(fmap)
