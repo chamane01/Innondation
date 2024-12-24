@@ -24,6 +24,7 @@ import folium
 from folium.plugins import MeasureControl, Draw
 from rasterio.plot import reshape_as_image
 from streamlit_folium import folium_static
+import rasterio.warp
 
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path):
@@ -32,6 +33,47 @@ def load_tiff(file_path):
         profile = src.profile  # Profil du fichier (métadonnées)
         bounds = src.bounds  # Bornes géographiques
     return data, profile, bounds
+
+# Fonction pour reprojecter un fichier TIFF vers un système de coordonnées cible
+def reproject_tiff(input_tiff, target_crs):
+    """Reprojecte un fichier TIFF vers un CRS cible."""
+    with rasterio.open(input_tiff) as src:
+        transform, width, height = rasterio.warp.calculate_default_transform(
+            src.crs, target_crs, src.width, src.height, *src.bounds
+        )
+        kwargs = src.meta.copy()
+        kwargs.update({
+            'crs': target_crs,
+            'transform': transform,
+            'width': width,
+            'height': height
+        })
+
+        reprojected_tiff = "reprojected.tiff"
+        with rasterio.open(reprojected_tiff, 'w', **kwargs) as dst:
+            for i in range(1, src.count + 1):
+                rasterio.warp.reproject(
+                    source=rasterio.band(src, i),
+                    destination=rasterio.band(dst, i),
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    dst_transform=transform,
+                    dst_crs=target_crs,
+                    resampling=rasterio.warp.Resampling.nearest
+                )
+
+    return reprojected_tiff
+
+# Fonction pour ajouter une image TIFF en tant qu'overlay sur une carte Folium
+def add_image_overlay(map_object, tiff_path, bounds, name):
+    """Ajoute une superposition d'image TIFF sur une carte Folium."""
+    with rasterio.open(tiff_path) as src:
+        image = reshape_as_image(src.read())
+        folium.raster_layers.ImageOverlay(
+            image=image,
+            bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
+            name=name
+        ).add_to(map_object)
 
 # Fonction pour calculer la hauteur relative (MNS - MNT)
 def calculate_heights(mns, mnt):
@@ -72,20 +114,25 @@ def add_tree_clusters(map_object, coords, clusters, bounds, name):
             ).add_to(map_object)
 
 # Interface Streamlit
-st.title("Détection d'arbres avec DBSCAN sur une carte interactive")
+st.title("Détection d'arbres avec DBSCAN et projection TIFF")
 
 # Chargement des fichiers
 mnt_file = st.file_uploader("Téléchargez le fichier MNT (Modèle Numérique de Terrain) en TIFF", type=["tif", "tiff"])
 mns_file = st.file_uploader("Téléchargez le fichier MNS (Modèle Numérique de Surface) en TIFF", type=["tif", "tiff"])
+target_crs = st.text_input("Saisissez le CRS cible (par exemple, 'EPSG:4326')", "EPSG:4326")
 
 if mnt_file and mns_file:
-    # Charger les données TIFF
-    mnt, mnt_profile, mnt_bounds = load_tiff(mnt_file)
-    mns, mns_profile, mns_bounds = load_tiff(mns_file)
+    # Reprojection des fichiers TIFF
+    reprojected_mnt = reproject_tiff(mnt_file, target_crs)
+    reprojected_mns = reproject_tiff(mns_file, target_crs)
+
+    # Charger les données TIFF reprojetées
+    mnt, mnt_profile, mnt_bounds = load_tiff(reprojected_mnt)
+    mns, mns_profile, mns_bounds = load_tiff(reprojected_mns)
 
     # Vérifier si les bornes des deux fichiers correspondent
     if mnt_bounds != mns_bounds:
-        st.error("Les fichiers MNT et MNS doivent avoir les mêmes bornes géographiques.")
+        st.error("Les fichiers MNT et MNS doivent avoir les mêmes bornes géographiques après reprojection.")
     else:
         # Calcul des hauteurs
         heights = calculate_heights(mns, mnt)
@@ -130,6 +177,10 @@ if mnt_file and mns_file:
         # Ajouter les clusters d'arbres sur la carte
         add_tree_clusters(fmap, coords, tree_clusters, mnt_bounds, "Clusters d'arbres")
 
+        # Ajouter les superpositions d'images TIFF
+        add_image_overlay(fmap, reprojected_mnt, mnt_bounds, "MNT")
+        add_image_overlay(fmap, reprojected_mns, mns_bounds, "MNS")
+
         # Ajouter les contrôles interactifs
         fmap.add_child(MeasureControl())
         fmap.add_child(Draw(export=True))
@@ -137,6 +188,7 @@ if mnt_file and mns_file:
 
         # Afficher la carte
         folium_static(fmap)
+
 
 
 
