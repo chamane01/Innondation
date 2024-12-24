@@ -21,9 +21,9 @@ import numpy as np
 import rasterio
 from sklearn.cluster import DBSCAN
 from rasterio.plot import reshape_as_image
-from folium import Map, raster_layers
-from folium.plugins import MeasureControl, Draw
 from streamlit_folium import folium_static
+import folium
+from folium.plugins import MeasureControl, Draw
 
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path):
@@ -31,8 +31,7 @@ def load_tiff(file_path):
         data = src.read(1)  # Lire la première bande
         profile = src.profile  # Profil du fichier (métadonnées)
         bounds = src.bounds
-        crs = src.crs
-    return data, profile, bounds, crs
+    return data, profile, bounds
 
 # Fonction pour calculer la hauteur relative (MNS - MNT)
 def calculate_heights(mns, mnt):
@@ -43,26 +42,31 @@ def detect_trees(heights, threshold, eps, min_samples):
     # Créer un masque pour les arbres (hauteur > seuil)
     tree_mask = heights > threshold
     coords = np.column_stack(np.where(tree_mask))
-
+    
     # Clusterisation avec DBSCAN
     clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
     tree_clusters = clustering.labels_
-
+    
     return coords, tree_clusters
 
-# Ajouter une superposition d'image sur une carte Folium
-def add_tree_clusters(map_object, coords, clusters, bounds):
-    for cluster_id in set(clusters):
-        if cluster_id == -1:
-            continue  # Ignorer les points non classés
-        cluster_coords = coords[clusters == cluster_id]
-        for coord in cluster_coords:
-            lat = bounds.top - (coord[0] / bounds.height) * (bounds.top - bounds.bottom)
-            lon = bounds.left + (coord[1] / bounds.width) * (bounds.right - bounds.left)
-            folium.CircleMarker(location=[lat, lon], radius=2, color='green', fill=True).add_to(map_object)
+# Fonction pour ajouter les arbres détectés à la carte Folium
+def add_tree_clusters(map_object, coords, clusters, bounds, name):
+    for i, coord in enumerate(coords):
+        cluster_id = clusters[i]
+        if cluster_id != -1:  # Ignorer les bruits
+            lat = bounds.top - (bounds.top - bounds.bottom) * (coord[0] / bounds.height)
+            lon = bounds.left + (bounds.right - bounds.left) * (coord[1] / bounds.width)
+            folium.CircleMarker(
+                location=[lat, lon],
+                radius=3,
+                color="blue",
+                fill=True,
+                fill_opacity=0.6,
+                popup=f"Cluster: {cluster_id}"
+            ).add_to(map_object)
 
 # Interface Streamlit
-st.title("Détection d'arbres avec DBSCAN et carte interactive")
+st.title("Détection d'arbres avec une carte interactive")
 
 # Chargement des fichiers
 mnt_file = st.file_uploader("Téléchargez le fichier MNT (Modèle Numérique de Terrain) en TIFF", type=["tif", "tiff"])
@@ -70,13 +74,14 @@ mns_file = st.file_uploader("Téléchargez le fichier MNS (Modèle Numérique de
 
 if mnt_file and mns_file:
     # Charger les données TIFF
-    mnt, mnt_profile, mnt_bounds, mnt_crs = load_tiff(mnt_file)
-    mns, mns_profile, mns_bounds, mns_crs = load_tiff(mns_file)
+    mnt, mnt_profile, mnt_bounds = load_tiff(mnt_file)
+    mns, mns_profile, mns_bounds = load_tiff(mns_file)
 
     # Calcul des hauteurs
     heights = calculate_heights(mns, mnt)
     st.write("Hauteurs calculées (MNS - MNT)")
 
+    # Paramètres de détection
     st.sidebar.title("Paramètres de détection")
     height_threshold = st.sidebar.slider(
         "Seuil de hauteur des arbres (m)",
@@ -102,21 +107,28 @@ if mnt_file and mns_file:
 
     # Détection des arbres
     coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
+    
+    # Comptage des arbres
+    num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
+    st.write(f"Nombre d'arbres détectés : {num_trees}")
 
-    # Création de la carte Folium
+    # Créer une carte Folium
     center_lat = (mnt_bounds.top + mnt_bounds.bottom) / 2
     center_lon = (mnt_bounds.left + mnt_bounds.right) / 2
-    fmap = Map(location=[center_lat, center_lon], zoom_start=12)
+    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-    # Ajouter les clusters d'arbres sur la carte
-    add_tree_clusters(fmap, coords, tree_clusters, mnt_bounds)
+    # Ajouter les clusters détectés sur la carte
+    add_tree_clusters(fmap, coords, tree_clusters, mnt_bounds, "Clusters d'arbres")
 
     # Ajouter des contrôles interactifs
     fmap.add_child(MeasureControl())
-    fmap.add_child(Draw(export=True))
+    draw = Draw(export=True)
+    fmap.add_child(draw)
+    folium.LayerControl().add_to(fmap)
 
-    # Afficher la carte dans l'application Streamlit
+    # Afficher la carte
     folium_static(fmap)
+
 
 
 
