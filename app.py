@@ -106,22 +106,7 @@ if df is not None:
             ax.set_xlim(X_min, X_max)
             ax.set_ylim(Y_min, Y_max)
             ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
-            # Ajouter des coordonnées sur les quatre côtés
-            ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
-            ax.set_xticks(np.linspace(X_min, X_max, num=5))# Coordonnées sur l'axe X
-            ax.set_yticks(np.linspace(Y_min, Y_max, num=5))# Coordonnées sur l'axe Y
-            ax.xaxis.set_tick_params(labeltop=True)# Affiche les labels sur le haut
-            ax.yaxis.set_tick_params(labelright=True)# Affiche les labels à droite
-            
-            # Ajouter les lignes pour relier les tirets (lignes horizontales et verticales)
-            # Lignes verticales (de haut en bas)
-            for x in np.linspace(X_min, X_max, num=5):
-                ax.axvline(x, color='black', linewidth=0.5, linestyle='--')
-            # Lignes horizontales (de gauche à droite)
-            for y in np.linspace(Y_min, Y_max, num=5):
-                ax.axhline(y, color='black', linewidth=0.5, linestyle='--')
 
-            # Tracer la zone inondée avec les contours
             contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
             ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
             ax.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], colors='#007FFF', alpha=0.5)
@@ -130,25 +115,17 @@ if df is not None:
             contour_paths = [Polygon(path.vertices) for collection in contours_inondation.collections for path in collection.get_paths()]
             zone_inondee = gpd.GeoDataFrame(geometry=[MultiPolygon(contour_paths)], crs="EPSG:32630")
 
-            # Filtrer et afficher tous les bâtiments
+            # Filtrer les bâtiments dans la zone inondée
             if batiments_dans_emprise is not None:
-                batiments_dans_emprise.plot(ax=ax, facecolor='grey', edgecolor='black', linewidth=0.5, alpha=0.6, label="Bâtiments non inondés")
-                
-                # Séparer les bâtiments inondés
                 batiments_inondes = batiments_dans_emprise[batiments_dans_emprise.intersects(zone_inondee.unary_union)]
                 nombre_batiments_inondes = len(batiments_inondes)
-
-                # Afficher les bâtiments inondés en rouge
-                batiments_inondes.plot(ax=ax, facecolor='red', edgecolor='red', linewidth=1, alpha=0.8, label="Bâtiments inondés")
-
+                batiments_inondes.plot(ax=ax, facecolor='none', edgecolor='red', linewidth=1, linestyle='--')
                 st.write(f"Nombre de bâtiments dans la zone inondée : {nombre_batiments_inondes}")
-                ax.legend()
             else:
                 st.write("Aucun bâtiment à analyser dans cette zone.")
 
             st.pyplot(fig)
 
-            # Enregistrer les contours en fichier DXF
             doc = ezdxf.new(dxfversion='R2010')
             msp = doc.modelspace()
             for collection in contours_inondation.collections:
@@ -168,7 +145,6 @@ if df is not None:
             with open(dxf_file, "rb") as dxf:
                 st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
 
-            # Afficher les résultats
             now = datetime.now()
             st.markdown("## Résultats")
             st.write(f"**Surface inondée :** {surface_bleue:.2f} hectares")
@@ -177,4 +153,3 @@ if df is not None:
             st.write(f"**Nombre de bâtiments inondés :** {nombre_batiments_inondes}")
             st.write(f"**Date :** {now.strftime('%Y-%m-%d')}")
             st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
-            st.write(f"**Système de projection :** EPSG:32630")
