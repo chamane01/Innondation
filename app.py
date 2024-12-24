@@ -1,4 +1,3 @@
-
 # Importer les bibliothèques nécessaires
 import streamlit as st
 import pandas as pd
@@ -13,559 +12,91 @@ import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
 import rasterio
 
+
 import streamlit as st
-import numpy as np
 import rasterio
-from rasterio.io import MemoryFile
-from scipy.ndimage import binary_erosion
-from scipy.interpolate import griddata
-import matplotlib.pyplot as plt
-
-# Fonction pour charger un fichier TIFF
-def load_tiff(file_path):
-    with rasterio.open(file_path) as src:
-        data = src.read(1)  # On lit uniquement la première bande
-        profile = src.profile
-    return data, profile
-
-# Fonction pour générer un MNT
-def generate_mnt(elevation_data, structure_size=3):
-    """
-    Génère un MNT en filtrant les objets élevés et en interpolant les données manquantes.
-    """
-    # Étape 1 : Filtrage morphologique pour détecter le sol
-    ground_mask = binary_erosion(elevation_data > 0, structure=np.ones((structure_size, structure_size)))
-
-    # Étape 2 : Interpolation pour combler les trous
-    x, y = np.meshgrid(np.arange(elevation_data.shape[1]), np.arange(elevation_data.shape[0]))
-    points = np.column_stack((x[ground_mask], y[ground_mask]))
-    values = elevation_data[ground_mask]
-    grid_z = griddata(points, values, (x, y), method='linear', fill_value=np.nan)
-
-    # Étape 3 : Remplir les valeurs NaN par une moyenne locale
-    grid_z_filled = np.nan_to_num(grid_z, nan=np.nanmean(grid_z))
-    return grid_z_filled
-
-# Fonction pour exporter le MNT en TIFF dans un fichier mémoire
-def export_mnt_to_tiff(mnt, profile):
-    """
-    Exporte le MNT dans un fichier TIFF et retourne un objet binaire pour le téléchargement.
-    """
-    profile.update({
-        "dtype": "float32",
-        "count": 1,
-        "compress": "lzw",
-    })
-
-    with MemoryFile() as memfile:
-        with memfile.open(**profile) as dataset:
-            dataset.write(mnt, 1)
-        return memfile.read()
-
-# Interface Streamlit
-st.title("Génération d'un MNT à partir d'un fichier TIFF")
-
-# Chargement du fichier TIFF
-tiff_file = st.file_uploader("Téléchargez un fichier TIFF contenant des données d'altitude", type=["tif", "tiff"])
-
-if tiff_file:
-    # Charger les données
-    elevation_data, profile = load_tiff(tiff_file)
-    st.write("Données d'altitude chargées :")
-    st.image(elevation_data, caption="Image d'altitude", use_column_width=True, clamp=True)
-
-    # Générer le MNT
-    structure_size = st.sidebar.slider("Taille du filtre morphologique (px)", 1, 10, 3)
-    mnt = generate_mnt(elevation_data, structure_size=structure_size)
-
-    # Afficher les résultats
-    st.write("Modèle Numérique de Terrain (MNT) généré :")
-    fig, ax = plt.subplots(1, 2, figsize=(12, 6))
-    ax[0].imshow(elevation_data, cmap="terrain", interpolation="none")
-    ax[0].set_title("Données originales")
-    ax[1].imshow(mnt, cmap="terrain", interpolation="none")
-    ax[1].set_title("MNT généré")
-    st.pyplot(fig)
-
-    # Exportation et téléchargement
-    tiff_data = export_mnt_to_tiff(mnt, profile)
-    st.download_button(
-        label="Télécharger le MNT en TIFF",
-        data=tiff_data,
-        file_name="mnt_generated.tif",
-        mime="image/tiff"
-    )
-
-
-
-
-
-
-
-import streamlit as st
 import numpy as np
-import rasterio
-from sklearn.cluster import DBSCAN
-import folium
-from folium import plugins
-from streamlit_folium import st_folium
 import matplotlib.pyplot as plt
-
-# Fonction pour charger un fichier TIFF
-def load_tiff(file_path):
-    with rasterio.open(file_path) as src:
-        data = src.read(1)  # Lire la première bande
-        profile = src.profile  # Profil du fichier (métadonnées)
-        bounds = src.bounds  # Limites géographiques
-    return data, profile, bounds
-
-# Fonction pour calculer la hauteur relative (MNS - MNT)
-def calculate_heights(mns, mnt):
-    return np.maximum(0, mns - mnt)  # Évite les valeurs négatives
-
-# Fonction pour détecter les arbres avec DBSCAN
-def detect_trees(heights, threshold, eps, min_samples):
-    # Créer un masque pour les arbres (hauteur > seuil)
-    tree_mask = heights > threshold
-    coords = np.column_stack(np.where(tree_mask))
-    
-    # Clusterisation avec DBSCAN
-    clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
-    tree_clusters = clustering.labels_
-    
-    return coords, tree_clusters
-
-# Fonction pour normaliser les données pour affichage sur une carte
-def normalize(array):
-    array = array.astype(float)
-    array_min, array_max = np.nanmin(array), np.nanmax(array)
-    return (array - array_min) / (array_max - array_min)
-
-# Interface Streamlit
-st.title("Détection d'arbres avec DBSCAN et carte interactive")
-
-# Chargement des fichiers
-mnt_file = st.file_uploader("Téléchargez le fichier MNT (Modèle Numérique de Terrain) en TIFF", type=["tif", "tiff"])
-mns_file = st.file_uploader("Téléchargez le fichier MNS (Modèle Numérique de Surface) en TIFF", type=["tif", "tiff"])
-
-if mnt_file and mns_file:
-    # Charger les données TIFF
-    mnt, mnt_profile, mnt_bounds = load_tiff(mnt_file)
-    mns, mns_profile, mns_bounds = load_tiff(mns_file)
-    
-    # Calcul des hauteurs
-    heights = calculate_heights(mns, mnt)
-    st.write("Hauteurs calculées (MNS - MNT)")
-
-    # Paramètres de détection
-    st.sidebar.title("Paramètres de détection")
-    height_threshold = st.sidebar.slider("Seuil de hauteur des arbres (m)", min_value=1, max_value=20, value=2)
-    eps = st.sidebar.slider("Rayon de voisinage (m)", min_value=1, max_value=10, value=2)
-    min_samples = st.sidebar.slider("Nombre minimum de points pour un arbre", min_value=1, max_value=10, value=5)
-
-    # Détection des arbres
-    coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
-    
-    # Comptage des arbres
-    num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
-    st.write(f"Nombre d'arbres détectés : {num_trees}")
-
-    # Visualisation de la carte dynamique
-    st.write("Carte interactive avec couches MNT et MNS")
-    
-    # Normaliser les données pour affichage
-    mnt_normalized = normalize(mnt)
-    mns_normalized = normalize(mns)
-    
-    # Créer une carte folium centrée sur les données
-    bounds = mnt_bounds
-    center_lat = (bounds.top + bounds.bottom) / 2
-    center_lon = (bounds.left + bounds.right) / 2
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=15)
-    
-    # Ajouter les couches MNT et MNS
-    folium.raster_layers.ImageOverlay(
-        image=mnt_normalized,
-        bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
-        opacity=0.6,
-        colormap=lambda x: (1 - x, x, 0),  # Gradient vert-jaune
-        name="MNT"
-    ).add_to(m)
-
-    folium.raster_layers.ImageOverlay(
-        image=mns_normalized,
-        bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
-        opacity=0.6,
-        colormap=lambda x: (0, x, 1 - x),  # Gradient bleu-cyan
-        name="MNS"
-    ).add_to(m)
-
-    # Ajouter les points des arbres
-    for (y, x), cluster in zip(coords, tree_clusters):
-        if cluster != -1:  # Ignorer le bruit
-            folium.CircleMarker(
-                location=[bounds.top - y * (bounds.top - bounds.bottom) / mnt.shape[0],
-                          bounds.left + x * (bounds.right - bounds.left) / mnt.shape[1]],
-                radius=2,
-                color="red",
-                fill=True,
-                fill_opacity=1.0
-            ).add_to(m)
-
-    # Ajout d'une couche de contrôle
-    folium.LayerControl().add_to(m)
-
-    # Afficher la carte
-    st_folium(m, width=800, height=600)
-
-
-
-
-
-
-
-
-import streamlit as st
-from PIL import Image
-import numpy as np
-import io
-
-# Fonction pour appliquer la compression LZW (simulée dans ce cas)
-def apply_lzw_compression(image):
-    # Pillow ne prend pas en charge directement LZW, mais on peut simuler en optimisant le fichier.
-    output = io.BytesIO()
-    image.save(output, format='TIFF', compression='tiff_lzw')
-    output.seek(0)
-    return Image.open(output)
-
-# Fonction pour réduire la profondeur des couleurs
-def reduce_color_depth(image, bit_depth=4):
-    factor = 2 ** (8 - bit_depth)
-    array = np.array(image)
-    reduced_array = (array // factor) * factor
-    return Image.fromarray(reduced_array.astype('uint8'))
-
-# Fonction pour convertir en PNG
-def convert_to_png(image):
-    output = io.BytesIO()
-    image.save(output, format='PNG', optimize=True)
-    output.seek(0)
-    return output
-
-# Interface utilisateur Streamlit
-st.title("Transformation de fichier TIFF")
-st.write("Téléversez un fichier TIFF pour appliquer des transformations : compression LZW, réduction de profondeur de couleurs, et conversion en PNG.")
-
-# Téléversement de fichier
-tiff_file = st.file_uploader("Choisissez un fichier TIFF", type=["tiff", "tif"])
-
-if tiff_file is not None:
-    # Chargement du fichier TIFF
-    image = Image.open(tiff_file)
-
-    st.write("### Aperçu de l'image originale")
-    st.image(image, caption="Image originale", use_column_width=True)
-
-    # Étape 1 : Compression LZW
-    st.write("### Compression LZW")
-    compressed_image = apply_lzw_compression(image)
-    st.image(compressed_image, caption="Image après compression LZW", use_column_width=True)
-
-    # Étape 2 : Réduction de profondeur des couleurs
-    st.write("### Réduction de profondeur des couleurs")
-    reduced_image = reduce_color_depth(compressed_image)
-    st.image(reduced_image, caption="Image avec profondeur réduite", use_column_width=True)
-
-    # Étape 3 : Conversion en PNG
-    st.write("### Conversion en PNG")
-    png_file = convert_to_png(reduced_image)
-
-    # Téléchargement du fichier final
-    st.download_button(
-        label="Télécharger l'image PNG compressée",
-        data=png_file,
-        file_name="image_compressée.png",
-        mime="image/png"
-    )
-
-
-
-
-
-
-import streamlit as st
-import numpy as np
-import rasterio
-import folium
-from streamlit_folium import st_folium
-from geopy.distance import geodesic
-import matplotlib.pyplot as plt
-from matplotlib.colors import ListedColormap
-from folium.plugins import MeasureControl
+from rasterio.plot import show
+from shapely.geometry import shape, box, mapping
 import geopandas as gpd
-from folium.plugins import Draw
+from matplotlib.colors import ListedColormap
+import json
 
-# Fonction pour charger un fichier TIFF
-def charger_tiff(fichier_tiff):
+# Titre de l'application
+st.title("Carte des zones inondées avec niveaux d'eau (sans GDAL)")
+
+# Initialiser session_state pour stocker les données
+if 'flood_data' not in st.session_state:
+    st.session_state.flood_data = {
+        'surface_inondee': None,
+        'niveau_inondation': 0.0
+    }
+
+# Étape 1 : Téléverser un fichier GeoTIFF
+uploaded_tiff = st.file_uploader("Téléversez un fichier GeoTIFF", type=["tif", "tiff"])
+
+if uploaded_tiff is not None:
     try:
-        with rasterio.open(fichier_tiff) as src:
-            data = src.read(1)  # Lire la première bande
+        # Charger les données GeoTIFF
+        with rasterio.open(uploaded_tiff) as src:
+            elevation = src.read(1)  # Lire la première bande
             transform = src.transform
             crs = src.crs
-            bounds = src.bounds
-            return data, transform, crs, bounds
+
+        # Afficher les informations de base du fichier
+        st.write(f"Dimensions: {elevation.shape}")
+        st.write(f"Système de coordonnées: {crs}")
+
+        # Étape 2 : Afficher une prévisualisation du raster
+        st.markdown("### Aperçu des altitudes")
+        fig, ax = plt.subplots(figsize=(8, 6))
+        show(elevation, transform=transform, ax=ax, cmap="terrain")
+        ax.set_title("Carte des altitudes")
+        st.pyplot(fig)
+
+        # Étape 3 : Définir le niveau d'eau
+        niveau_eau = st.slider("Niveau d'inondation (mètres)", float(np.min(elevation)), float(np.max(elevation)), step=0.1)
+        st.session_state.flood_data['niveau_inondation'] = niveau_eau
+
+        # Étape 4 : Calcul des zones inondées
+        zone_inondee = elevation <= niveau_eau
+
+        # Calculer la surface inondée
+        pixel_area = transform[0] * abs(transform[4])  # Taille d'un pixel (en m²)
+        surface_inondee = np.sum(zone_inondee) * pixel_area / 10000  # Surface en hectares
+        st.session_state.flood_data['surface_inondee'] = surface_inondee
+
+        st.write(f"Surface inondée: {surface_inondee:.2f} hectares")
+
+        # Étape 5 : Visualisation des zones inondées
+        st.markdown("### Carte des zones inondées")
+        fig, ax = plt.subplots(figsize=(8, 6))
+        cmap = ListedColormap(["blue", "lightgreen"])
+        show(zone_inondee.astype(int), transform=transform, ax=ax, cmap=cmap)
+        ax.set_title("Zones inondées")
+        st.pyplot(fig)
+
+        # Étape 6 : Exporter les zones inondées en GeoJSON
+        if st.button("Exporter les zones inondées en GeoJSON"):
+            mask = zone_inondee.astype(np.uint8)
+            shapes_generator = rasterio.features.shapes(mask, transform=transform)
+            polygons = [shape for shape, value in shapes_generator if value == 1]
+
+            # Créer un GeoJSON
+            features = [{"type": "Feature", "geometry": mapping(polygon), "properties": {}} for polygon in polygons]
+            geojson = {"type": "FeatureCollection", "features": features}
+
+            # Sauvegarder le fichier
+            with open("zones_inondees.geojson", "w") as f:
+                json.dump(geojson, f)
+
+            st.success("Fichier GeoJSON des zones inondées exporté.")
+
     except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
-        return None, None, None, None
-
-# Fonction pour charger un fichier GeoJSON
-def charger_geojson(fichier_geojson):
-    try:
-        gdf = gpd.read_file(fichier_geojson)
-        return gdf
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
-        return None
-
-# Calcul de la taille d'un pixel
-def calculer_taille_pixel(transform):
-    return transform[0], -transform[4]
-
-# Taille réelle d'une unité (pixel)
-def calculer_taille_unite(bounds_tiff, largeur_pixels, hauteur_pixels):
-    point1 = (bounds_tiff[1], bounds_tiff[0])
-    point2 = (bounds_tiff[1], bounds_tiff[2])
-    distance_x = geodesic(point1, point2).meters
-
-    point3 = (bounds_tiff[3], bounds_tiff[0])
-    distance_y = geodesic(point1, point3).meters
-
-    taille_x = distance_x / largeur_pixels
-    taille_y = distance_y / hauteur_pixels
-    return (taille_x + taille_y) / 2
-
-# Pixels inondés
-def calculer_pixels_inondes(data, niveau_inondation):
-    return np.sum(data <= niveau_inondation)
-
-# Surface inondée
-def calculer_surface_inondee(nombre_pixels_inondes, taille_unite):
-    surface_pixel = taille_unite ** 2
-    surface_totale_m2 = nombre_pixels_inondes * surface_pixel
-    surface_totale_hectares = surface_totale_m2 / 10000
-    return surface_totale_m2, surface_totale_hectares
-
-# Génération d'une image de profondeur
-def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
-    extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
-    plt.figure(figsize=(8, 6))
-    plt.imshow(data_tiff, cmap='terrain', extent=extent)
-    plt.colorbar(label="Altitude (m)")
-    plt.title("Carte de profondeur")
-    plt.savefig(output_path, format='png', bbox_inches='tight')
-    plt.close()
-
-# Calcul de la surface d'un polygone (en hectares)
-def calculer_surface_polygone(geojson_polygon):
-    try:
-        surface_totale_m2 = geojson_polygon.geometry.area.sum()
-        surface_totale_ha = surface_totale_m2 / 10000
-        return surface_totale_m2, surface_totale_ha
-    except Exception as e:
-        st.error(f"Erreur lors du calcul de la surface du polygone : {e}")
-        return None, None
-
-# Carte Folium avec superposition
-def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_layers):
-    lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
-    lat_max, lon_max = bounds_tiff[3], bounds_tiff[2]
-    center = [(lat_min + lat_max) / 2, (lon_min + lon_max) / 2]
-
-    m = folium.Map(location=center, zoom_start=13, control_scale=True)
-    depth_map_path = "temp_depth_map.png"
-    generer_image_profondeur(data_tiff, bounds_tiff, depth_map_path)
-
-    img_overlay = folium.raster_layers.ImageOverlay(
-        image=depth_map_path,
-        bounds=[[lat_min, lon_min], [lat_max, lon_max]],
-        opacity=0.7
-    )
-    img_overlay.add_to(m)
-
-    if niveau_inondation is not None:
-        inondation_mask = data_tiff <= niveau_inondation
-        zone_inondee = np.zeros_like(data_tiff, dtype=np.uint8)
-        zone_inondee[inondation_mask] = 255
-
-        flood_map_path = "temp_flood_map.png"
-        extent = [lon_min, lon_max, lat_min, lat_max]
-        plt.figure(figsize=(8, 6))
-        plt.imshow(zone_inondee, cmap=ListedColormap(['none', 'magenta']), extent=extent, alpha=0.5)
-        plt.axis('off')
-        plt.savefig(flood_map_path, format='png', transparent=True, bbox_inches='tight')
-        plt.close()
-
-        flood_overlay = folium.raster_layers.ImageOverlay(
-            image=flood_map_path,
-            bounds=[[lat_min, lon_min], [lat_max, lon_max]],
-            opacity=0.6
-        )
-        flood_overlay.add_to(m)
-        # Ajouter les contours magenta foncés
-        plt.figure(figsize=(8, 6))
-        flipped_zone_inondee = np.flipud(zone_inondee)  # Retourne les données verticalement si nécessaire
-        plt.contour(
-            flipped_zone_inondee,  # Utiliser les données corrigées
-            levels=[127],  # Niveau de contour
-            colors='darkmagenta',  # Couleur des contours
-            linewidths=1.5,  # Épaisseur des contours
-            extent=extent  # Étendue géographique (doit correspondre à votre image)
-        )
-        plt.axis('off')
-        plt.savefig(flood_map_path, format='png', transparent=True, bbox_inches='tight')
-        plt.close()
-        flood_overlay = folium.raster_layers.ImageOverlay(
-            image=flood_map_path,
-            bounds=[[lat_min, lon_min], [lat_max, lon_max]],
-            opacity=0.6
-
-        )
-        flood_overlay.add_to(m)
-
-
-    
-    measure_control = MeasureControl(primary_length_unit='meters', primary_area_unit='sqmeters')
-    measure_control = MeasureControl(
-        primary_length_unit='meters',
-        secondary_length_unit='kilometers',
-        primary_area_unit='sqmeters',
-        secondary_area_unit='hectares'
-    )
-    measure_control.add_to(m)
-
-
-    # Ajouter l'outil de dessin
-    draw = Draw(
-        export=True,  # Permet l'export des couches dessinées en GeoJSON
-        position='topleft',  # Position de l'icône sur la carte
-        draw_options={
-            'polyline': {'allowIntersection': False},  # Empêche l'intersection des lignes
-            'polygon': {'showArea': True},  # Affiche la surface des polygones
-            'circle': False,  # Désactive l'outil cercle
-            'circlemarker': False,  # Désactive l'outil cercle-marqueur
-        },
-        edit_options={
-            'remove': True  # Permet de supprimer des couches
-        }
-    )
-    draw.add_to(m)
-    
-    
-
-
-    # Ajouter les GeoJSON avec des styles spécifiques
-    styles = {
-        "routes": {"color": "orange", "weight": 2},
-        "polygon": {"fillColor": "semi-transparent", "color": "black", "weight": 2},
-        "pistes": {"color": "blue", "weight": 2},
-        "cours_eau": {"color": "cyan", "weight": 2},
-        "batiments": {"fillColor": "red", "color": "red", "weight": 1, "fillOpacity": 0.5},
-        "ville": {"fillColor": "green", "color": "green", "weight": 1, "fillOpacity": 0.3},
-        "plantations": {"fillColor": "yellow", "color": "yellow", "weight": 1, "fillOpacity": 0.3},
-    }
-
-    for layer, geojson_data in geojson_layers.items():
-        if geojson_data is not None:
-            folium.GeoJson(
-                geojson_data,
-                style_function=lambda feature, style=styles[layer]: style
-            ).add_to(m)
-
-    folium.LayerControl().add_to(m)
-    return m
-
-# Interface principale Streamlit
-def main():
-    st.title("Analyse des zones inondées")
-    st.markdown("### Téléchargez les fichiers nécessaires pour visualiser les données.")
-
-    fichier_tiff = st.file_uploader("Fichier GeoTIFF", type=["tif"])
-    fichier_geojson_routes = st.file_uploader("GeoJSON (routes)", type=["geojson"])
-    fichier_geojson_polygon = st.file_uploader("GeoJSON (polygone)", type=["geojson"])
-    fichier_geojson_pistes = st.file_uploader("GeoJSON (pistes)", type=["geojson"])
-    fichier_geojson_cours_eau = st.file_uploader("GeoJSON (cours d'eau)", type=["geojson"])
-    fichier_geojson_batiments = st.file_uploader("GeoJSON (bâtiments)", type=["geojson"])
-    fichier_geojson_ville = st.file_uploader("GeoJSON (ville)", type=["geojson"])
-    fichier_geojson_plantations = st.file_uploader("GeoJSON (plantations)", type=["geojson"])
-
-    geojson_data = {
-        "routes": charger_geojson(fichier_geojson_routes) if fichier_geojson_routes else None,
-        "polygon": charger_geojson(fichier_geojson_polygon) if fichier_geojson_polygon else None,
-        "pistes": charger_geojson(fichier_geojson_pistes) if fichier_geojson_pistes else None,
-        "cours_eau": charger_geojson(fichier_geojson_cours_eau) if fichier_geojson_cours_eau else None,
-        "batiments": charger_geojson(fichier_geojson_batiments) if fichier_geojson_batiments else None,
-        "ville": charger_geojson(fichier_geojson_ville) if fichier_geojson_ville else None,
-        "plantations": charger_geojson(fichier_geojson_plantations) if fichier_geojson_plantations else None,
-    }
-    # Calcul du nombre de bâtiments dans l'emprise du polygone
-    if fichier_geojson_batiments and fichier_geojson_polygon:
-        geojson_batiments = charger_geojson(fichier_geojson_batiments)
-        geojson_polygon = charger_geojson(fichier_geojson_polygon)
-        if geojson_batiments is not None and geojson_polygon is not None:
-            # Vérifier si les CRS sont compatibles
-            if geojson_batiments.crs != geojson_polygon.crs:
-                geojson_batiments = geojson_batiments.to_crs(geojson_polygon.crs)
-                
-            # Effectuer l'intersection
-            intersection = gpd.overlay(geojson_batiments, geojson_polygon, how='intersection')
-            # Compter le nombre de bâtiments
-            nombre_batiments = len(intersection)
-            st.write(f"Nombre de bâtiments dans l'emprise du polygone : {nombre_batiments}")
-
-
-
-    if fichier_tiff:
-        data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
-        #afficher surface polygone
-        if fichier_geojson_polygon:
-             geojson_polygon = charger_geojson(fichier_geojson_polygon)
-             if geojson_polygon is not None:
-                 surface_m2, surface_ha = calculer_surface_polygone(geojson_polygon)
-                 st.write(f"Surface du polygone : {surface_m2:.2f} m² ({surface_ha:.2f} ha)")
-        
-
-        
-        if data_tiff is not None:
-            st.write(f"Dimensions : {data_tiff.shape}")
-            st.write(f"Altitude : min {data_tiff.min()} m, max {data_tiff.max()} m")
-
-            taille_unite = calculer_taille_unite(bounds_tiff, data_tiff.shape[1], data_tiff.shape[0])
-            st.write(f"Taille moyenne d'une unité : {taille_unite:.2f} m")
-
-            niveau_inondation = st.slider("Niveau d'inondation", float(data_tiff.min()), float(data_tiff.max()), step=0.1)
-            if niveau_inondation:
-                pixels_inondes = calculer_pixels_inondes(data_tiff, niveau_inondation)
-                surface_m2, surface_ha = calculer_surface_inondee(pixels_inondes, taille_unite)
-                st.write(f"Surface inondée : {surface_m2:.2f} m² ({surface_ha:.2f} ha)")
-
-            m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, **geojson_data)
-            st_folium(m, width=700, height=500)
-
-if __name__ == "__main__":
-    main()
-
-
-
-
-
-
-
-
-
-
-
-
-
+        st.error(f"Erreur lors du traitement du fichier GeoTIFF : {e}")
+else:
+    st.warning("Veuillez téléverser un fichier GeoTIFF pour commencer.")
 
 
 import streamlit as st
