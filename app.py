@@ -20,15 +20,6 @@ import streamlit as st
 import numpy as np
 import rasterio
 from sklearn.cluster import DBSCAN
-import folium
-from folium.plugins import MeasureControl, Draw
-from rasterio.plot import reshape_as_image
-from streamlit_folium import folium_static
-
-import streamlit as st
-import numpy as np
-import rasterio
-from sklearn.cluster import DBSCAN
 import matplotlib.pyplot as plt
 from folium import Map, raster_layers, LayerControl
 from folium.plugins import MeasureControl, Draw
@@ -173,8 +164,6 @@ if mnt_file and mns_file:
     ax.set_title("Détection des arbres")
     ax.axis("off")
     st.pyplot(fig)
-
-
 
 
 
