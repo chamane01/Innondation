@@ -56,97 +56,26 @@ def reproject_tiff(input_tiff, target_crs):
 
     return reprojected_tiff
 
-# --- Méthode pour détecter les arbres ---
-def detect_trees(heights, threshold, eps, min_samples):
-    """Détecte des arbres à partir des hauteurs."""
-    tree_mask = heights > threshold
-    coords = np.column_stack(np.where(tree_mask))
-    
-    # Vérification des coordonnées
-    if coords.size == 0:
-        st.warning("Aucune hauteur d'arbre détectée au-dessus du seuil spécifié.")
-        return coords, np.array([])  # Retourne des clusters vides
-
-    # Clusterisation avec DBSCAN
-    clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
-    tree_clusters = clustering.labels_
-    
-    return coords, tree_clusters
-
-# --- Méthode pour ajouter les clusters sur une carte ---
-def add_tree_clusters(map_object, coords, tree_clusters, bounds, name):
-    """Ajoute des clusters d'arbres à une carte."""
-    for coord, cluster in zip(coords, tree_clusters):
-        if cluster != -1:  # Ignorer le bruit
-            lat = bounds.top - (bounds.top - bounds.bottom) * (coord[0] / bounds.height)
-            lon = bounds.left + (bounds.right - bounds.left) * (coord[1] / bounds.width)
-            folium.CircleMarker(location=[lat, lon], radius=3, color="green", fill=True).add_to(map_object)
-
-# --- Méthode pour ajouter un overlay d'image ---
-def add_image_overlay(map_object, tiff_path, bounds, name):
-    """Ajoute une superposition d'image TIFF à une carte Folium."""
-    with rasterio.open(tiff_path) as src:
-        image = reshape_as_image(src.read())
-        folium.raster_layers.ImageOverlay(
-            image=image,
-            bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
-            name=name
-        ).add_to(map_object)
-
 # --- Début de l'application ---
-st.title("Analyse des inondations et détection d'arbres")
+st.title("Analyse des inondations")
 
-# Paramètres de reprojection
-target_crs = "EPSG:4326"  # Projection WGS84
+# Téléversement des fichiers
+mnt_file = st.file_uploader("Téléversez le fichier MNT (TIFF)", type=["tiff"])
+mns_file = st.file_uploader("Téléversez le fichier MNS (TIFF)", type=["tiff"])
 
-# Chargement des fichiers
-mnt_path = st.text_input("Chemin du fichier MNT (TIFF):")
-mns_path = st.text_input("Chemin du fichier MNS (TIFF):")
-
-if mnt_path and mns_path:
+if mnt_file and mns_file:
     # Reprojection des fichiers
-    reprojected_mnt = reproject_tiff(mnt_path, target_crs)
-    reprojected_mns = reproject_tiff(mns_path, target_crs)
+    target_crs = "EPSG:4326"  # Projection WGS84
+    with open("mnt.tiff", "wb") as f:
+        f.write(mnt_file.getbuffer())
+    with open("mns.tiff", "wb") as f:
+        f.write(mns_file.getbuffer())
+    
+    reprojected_mnt = reproject_tiff("mnt.tiff", target_crs)
+    reprojected_mns = reproject_tiff("mns.tiff", target_crs)
 
-    # Lecture des données
-    with rasterio.open(reprojected_mnt) as mnt, rasterio.open(reprojected_mns) as mns:
-        mnt_bounds = mnt.bounds
-        mns_bounds = mns.bounds
-        heights = mns.read(1) - mnt.read(1)
-
-    # Paramètres pour détecter les arbres
-    height_threshold = st.slider("Seuil de hauteur pour détecter les arbres (m):", 0, 100, 10)
-    eps = st.slider("Paramètre eps pour DBSCAN (m):", 1, 20, 5)
-    min_samples = st.slider("Nombre minimum d'échantillons pour DBSCAN:", 1, 10, 3)
-
-    # Détection des arbres
-    coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
-
-    if tree_clusters.size == 0:
-        st.warning("Aucun arbre détecté pour les paramètres spécifiés.")
-    else:
-        num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
-        st.write(f"Nombre d'arbres détectés : {num_trees}")
-
-        # Création de la carte
-        center_lat = (mnt_bounds.top + mnt_bounds.bottom) / 2
-        center_lon = (mnt_bounds.left + mnt_bounds.right) / 2
-        fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-
-        # Ajout des clusters d'arbres
-        add_tree_clusters(fmap, coords, tree_clusters, mnt_bounds, "Clusters d'arbres")
-
-        # Ajout des superpositions d'images TIFF
-        add_image_overlay(fmap, reprojected_mnt, mnt_bounds, "MNT")
-        add_image_overlay(fmap, reprojected_mns, mns_bounds, "MNS")
-
-        # Ajout des contrôles interactifs
-        fmap.add_child(MeasureControl())
-        fmap.add_child(Draw(export=True))
-        folium.LayerControl().add_to(fmap)
-
-        # Affichage de la carte
-        folium_static(fmap)
+    # Lecture des données pour traitement supplémentaire si nécessaire
+    st.write("Fichiers reprojetés avec succès.")
 
 
 
