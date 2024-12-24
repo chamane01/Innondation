@@ -121,12 +121,31 @@ if mnt_file and mns_file:
         center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
         fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
+        # Ajout du fichier TIFF MNT à la carte
+        folium.raster_layers.ImageOverlay(
+            image=mnt,
+            bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
+            opacity=0.5,
+            name="MNT"
+        ).add_to(fmap)
+
+        # Ajout du fichier TIFF MNS à la carte
+        folium.raster_layers.ImageOverlay(
+            image=mns,
+            bounds=[[mns_bounds[1], mns_bounds[0]], [mns_bounds[3], mns_bounds[2]]],
+            opacity=0.5,
+            name="MNS"
+        ).add_to(fmap)
+
+        # Ajouter les clusters d'arbres sur la carte
         add_tree_clusters(fmap, coords, tree_clusters, mnt_bounds, "Clusters d'arbres")
         fmap.add_child(MeasureControl())
         fmap.add_child(Draw(export=True))
         folium.LayerControl().add_to(fmap)
 
+        # Afficher la carte
         folium_static(fmap)
+
 
 
 
