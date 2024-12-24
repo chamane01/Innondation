@@ -1,4 +1,5 @@
 
+
 # Importer les bibliothèques nécessaires
 import streamlit as st
 import pandas as pd
@@ -13,103 +14,12 @@ import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
 import rasterio
 
-import streamlit as st
-import numpy as np
-import rasterio
-from rasterio.io import MemoryFile
-from scipy.ndimage import binary_erosion
-from scipy.interpolate import griddata
-import matplotlib.pyplot as plt
-
-# Fonction pour charger un fichier TIFF
-def load_tiff(file_path):
-    with rasterio.open(file_path) as src:
-        data = src.read(1)  # On lit uniquement la première bande
-        profile = src.profile
-    return data, profile
-
-# Fonction pour générer un MNT
-def generate_mnt(elevation_data, structure_size=3):
-    """
-    Génère un MNT en filtrant les objets élevés et en interpolant les données manquantes.
-    """
-    # Étape 1 : Filtrage morphologique pour détecter le sol
-    ground_mask = binary_erosion(elevation_data > 0, structure=np.ones((structure_size, structure_size)))
-
-    # Étape 2 : Interpolation pour combler les trous
-    x, y = np.meshgrid(np.arange(elevation_data.shape[1]), np.arange(elevation_data.shape[0]))
-    points = np.column_stack((x[ground_mask], y[ground_mask]))
-    values = elevation_data[ground_mask]
-    grid_z = griddata(points, values, (x, y), method='linear', fill_value=np.nan)
-
-    # Étape 3 : Remplir les valeurs NaN par une moyenne locale
-    grid_z_filled = np.nan_to_num(grid_z, nan=np.nanmean(grid_z))
-    return grid_z_filled
-
-# Fonction pour exporter le MNT en TIFF dans un fichier mémoire
-def export_mnt_to_tiff(mnt, profile):
-    """
-    Exporte le MNT dans un fichier TIFF et retourne un objet binaire pour le téléchargement.
-    """
-    profile.update({
-        "dtype": "float32",
-        "count": 1,
-        "compress": "lzw",
-    })
-
-    with MemoryFile() as memfile:
-        with memfile.open(**profile) as dataset:
-            dataset.write(mnt, 1)
-        return memfile.read()
-
-# Interface Streamlit
-st.title("Génération d'un MNT à partir d'un fichier TIFF")
-
-# Chargement du fichier TIFF
-tiff_file = st.file_uploader("Téléchargez un fichier TIFF contenant des données d'altitude", type=["tif", "tiff"])
-
-if tiff_file:
-    # Charger les données
-    elevation_data, profile = load_tiff(tiff_file)
-    st.write("Données d'altitude chargées :")
-    st.image(elevation_data, caption="Image d'altitude", use_column_width=True, clamp=True)
-
-    # Générer le MNT
-    structure_size = st.sidebar.slider("Taille du filtre morphologique (px)", 1, 10, 3)
-    mnt = generate_mnt(elevation_data, structure_size=structure_size)
-
-    # Afficher les résultats
-    st.write("Modèle Numérique de Terrain (MNT) généré :")
-    fig, ax = plt.subplots(1, 2, figsize=(12, 6))
-    ax[0].imshow(elevation_data, cmap="terrain", interpolation="none")
-    ax[0].set_title("Données originales")
-    ax[1].imshow(mnt, cmap="terrain", interpolation="none")
-    ax[1].set_title("MNT généré")
-    st.pyplot(fig)
-
-    # Exportation et téléchargement
-    tiff_data = export_mnt_to_tiff(mnt, profile)
-    st.download_button(
-        label="Télécharger le MNT en TIFF",
-        data=tiff_data,
-        file_name="mnt_generated.tif",
-        mime="image/tiff"
-    )
-
-
-
-
-
 
 
 import streamlit as st
 import numpy as np
 import rasterio
-from rasterio.warp import calculate_default_transform, reproject, Resampling
 from sklearn.cluster import DBSCAN
-import folium
-from folium import plugins
-from streamlit_folium import st_folium
 import matplotlib.pyplot as plt
 
 
@@ -118,38 +28,11 @@ def load_tiff(file_path):
     with rasterio.open(file_path) as src:
         data = src.read(1)  # Lire la première bande
         profile = src.profile  # Profil du fichier (métadonnées)
-        bounds = src.bounds  # Limites géographiques
-    return data, profile, bounds
-
-
-# Fonction pour reprojeter un fichier TIFF vers une nouvelle projection
-def reproject_tiff(data, profile, src_bounds, src_crs, dst_crs="EPSG:4326"):
-    transform, width, height = calculate_default_transform(
-        src_crs, dst_crs, profile["width"], profile["height"], *src_bounds
-    )
-    profile.update(
-        crs=dst_crs,
-        transform=transform,
-        width=width,
-        height=height,
-    )
-    reprojected_data = np.empty((height, width), dtype=data.dtype)
-    reproject(
-        source=data,
-        destination=reprojected_data,
-        src_transform=profile["transform"],
-        src_crs=src_crs,
-        dst_transform=transform,
-        dst_crs=dst_crs,
-        resampling=Resampling.nearest,
-    )
-    return reprojected_data, profile, transform
-
+    return data, profile
 
 # Fonction pour calculer la hauteur relative (MNS - MNT)
 def calculate_heights(mns, mnt):
     return np.maximum(0, mns - mnt)  # Évite les valeurs négatives
-
 
 # Fonction pour détecter les arbres avec DBSCAN
 def detect_trees(heights, threshold, eps, min_samples):
@@ -163,16 +46,8 @@ def detect_trees(heights, threshold, eps, min_samples):
     
     return coords, tree_clusters
 
-
-# Fonction pour normaliser les données pour affichage sur une carte
-def normalize(array):
-    array = array.astype(float)
-    array_min, array_max = np.nanmin(array), np.nanmax(array)
-    return (array - array_min) / (array_max - array_min)
-
-
 # Interface Streamlit
-st.title("Détection d'arbres avec DBSCAN et carte interactive")
+st.title("Détection d'arbres avec DBSCAN")
 
 # Chargement des fichiers
 mnt_file = st.file_uploader("Téléchargez le fichier MNT (Modèle Numérique de Terrain) en TIFF", type=["tif", "tiff"])
@@ -180,32 +55,37 @@ mns_file = st.file_uploader("Téléchargez le fichier MNS (Modèle Numérique de
 
 if mnt_file and mns_file:
     # Charger les données TIFF
-    mnt, mnt_profile, mnt_bounds = load_tiff(mnt_file)
-    mns, mns_profile, mns_bounds = load_tiff(mns_file)
-    
-    # Reprojection des fichiers vers EPSG:4326
-    mnt_reprojected, mnt_profile, mnt_transform = reproject_tiff(
-        mnt, mnt_profile, mnt_bounds, src_crs="EPSG:32630", dst_crs="EPSG:4326"
-    )
-    mns_reprojected, mns_profile, mns_transform = reproject_tiff(
-        mns, mns_profile, mns_bounds, src_crs="EPSG:32630", dst_crs="EPSG:4326"
-    )
+    mnt, mnt_profile = load_tiff(mnt_file)
+    mns, mns_profile = load_tiff(mns_file)
     
     # Calcul des hauteurs
-    heights = calculate_heights(mns_reprojected, mnt_reprojected)
+    heights = calculate_heights(mns, mnt)
     st.write("Hauteurs calculées (MNS - MNT)")
 
-    # Paramètres de détection
     st.sidebar.title("Paramètres de détection")
     height_threshold = st.sidebar.slider(
-        "Seuil de hauteur des arbres (m)", min_value=0.5, max_value=20, value=1.0
+    "Seuil de hauteur des arbres (m)",
+    min_value=0.1,  # Flottant requis car step est un flottant
+    max_value=20.0,  # Flottant requis pour correspondre à step
+    value=2.0,       # La valeur par défaut doit être un flottant
+    step=0.1         # Intervalle en flottants
     )
     eps = st.sidebar.slider(
-        "Rayon de voisinage (m)", min_value=1, max_value=10, value=2
+    "Rayon de voisinage (m)",
+    min_value=0.1,
+    max_value=10.0,
+    value=2.0,
+    step=0.1
     )
     min_samples = st.sidebar.slider(
-        "Nombre minimum de points pour un arbre", min_value=1, max_value=10, value=5
+    "Nombre minimum de points pour un arbre",
+    min_value=1,     # Entiers ici
+    max_value=10,
+    value=5,
+    step=1           # Step entier
     )
+
+   
 
     # Détection des arbres
     coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
@@ -214,56 +94,111 @@ if mnt_file and mns_file:
     num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
     st.write(f"Nombre d'arbres détectés : {num_trees}")
 
-    # Visualisation de la carte dynamique
-    st.write("Carte interactive avec couches MNT et MNS")
-    
-    # Normaliser les données pour affichage
-    mnt_normalized = normalize(mnt_reprojected)
-    mns_normalized = normalize(mns_reprojected)
-    
-    # Créer une carte folium centrée sur les données
-    center_lat = (mnt_bounds.top + mnt_bounds.bottom) / 2
-    center_lon = (mnt_bounds.left + mnt_bounds.right) / 2
-    m = folium.Map(location=[center_lat, center_lon], zoom_start=15)
-    
-    # Ajouter les couches MNT et MNS
-    folium.raster_layers.ImageOverlay(
-        image=mnt_normalized,
-        bounds=[[mnt_bounds.bottom, mnt_bounds.left], [mnt_bounds.top, mnt_bounds.right]],
-        opacity=0.6,
-        colormap=lambda x: (1 - x, x, 0),  # Gradient vert-jaune
-        name="MNT"
-    ).add_to(m)
-
-    folium.raster_layers.ImageOverlay(
-        image=mns_normalized,
-        bounds=[[mns_bounds.bottom, mns_bounds.left], [mns_bounds.top, mns_bounds.right]],
-        opacity=0.6,
-        colormap=lambda x: (0, x, 1 - x),  # Gradient bleu-cyan
-        name="MNS"
-    ).add_to(m)
-
-    # Ajouter les points des arbres
-    for (y, x), cluster in zip(coords, tree_clusters):
-        if cluster != -1:  # Ignorer le bruit
-            folium.CircleMarker(
-                location=[
-                    mnt_bounds.top - y * (mnt_bounds.top - mnt_bounds.bottom) / mnt.shape[0],
-                    mnt_bounds.left + x * (mnt_bounds.right - mnt_bounds.left) / mnt.shape[1],
-                ],
-                radius=2,
-                color="red",
-                fill=True,
-                fill_opacity=1.0
-            ).add_to(m)
-
-    # Ajout d'une couche de contrôle
-    folium.LayerControl().add_to(m)
-
-    # Afficher la carte
-    st_folium(m, width=800, height=600)
+    # Visualisation
+    fig, ax = plt.subplots()
+    ax.imshow(heights, cmap="viridis", interpolation="none")
+    ax.scatter(coords[:, 1], coords[:, 0], c=tree_clusters, cmap="tab10", s=5)
+    ax.set_title("Détection des arbres")
+    ax.axis("off")
+    st.pyplot(fig)
 
 
+
+
+
+import streamlit as st
+import rasterio
+import rasterio.warp
+import folium
+from folium import plugins
+from folium.plugins import MeasureControl, Draw
+from rasterio.plot import reshape_as_image
+from PIL import Image
+from streamlit_folium import folium_static
+
+def reproject_tiff(input_tiff, target_crs):
+    """Reproject a TIFF file to a target CRS."""
+    with rasterio.open(input_tiff) as src:
+        transform, width, height = rasterio.warp.calculate_default_transform(
+            src.crs, target_crs, src.width, src.height, *src.bounds
+        )
+        kwargs = src.meta.copy()
+        kwargs.update({
+            'crs': target_crs,
+            'transform': transform,
+            'width': width,
+            'height': height
+        })
+
+        reprojected_tiff = "reprojected.tiff"
+        with rasterio.open(reprojected_tiff, 'w', **kwargs) as dst:
+            for i in range(1, src.count + 1):
+                rasterio.warp.reproject(
+                    source=rasterio.band(src, i),
+                    destination=rasterio.band(dst, i),
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    dst_transform=transform,
+                    dst_crs=target_crs,
+                    resampling=rasterio.warp.Resampling.nearest
+                )
+
+    return reprojected_tiff
+
+def add_image_overlay(map_object, tiff_path, bounds, name):
+    """Add a TIFF image overlay to a Folium map."""
+    with rasterio.open(tiff_path) as src:
+        image = reshape_as_image(src.read())
+        folium.raster_layers.ImageOverlay(
+            image=image,
+            bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
+            name=name
+        ).add_to(map_object)
+
+# Streamlit app
+def main():
+    st.title("TIFF Viewer and Interactive Map")
+
+    # Upload TIFF file
+    uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
+
+    if uploaded_file is not None:
+        tiff_path = uploaded_file.name
+        with open(tiff_path, "wb") as f:
+            f.write(uploaded_file.read())
+
+        st.write("Reprojecting TIFF file...")
+
+        # Reproject TIFF to target CRS (e.g., EPSG:4326)
+        reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
+
+        # Read bounds from reprojected TIFF file
+        with rasterio.open(reprojected_tiff) as src:
+            bounds = src.bounds
+
+        # Create Folium map
+        center_lat = (bounds.top + bounds.bottom) / 2
+        center_lon = (bounds.left + bounds.right) / 2
+        fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+
+        # Add reprojected TIFF as overlay
+        add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
+
+        # Add measure control
+        fmap.add_child(MeasureControl())
+
+        # Add draw control
+        draw = Draw(export=True)
+        fmap.add_child(draw)
+
+        # Layer control
+        folium.LayerControl().add_to(fmap)
+
+        # Display map
+        folium_static(fmap)
+
+if __name__ == "__main__":
+    main()
 
 
 
