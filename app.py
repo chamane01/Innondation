@@ -129,7 +129,7 @@ def detect_trees(heights, threshold, eps, min_samples):
     return coords, tree_clusters
 
 # Interface Streamlit
-st.title("Détection d'arbres avec DBSCAN")
+st.title("Détection d'arbres, AFRICAN TECHNO LAB")
 
 # Chargement des fichiers
 mnt_file = st.file_uploader("Téléchargez le fichier MNT (Modèle Numérique de Terrain) en TIFF", type=["tif", "tiff"])
