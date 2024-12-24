@@ -16,14 +16,13 @@ import rasterio
 
 
 
-import streamlit as st
+import streamlit as st 
 import numpy as np
 import rasterio
 from rasterio.warp import transform_bounds, calculate_default_transform
 from sklearn.cluster import DBSCAN
 import folium
 from folium.plugins import MeasureControl, Draw
-from rasterio.plot import reshape_as_image
 from streamlit_folium import folium_static
 
 # Fonction pour charger un fichier TIFF et reprojeter les bornes
@@ -36,21 +35,6 @@ def load_tiff(file_path, target_crs="EPSG:4326"):
 
             # Reprojeter les bornes vers le CRS cible
             target_bounds = transform_bounds(src_crs, target_crs, *bounds)
-
-            # Reprojeter les données si nécessaire
-            if src_crs != target_crs:
-                transform, width, height = calculate_default_transform(
-                    src_crs, target_crs, src.width, src.height, *bounds
-                )
-                data = rasterio.warp.reproject(
-                    source=rasterio.band(src, 1),
-                    destination=np.empty((height, width), dtype=np.float32),
-                    src_transform=src.transform,
-                    src_crs=src_crs,
-                    dst_transform=transform,
-                    dst_crs=target_crs,
-                )[0]
-                bounds = target_bounds
 
         return data, target_bounds
     except Exception as e:
@@ -72,30 +56,26 @@ def detect_trees(heights, threshold, eps, min_samples):
     return coords, tree_clusters
 
 # Fonction pour ajouter des clusters sur la carte
-def add_tree_clusters(map_object, coords, clusters, bounds, name):
-    height = bounds[3] - bounds[1]
-    width = bounds[2] - bounds[0]
-
-    # Limites du TIFF pour vérifier si les clusters sont dans la zone
-    min_lat, min_lon = bounds[1], bounds[0]
-    max_lat, max_lon = bounds[3], bounds[2]
+def add_tree_clusters(map_object, coords, clusters, bounds, tiff_shape):
+    height = bounds[3] - bounds[1]  # Différence de latitude
+    width = bounds[2] - bounds[0]   # Différence de longitude
 
     for i, coord in enumerate(coords):
         cluster_id = clusters[i]
         if cluster_id != -1:
-            lat = bounds[3] - height * (coord[0] / coords.shape[0])
-            lon = bounds[0] + width * (coord[1] / coords.shape[1])
+            # Conversion des indices d'image en coordonnées géographiques
+            lat = bounds[3] - (coord[0] / tiff_shape[0]) * height
+            lon = bounds[0] + (coord[1] / tiff_shape[1]) * width
 
-            # Vérifier si le cluster est dans les bornes du TIFF
-            if min_lat <= lat <= max_lat and min_lon <= lon <= max_lon:
-                folium.CircleMarker(
-                    location=[lat, lon],
-                    radius=3,
-                    color="blue",
-                    fill=True,
-                    fill_opacity=0.6,
-                    popup=f"Cluster: {cluster_id}"
-                ).add_to(map_object)
+            # Ajouter uniquement les clusters dans les bornes
+            folium.CircleMarker(
+                location=[lat, lon],
+                radius=3,
+                color="blue",
+                fill=True,
+                fill_opacity=0.6,
+                popup=f"Cluster: {cluster_id}"
+            ).add_to(map_object)
 
 # Interface Streamlit
 st.title("Détection d'arbres avec projection adaptée et DBSCAN")
@@ -145,7 +125,7 @@ if mnt_file and mns_file:
         ).add_to(fmap)
 
         # Ajouter les clusters d'arbres sur la carte
-        add_tree_clusters(fmap, coords, tree_clusters, mnt_bounds, "Clusters d'arbres")
+        add_tree_clusters(fmap, coords, tree_clusters, mnt_bounds, mnt.shape, "Clusters d'arbres")
         fmap.add_child(MeasureControl())
         fmap.add_child(Draw(export=True))
         folium.LayerControl().add_to(fmap)
