@@ -123,9 +123,9 @@ def load_tiff(file_path):
 
 
 # Fonction pour reprojeter un fichier TIFF vers une nouvelle projection
-def reproject_tiff(data, profile, src_crs, dst_crs="EPSG:4326"):
+def reproject_tiff(data, profile, src_bounds, src_crs, dst_crs="EPSG:4326"):
     transform, width, height = calculate_default_transform(
-        src_crs, dst_crs, profile["width"], profile["height"], *profile["bounds"]
+        src_crs, dst_crs, profile["width"], profile["height"], *src_bounds
     )
     profile.update(
         crs=dst_crs,
@@ -184,8 +184,12 @@ if mnt_file and mns_file:
     mns, mns_profile, mns_bounds = load_tiff(mns_file)
     
     # Reprojection des fichiers vers EPSG:4326
-    mnt_reprojected, mnt_profile, mnt_transform = reproject_tiff(mnt, mnt_profile, src_crs="EPSG:32630", dst_crs="EPSG:4326")
-    mns_reprojected, mns_profile, mns_transform = reproject_tiff(mns, mns_profile, src_crs="EPSG:32630", dst_crs="EPSG:4326")
+    mnt_reprojected, mnt_profile, mnt_transform = reproject_tiff(
+        mnt, mnt_profile, mnt_bounds, src_crs="EPSG:32630", dst_crs="EPSG:4326"
+    )
+    mns_reprojected, mns_profile, mns_transform = reproject_tiff(
+        mns, mns_profile, mns_bounds, src_crs="EPSG:32630", dst_crs="EPSG:4326"
+    )
     
     # Calcul des hauteurs
     heights = calculate_heights(mns_reprojected, mnt_reprojected)
