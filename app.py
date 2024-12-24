@@ -143,27 +143,17 @@ if mnt_file and mns_file:
         # Ajouter la couche des arbres à la carte
         add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
 
-        # Ajouter le bouton d'export GEOJSON pour les points des arbres
-        draw_control = Draw(export=True)
-        draw_control.add_to(fmap)
-
-        # Ajouter les contrôles de mesure et des couches à la carte
         fmap.add_child(MeasureControl(position='topleft'))
+        draw_control = Draw(export=True, position='topleft')
         fmap.add_child(draw_control)
 
         # Ajouter le contrôle des couches à la carte (en haut à droite)
         fmap.add_child(folium.LayerControl(position='topright'))
 
         # Ajouter un bouton d'export en bas de la carte
-        st.download_button(
-            label="Exporter en GEOJSON",
-            data=export_geojson(coords, "arbre_points.geojson"),
-            file_name="arbre_points.geojson",
-            mime="application/json"
-        )
 
-        # Afficher la carte
         folium_static(fmap)
+
 
 
 
