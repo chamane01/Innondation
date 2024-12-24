@@ -16,7 +16,7 @@ import rasterio
 
 
 
-import streamlit as st 
+import streamlit as st
 import numpy as np
 import rasterio
 from rasterio.warp import transform_bounds, calculate_default_transform
@@ -56,26 +56,29 @@ def detect_trees(heights, threshold, eps, min_samples):
     return coords, tree_clusters
 
 # Fonction pour ajouter des clusters sur la carte
-def add_tree_clusters(map_object, coords, clusters, bounds, tiff_shape):
-    height = bounds[3] - bounds[1]  # Différence de latitude
-    width = bounds[2] - bounds[0]   # Différence de longitude
+def add_tree_clusters(map_object, coords, clusters, bounds, image_shape, name):
+    height = bounds[3] - bounds[1]
+    width = bounds[2] - bounds[0]
+
+    img_height, img_width = image_shape[:2]
+    min_lat, min_lon = bounds[1], bounds[0]
+    max_lat, max_lon = bounds[3], bounds[2]
 
     for i, coord in enumerate(coords):
         cluster_id = clusters[i]
         if cluster_id != -1:
-            # Conversion des indices d'image en coordonnées géographiques
-            lat = bounds[3] - (coord[0] / tiff_shape[0]) * height
-            lon = bounds[0] + (coord[1] / tiff_shape[1]) * width
+            lat = bounds[3] - height * (coord[0] / img_height)
+            lon = bounds[0] + width * (coord[1] / img_width)
 
-            # Ajouter uniquement les clusters dans les bornes
-            folium.CircleMarker(
-                location=[lat, lon],
-                radius=3,
-                color="blue",
-                fill=True,
-                fill_opacity=0.6,
-                popup=f"Cluster: {cluster_id}"
-            ).add_to(map_object)
+            if min_lat <= lat <= max_lat and min_lon <= lon <= max_lon:
+                folium.CircleMarker(
+                    location=[lat, lon],
+                    radius=3,
+                    color="blue",
+                    fill=True,
+                    fill_opacity=0.6,
+                    popup=f"Cluster: {cluster_id}"
+                ).add_to(map_object)
 
 # Interface Streamlit
 st.title("Détection d'arbres avec projection adaptée et DBSCAN")
@@ -132,6 +135,7 @@ if mnt_file and mns_file:
 
         # Afficher la carte
         folium_static(fmap)
+
 
 
 
