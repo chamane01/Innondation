@@ -90,7 +90,7 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
     feature_group.add_to(map_object)
 
 # Interface Streamlit
-st.title("Détection d'arbres avec clusters unifiés et centroïdes")
+st.title("Détection d'arbres automatique par African Techno Lab ")
 
 mnt_file = st.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
 mns_file = st.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
