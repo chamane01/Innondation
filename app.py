@@ -143,7 +143,7 @@ if mnt_file and mns_file:
         # Ajouter la couche des arbres à la carte
         add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
         fmap.add_child(MeasureControl())
-        fmap.add_child(Draw(export=True))
+      
         folium.LayerControl().add_to(fmap)
 
         # Afficher la carte
