@@ -19,7 +19,7 @@ import rasterio
 import streamlit as st
 import numpy as np
 import rasterio
-from rasterio.warp import transform_bounds, calculate_default_transform
+from rasterio.warp import transform_bounds
 from sklearn.cluster import DBSCAN
 import folium
 from folium.plugins import MeasureControl, Draw
@@ -55,33 +55,36 @@ def detect_trees(heights, threshold, eps, min_samples):
 
     return coords, tree_clusters
 
-# Fonction pour ajouter des clusters sur la carte
-def add_tree_clusters(map_object, coords, clusters, bounds, image_shape, name):
+# Fonction pour calculer les centroïdes des clusters
+def calculate_cluster_centroids(coords, clusters):
+    unique_clusters = set(clusters) - {-1}  # Ignorer le bruit (-1)
+    centroids = []
+
+    for cluster_id in unique_clusters:
+        cluster_coords = coords[clusters == cluster_id]
+        centroid = cluster_coords.mean(axis=0)
+        centroids.append((cluster_id, centroid))
+
+    return centroids
+
+# Fonction pour ajouter les centroïdes des arbres à la carte
+def add_tree_centroids(map_object, centroids, bounds, image_shape, name):
     height = bounds[3] - bounds[1]
     width = bounds[2] - bounds[0]
-
     img_height, img_width = image_shape[:2]
-    min_lat, min_lon = bounds[1], bounds[0]
-    max_lat, max_lon = bounds[3], bounds[2]
 
-    for i, coord in enumerate(coords):
-        cluster_id = clusters[i]
-        if cluster_id != -1:
-            lat = bounds[3] - height * (coord[0] / img_height)
-            lon = bounds[0] + width * (coord[1] / img_width)
+    for _, centroid in centroids:
+        lat = bounds[3] - height * (centroid[0] / img_height)
+        lon = bounds[0] + width * (centroid[1] / img_width)
 
-            if min_lat <= lat <= max_lat and min_lon <= lon <= max_lon:
-                folium.CircleMarker(
-                    location=[lat, lon],
-                    radius=3,
-                    color="blue",
-                    fill=True,
-                    fill_opacity=0.6,
-                    popup=f"Cluster: {cluster_id}"
-                ).add_to(map_object)
+        folium.Marker(
+            location=[lat, lon],
+            popup=f"Arbre",
+            icon=folium.Icon(color="green", icon="tree"),
+        ).add_to(map_object)
 
 # Interface Streamlit
-st.title("Détection d'arbres avec projection adaptée et DBSCAN")
+st.title("Détection d'arbres avec clusters unifiés et centroïdes")
 
 mnt_file = st.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
 mns_file = st.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
@@ -107,6 +110,10 @@ if mnt_file and mns_file:
         num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
         st.write(f"Nombre d'arbres détectés : {num_trees}")
 
+        # Calcul des centroïdes
+        centroids = calculate_cluster_centroids(coords, tree_clusters)
+
+        # Création de la carte
         center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
         center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
         fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
@@ -128,7 +135,7 @@ if mnt_file and mns_file:
         ).add_to(fmap)
 
         # Ajouter les clusters d'arbres sur la carte
-        add_tree_clusters(fmap, coords, tree_clusters, mnt_bounds, mnt.shape, "Clusters d'arbres")
+        add_tree_centroids(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
         fmap.add_child(MeasureControl())
         fmap.add_child(Draw(export=True))
         folium.LayerControl().add_to(fmap)
