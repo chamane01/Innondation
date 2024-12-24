@@ -23,7 +23,6 @@ import matplotlib.pyplot as plt
 from matplotlib.colors import ListedColormap
 from folium.plugins import MeasureControl
 import geopandas as gpd
-from folium.plugins import Draw
 
 # Fonction pour charger un fichier TIFF
 def charger_tiff(fichier_tiff):
@@ -155,33 +154,7 @@ def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, **geojson_la
 
     
     measure_control = MeasureControl(primary_length_unit='meters', primary_area_unit='sqmeters')
-    measure_control = MeasureControl(
-        primary_length_unit='meters',
-        secondary_length_unit='kilometers',
-        primary_area_unit='sqmeters',
-        secondary_area_unit='hectares'
-    )
     measure_control.add_to(m)
-
-
-    # Ajouter l'outil de dessin
-    draw = Draw(
-        export=True,  # Permet l'export des couches dessinées en GeoJSON
-        position='topleft',  # Position de l'icône sur la carte
-        draw_options={
-            'polyline': {'allowIntersection': False},  # Empêche l'intersection des lignes
-            'polygon': {'showArea': True},  # Affiche la surface des polygones
-            'circle': False,  # Désactive l'outil cercle
-            'circlemarker': False,  # Désactive l'outil cercle-marqueur
-        },
-        edit_options={
-            'remove': True  # Permet de supprimer des couches
-        }
-    )
-    draw.add_to(m)
-    
-    
-
 
     # Ajouter les GeoJSON avec des styles spécifiques
     styles = {
