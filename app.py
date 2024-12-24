@@ -17,26 +17,18 @@ import rasterio
 
 
 import streamlit as st
-import numpy as np
-import rasterio
-from sklearn.cluster import DBSCAN
 import folium
 from folium.plugins import MeasureControl, Draw
-from rasterio.plot import reshape_as_image
 from streamlit_folium import folium_static
+import rasterio
+from rasterio.plot import reshape_as_image
+import numpy as np
+from sklearn.cluster import DBSCAN
 import rasterio.warp
 
-# Fonction pour charger un fichier TIFF
-def load_tiff(file_path):
-    with rasterio.open(file_path) as src:
-        data = src.read(1)  # Lire la première bande
-        profile = src.profile  # Profil du fichier (métadonnées)
-        bounds = src.bounds  # Bornes géographiques
-    return data, profile, bounds
-
-# Fonction pour reprojecter un fichier TIFF vers un système de coordonnées cible
+# --- Méthode de reprojection TIFF ---
 def reproject_tiff(input_tiff, target_crs):
-    """Reprojecte un fichier TIFF vers un CRS cible."""
+    """Reproject a TIFF file to a target CRS."""
     with rasterio.open(input_tiff) as src:
         transform, width, height = rasterio.warp.calculate_default_transform(
             src.crs, target_crs, src.width, src.height, *src.bounds
@@ -64,9 +56,35 @@ def reproject_tiff(input_tiff, target_crs):
 
     return reprojected_tiff
 
-# Fonction pour ajouter une image TIFF en tant qu'overlay sur une carte Folium
+# --- Méthode pour détecter les arbres ---
+def detect_trees(heights, threshold, eps, min_samples):
+    """Détecte des arbres à partir des hauteurs."""
+    tree_mask = heights > threshold
+    coords = np.column_stack(np.where(tree_mask))
+    
+    # Vérification des coordonnées
+    if coords.size == 0:
+        st.warning("Aucune hauteur d'arbre détectée au-dessus du seuil spécifié.")
+        return coords, np.array([])  # Retourne des clusters vides
+
+    # Clusterisation avec DBSCAN
+    clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
+    tree_clusters = clustering.labels_
+    
+    return coords, tree_clusters
+
+# --- Méthode pour ajouter les clusters sur une carte ---
+def add_tree_clusters(map_object, coords, tree_clusters, bounds, name):
+    """Ajoute des clusters d'arbres à une carte."""
+    for coord, cluster in zip(coords, tree_clusters):
+        if cluster != -1:  # Ignorer le bruit
+            lat = bounds.top - (bounds.top - bounds.bottom) * (coord[0] / bounds.height)
+            lon = bounds.left + (bounds.right - bounds.left) * (coord[1] / bounds.width)
+            folium.CircleMarker(location=[lat, lon], radius=3, color="green", fill=True).add_to(map_object)
+
+# --- Méthode pour ajouter un overlay d'image ---
 def add_image_overlay(map_object, tiff_path, bounds, name):
-    """Ajoute une superposition d'image TIFF sur une carte Folium."""
+    """Ajoute une superposition d'image TIFF à une carte Folium."""
     with rasterio.open(tiff_path) as src:
         image = reshape_as_image(src.read())
         folium.raster_layers.ImageOverlay(
@@ -75,120 +93,60 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
             name=name
         ).add_to(map_object)
 
-# Fonction pour calculer la hauteur relative (MNS - MNT)
-def calculate_heights(mns, mnt):
-    return np.maximum(0, mns - mnt)  # Évite les valeurs négatives
+# --- Début de l'application ---
+st.title("Analyse des inondations et détection d'arbres")
 
-# Fonction pour détecter les arbres avec DBSCAN
-def detect_trees(heights, threshold, eps, min_samples):
-    # Créer un masque pour les arbres (hauteur > seuil)
-    tree_mask = heights > threshold
-    coords = np.column_stack(np.where(tree_mask))
-    
-    # Clusterisation avec DBSCAN
-    clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
-    tree_clusters = clustering.labels_
-    
-    return coords, tree_clusters
-
-# Fonction pour ajouter des clusters sur la carte
-def add_tree_clusters(map_object, coords, clusters, bounds, name):
-    # Calcul de la hauteur et de la largeur des bornes
-    bounds_height = bounds.top - bounds.bottom
-    bounds_width = bounds.right - bounds.left
-
-    # Ajouter des marqueurs pour chaque arbre détecté
-    for i, coord in enumerate(coords):
-        cluster_id = clusters[i]
-        if cluster_id != -1:  # Ignorer les bruits
-            # Convertir les coordonnées en latitude/longitude
-            lat = bounds.top - bounds_height * (coord[0] / coords.shape[0])
-            lon = bounds.left + bounds_width * (coord[1] / coords.shape[1])
-            folium.CircleMarker(
-                location=[lat, lon],
-                radius=3,
-                color="blue",
-                fill=True,
-                fill_opacity=0.6,
-                popup=f"Cluster: {cluster_id}"
-            ).add_to(map_object)
-
-# Interface Streamlit
-st.title("Détection d'arbres avec DBSCAN et projection TIFF")
+# Paramètres de reprojection
+target_crs = "EPSG:4326"  # Projection WGS84
 
 # Chargement des fichiers
-mnt_file = st.file_uploader("Téléchargez le fichier MNT (Modèle Numérique de Terrain) en TIFF", type=["tif", "tiff"])
-mns_file = st.file_uploader("Téléchargez le fichier MNS (Modèle Numérique de Surface) en TIFF", type=["tif", "tiff"])
-target_crs = st.text_input("Saisissez le CRS cible (par exemple, 'EPSG:4326')", "EPSG:4326")
+mnt_path = st.text_input("Chemin du fichier MNT (TIFF):")
+mns_path = st.text_input("Chemin du fichier MNS (TIFF):")
 
-if mnt_file and mns_file:
-    # Reprojection des fichiers TIFF
-    reprojected_mnt = reproject_tiff(mnt_file, target_crs)
-    reprojected_mns = reproject_tiff(mns_file, target_crs)
+if mnt_path and mns_path:
+    # Reprojection des fichiers
+    reprojected_mnt = reproject_tiff(mnt_path, target_crs)
+    reprojected_mns = reproject_tiff(mns_path, target_crs)
 
-    # Charger les données TIFF reprojetées
-    mnt, mnt_profile, mnt_bounds = load_tiff(reprojected_mnt)
-    mns, mns_profile, mns_bounds = load_tiff(reprojected_mns)
+    # Lecture des données
+    with rasterio.open(reprojected_mnt) as mnt, rasterio.open(reprojected_mns) as mns:
+        mnt_bounds = mnt.bounds
+        mns_bounds = mns.bounds
+        heights = mns.read(1) - mnt.read(1)
 
-    # Vérifier si les bornes des deux fichiers correspondent
-    if mnt_bounds != mns_bounds:
-        st.error("Les fichiers MNT et MNS doivent avoir les mêmes bornes géographiques après reprojection.")
+    # Paramètres pour détecter les arbres
+    height_threshold = st.slider("Seuil de hauteur pour détecter les arbres (m):", 0, 100, 10)
+    eps = st.slider("Paramètre eps pour DBSCAN (m):", 1, 20, 5)
+    min_samples = st.slider("Nombre minimum d'échantillons pour DBSCAN:", 1, 10, 3)
+
+    # Détection des arbres
+    coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
+
+    if tree_clusters.size == 0:
+        st.warning("Aucun arbre détecté pour les paramètres spécifiés.")
     else:
-        # Calcul des hauteurs
-        heights = calculate_heights(mns, mnt)
-        st.write("Hauteurs calculées (MNS - MNT)")
-
-        # Paramètres de détection dans la barre latérale
-        st.sidebar.title("Paramètres de détection")
-        height_threshold = st.sidebar.slider(
-            "Seuil de hauteur des arbres (m)",
-            min_value=0.1,
-            max_value=20.0,
-            value=2.0,
-            step=0.1
-        )
-        eps = st.sidebar.slider(
-            "Rayon de voisinage (m)",
-            min_value=0.1,
-            max_value=10.0,
-            value=2.0,
-            step=0.1
-        )
-        min_samples = st.sidebar.slider(
-            "Nombre minimum de points pour un arbre",
-            min_value=1,
-            max_value=10,
-            value=5,
-            step=1
-        )
-
-        # Détection des arbres
-        coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
-
-        # Comptage des arbres
         num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
         st.write(f"Nombre d'arbres détectés : {num_trees}")
 
-        # Affichage sur une carte interactive
+        # Création de la carte
         center_lat = (mnt_bounds.top + mnt_bounds.bottom) / 2
         center_lon = (mnt_bounds.left + mnt_bounds.right) / 2
         fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-        # Ajouter les clusters d'arbres sur la carte
+        # Ajout des clusters d'arbres
         add_tree_clusters(fmap, coords, tree_clusters, mnt_bounds, "Clusters d'arbres")
 
-        # Ajouter les superpositions d'images TIFF
+        # Ajout des superpositions d'images TIFF
         add_image_overlay(fmap, reprojected_mnt, mnt_bounds, "MNT")
         add_image_overlay(fmap, reprojected_mns, mns_bounds, "MNS")
 
-        # Ajouter les contrôles interactifs
+        # Ajout des contrôles interactifs
         fmap.add_child(MeasureControl())
         fmap.add_child(Draw(export=True))
         folium.LayerControl().add_to(fmap)
 
-        # Afficher la carte
+        # Affichage de la carte
         folium_static(fmap)
-
 
 
 
