@@ -67,21 +67,27 @@ def calculate_cluster_centroids(coords, clusters):
 
     return centroids
 
-# Fonction pour ajouter les centroïdes des arbres à la carte
-def add_tree_centroids(map_object, centroids, bounds, image_shape, name):
+# Fonction pour ajouter les centroïdes des arbres sous forme de cercles
+def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_name):
     height = bounds[3] - bounds[1]
     width = bounds[2] - bounds[0]
     img_height, img_width = image_shape[:2]
 
+    feature_group = folium.FeatureGroup(name=layer_name)
     for _, centroid in centroids:
         lat = bounds[3] - height * (centroid[0] / img_height)
         lon = bounds[0] + width * (centroid[1] / img_width)
 
-        folium.Marker(
+        folium.CircleMarker(
             location=[lat, lon],
-            popup=f"Arbre",
-            icon=folium.Icon(color="green", icon="tree"),
-        ).add_to(map_object)
+            radius=3,  # Rayon du cercle en pixels
+            color="green",
+            fill=True,
+            fill_color="green",
+            fill_opacity=0.8,
+        ).add_to(feature_group)
+
+    feature_group.add_to(map_object)
 
 # Interface Streamlit
 st.title("Détection d'arbres avec clusters unifiés et centroïdes")
@@ -134,8 +140,8 @@ if mnt_file and mns_file:
             name="MNS"
         ).add_to(fmap)
 
-        # Ajouter les clusters d'arbres sur la carte
-        add_tree_centroids(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
+        # Ajouter la couche des arbres à la carte
+        add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
         fmap.add_child(MeasureControl())
         fmap.add_child(Draw(export=True))
         folium.LayerControl().add_to(fmap)
