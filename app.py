@@ -144,7 +144,7 @@ if mnt_file and mns_file:
         add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
         fmap.add_child(MeasureControl())
 
-         fmap.add_child(MeasureControl(position='topleft'))
+        fmap.add_child(MeasureControl(position='topleft'))
         fmap.add_child(Draw(position='topleft', export=True))
 
         # Ajouter le contrôle des couches à la carte (en haut à droite)
