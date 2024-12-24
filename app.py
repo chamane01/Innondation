@@ -90,7 +90,7 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
     feature_group.add_to(map_object)
 
 # Interface Streamlit
-st.title("Détection d'arbres automatique par African Techno Lab ")
+st.title("Détection d'arbres avec clusters unifiés et centroïdes")
 
 mnt_file = st.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
 mns_file = st.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
@@ -142,9 +142,13 @@ if mnt_file and mns_file:
 
         # Ajouter la couche des arbres à la carte
         add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
-        fmap.add_child(MeasureControl())
-        fmap.add_child(Draw(export=True))
-        folium.LayerControl().add_to(fmap)
+        
+        # Ajouter le contrôle de mesure et de dessin
+        fmap.add_child(MeasureControl(position='topright'))
+        fmap.add_child(Draw(position='topright', export=True))
+
+        # Ajouter le contrôle des couches à la carte (en haut à droite)
+        fmap.add_child(folium.LayerControl(position='topright'))
 
         # Afficher la carte
         folium_static(fmap)
