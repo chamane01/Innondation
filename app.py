@@ -81,14 +81,16 @@ def add_tree_clusters(map_object, coords, clusters, bounds, name):
         if cluster_id != -1:
             lat = bounds[3] - height * (coord[0] / coords.shape[0])
             lon = bounds[0] + width * (coord[1] / coords.shape[1])
-            folium.CircleMarker(
-                location=[lat, lon],
-                radius=3,
-                color="blue",
-                fill=True,
-                fill_opacity=0.6,
-                popup=f"Cluster: {cluster_id}"
-            ).add_to(map_object)
+            # Affichage des clusters uniquement dans les bornes du TIFF
+            if bounds[1] <= lat <= bounds[3] and bounds[0] <= lon <= bounds[2]:
+                folium.CircleMarker(
+                    location=[lat, lon],
+                    radius=3,
+                    color="blue",
+                    fill=True,
+                    fill_opacity=0.6,
+                    popup=f"Cluster: {cluster_id}"
+                ).add_to(map_object)
 
 # Interface Streamlit
 st.title("Détection d'arbres avec projection adaptée et DBSCAN")
@@ -139,8 +141,12 @@ if mnt_file and mns_file:
 
         # Ajouter les clusters d'arbres sur la carte
         add_tree_clusters(fmap, coords, tree_clusters, mnt_bounds, "Clusters d'arbres")
+        
+        # Outils de mesure et de dessin
         fmap.add_child(MeasureControl())
-        fmap.add_child(Draw(export=True))
+        fmap.add_child(Draw(export=True, position='bottomright'))  # Positionner l'outil d'export en bas à droite
+        
+        # Ajouter le contrôle des couches
         folium.LayerControl().add_to(fmap)
 
         # Afficher la carte
