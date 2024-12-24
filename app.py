@@ -152,7 +152,7 @@ if mnt_file and mns_file:
 
         # Ajouter un bouton d'export en bas de la carte
         
-        fmap.add_child(export_button)
+       
       
         folium.LayerControl().add_to(fmap)
 
