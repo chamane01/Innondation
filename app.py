@@ -76,13 +76,18 @@ def add_tree_clusters(map_object, coords, clusters, bounds, name):
     height = bounds[3] - bounds[1]
     width = bounds[2] - bounds[0]
 
+    # Limites du TIFF pour vérifier si les clusters sont dans la zone
+    min_lat, min_lon = bounds[1], bounds[0]
+    max_lat, max_lon = bounds[3], bounds[2]
+
     for i, coord in enumerate(coords):
         cluster_id = clusters[i]
         if cluster_id != -1:
             lat = bounds[3] - height * (coord[0] / coords.shape[0])
             lon = bounds[0] + width * (coord[1] / coords.shape[1])
-            # Affichage des clusters uniquement dans les bornes du TIFF
-            if bounds[1] <= lat <= bounds[3] and bounds[0] <= lon <= bounds[2]:
+
+            # Vérifier si le cluster est dans les bornes du TIFF
+            if min_lat <= lat <= max_lat and min_lon <= lon <= max_lon:
                 folium.CircleMarker(
                     location=[lat, lon],
                     radius=3,
@@ -141,17 +146,12 @@ if mnt_file and mns_file:
 
         # Ajouter les clusters d'arbres sur la carte
         add_tree_clusters(fmap, coords, tree_clusters, mnt_bounds, "Clusters d'arbres")
-        
-        # Outils de mesure et de dessin
         fmap.add_child(MeasureControl())
-        fmap.add_child(Draw(export=True, position='bottomright'))  # Positionner l'outil d'export en bas à droite
-        
-        # Ajouter le contrôle des couches
+        fmap.add_child(Draw(export=True))
         folium.LayerControl().add_to(fmap)
 
         # Afficher la carte
         folium_static(fmap)
-
 
 
 
