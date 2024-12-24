@@ -105,11 +105,13 @@ if tiff_file:
 import streamlit as st
 import numpy as np
 import rasterio
+from rasterio.warp import calculate_default_transform, reproject, Resampling
 from sklearn.cluster import DBSCAN
 import folium
 from folium import plugins
 from streamlit_folium import st_folium
 import matplotlib.pyplot as plt
+
 
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path):
@@ -119,9 +121,35 @@ def load_tiff(file_path):
         bounds = src.bounds  # Limites géographiques
     return data, profile, bounds
 
+
+# Fonction pour reprojeter un fichier TIFF vers une nouvelle projection
+def reproject_tiff(data, profile, src_crs, dst_crs="EPSG:4326"):
+    transform, width, height = calculate_default_transform(
+        src_crs, dst_crs, profile["width"], profile["height"], *profile["bounds"]
+    )
+    profile.update(
+        crs=dst_crs,
+        transform=transform,
+        width=width,
+        height=height,
+    )
+    reprojected_data = np.empty((height, width), dtype=data.dtype)
+    reproject(
+        source=data,
+        destination=reprojected_data,
+        src_transform=profile["transform"],
+        src_crs=src_crs,
+        dst_transform=transform,
+        dst_crs=dst_crs,
+        resampling=Resampling.nearest,
+    )
+    return reprojected_data, profile, transform
+
+
 # Fonction pour calculer la hauteur relative (MNS - MNT)
 def calculate_heights(mns, mnt):
     return np.maximum(0, mns - mnt)  # Évite les valeurs négatives
+
 
 # Fonction pour détecter les arbres avec DBSCAN
 def detect_trees(heights, threshold, eps, min_samples):
@@ -135,11 +163,13 @@ def detect_trees(heights, threshold, eps, min_samples):
     
     return coords, tree_clusters
 
+
 # Fonction pour normaliser les données pour affichage sur une carte
 def normalize(array):
     array = array.astype(float)
     array_min, array_max = np.nanmin(array), np.nanmax(array)
     return (array - array_min) / (array_max - array_min)
+
 
 # Interface Streamlit
 st.title("Détection d'arbres avec DBSCAN et carte interactive")
@@ -153,15 +183,25 @@ if mnt_file and mns_file:
     mnt, mnt_profile, mnt_bounds = load_tiff(mnt_file)
     mns, mns_profile, mns_bounds = load_tiff(mns_file)
     
+    # Reprojection des fichiers vers EPSG:4326
+    mnt_reprojected, mnt_profile, mnt_transform = reproject_tiff(mnt, mnt_profile, src_crs="EPSG:32630", dst_crs="EPSG:4326")
+    mns_reprojected, mns_profile, mns_transform = reproject_tiff(mns, mns_profile, src_crs="EPSG:32630", dst_crs="EPSG:4326")
+    
     # Calcul des hauteurs
-    heights = calculate_heights(mns, mnt)
+    heights = calculate_heights(mns_reprojected, mnt_reprojected)
     st.write("Hauteurs calculées (MNS - MNT)")
 
     # Paramètres de détection
     st.sidebar.title("Paramètres de détection")
-    height_threshold = st.sidebar.slider("Seuil de hauteur des arbres (m)", min_value=1, max_value=20, value=2)
-    eps = st.sidebar.slider("Rayon de voisinage (m)", min_value=1, max_value=10, value=2)
-    min_samples = st.sidebar.slider("Nombre minimum de points pour un arbre", min_value=1, max_value=10, value=5)
+    height_threshold = st.sidebar.slider(
+        "Seuil de hauteur des arbres (m)", min_value=0.5, max_value=20, value=1.0
+    )
+    eps = st.sidebar.slider(
+        "Rayon de voisinage (m)", min_value=1, max_value=10, value=2
+    )
+    min_samples = st.sidebar.slider(
+        "Nombre minimum de points pour un arbre", min_value=1, max_value=10, value=5
+    )
 
     # Détection des arbres
     coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
@@ -174,19 +214,18 @@ if mnt_file and mns_file:
     st.write("Carte interactive avec couches MNT et MNS")
     
     # Normaliser les données pour affichage
-    mnt_normalized = normalize(mnt)
-    mns_normalized = normalize(mns)
+    mnt_normalized = normalize(mnt_reprojected)
+    mns_normalized = normalize(mns_reprojected)
     
     # Créer une carte folium centrée sur les données
-    bounds = mnt_bounds
-    center_lat = (bounds.top + bounds.bottom) / 2
-    center_lon = (bounds.left + bounds.right) / 2
+    center_lat = (mnt_bounds.top + mnt_bounds.bottom) / 2
+    center_lon = (mnt_bounds.left + mnt_bounds.right) / 2
     m = folium.Map(location=[center_lat, center_lon], zoom_start=15)
     
     # Ajouter les couches MNT et MNS
     folium.raster_layers.ImageOverlay(
         image=mnt_normalized,
-        bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
+        bounds=[[mnt_bounds.bottom, mnt_bounds.left], [mnt_bounds.top, mnt_bounds.right]],
         opacity=0.6,
         colormap=lambda x: (1 - x, x, 0),  # Gradient vert-jaune
         name="MNT"
@@ -194,7 +233,7 @@ if mnt_file and mns_file:
 
     folium.raster_layers.ImageOverlay(
         image=mns_normalized,
-        bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
+        bounds=[[mns_bounds.bottom, mns_bounds.left], [mns_bounds.top, mns_bounds.right]],
         opacity=0.6,
         colormap=lambda x: (0, x, 1 - x),  # Gradient bleu-cyan
         name="MNS"
@@ -204,8 +243,10 @@ if mnt_file and mns_file:
     for (y, x), cluster in zip(coords, tree_clusters):
         if cluster != -1:  # Ignorer le bruit
             folium.CircleMarker(
-                location=[bounds.top - y * (bounds.top - bounds.bottom) / mnt.shape[0],
-                          bounds.left + x * (bounds.right - bounds.left) / mnt.shape[1]],
+                location=[
+                    mnt_bounds.top - y * (mnt_bounds.top - mnt_bounds.bottom) / mnt.shape[0],
+                    mnt_bounds.left + x * (mnt_bounds.right - mnt_bounds.left) / mnt.shape[1],
+                ],
                 radius=2,
                 color="red",
                 fill=True,
@@ -217,6 +258,7 @@ if mnt_file and mns_file:
 
     # Afficher la carte
     st_folium(m, width=800, height=600)
+
 
 
 
