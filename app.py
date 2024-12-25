@@ -209,6 +209,19 @@ if mnt_file and mns_file:
         # Calcul des centroïdes
         centroids = calculate_cluster_centroids(coords, tree_clusters)
 
+        
+        # Création des GeoJSON
+        tree_geojson = create_tree_geojson(centroids, mnt_bounds, mnt.shape)
+        
+        # Ajouter les boutons de téléchargement
+        st.sidebar.title("Téléchargement des couches")
+        st.sidebar.download_button(
+            label="Télécharger les arbres détectés (GeoJSON)",
+            data=json.dumps(tree_geojson),
+            file_name="arbres.geojson",
+            mime="application/json"
+        )
+        
         # Création de la carte
         center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
         center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
