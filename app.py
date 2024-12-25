@@ -249,10 +249,7 @@ def count_trees_in_polygon(centroids, geojson_data):
     return tree_count
 
 # Exemple d'utilisation
-geojson_data = gpd.read_file("chemin/vers/votre_fichier.geojson")  # Lire le fichier GeoJSON
-centroids = [(lat1, lon1), (lat2, lon2)]  # Exemple de liste de centroids
-tree_count = count_trees_in_polygon(centroids, geojson_data)
-print(f"Nombre d'arbres détectés : {tree_count}")
+
 # Interface Streamlit
 st.title("Détection d'arbres automatique ")
 
