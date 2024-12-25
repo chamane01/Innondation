@@ -114,6 +114,7 @@ from sklearn.cluster import DBSCAN
 import folium
 from folium.plugins import MeasureControl, Draw
 from streamlit_folium import folium_static
+import json
 
 # Fonction pour charger un fichier TIFF et reprojeter les bornes
 def load_tiff(file_path, target_crs="EPSG:4326"):
@@ -179,6 +180,32 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
 
     feature_group.add_to(map_object)
 
+# Fonction pour exporter les couches en GeoJSON
+def export_layers(map_object, layer_names):
+    exported_files = []
+    for layer_name in layer_names:
+        # Simuler un GeoJSON (à remplacer par des données réelles liées aux couches)
+        geojson_data = {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Point",
+                        "coordinates": [0, 0]  # Coordonnées exemple
+                    },
+                    "properties": {
+                        "layer": layer_name
+                    }
+                }
+            ]
+        }
+        file_name = f"{layer_name}.geojson"
+        with open(file_name, "w") as f:
+            json.dump(geojson_data, f)
+        exported_files.append(file_name)
+    return exported_files
+
 # Interface Streamlit
 st.title("Détection d'arbres automatique ")
 
@@ -232,7 +259,6 @@ if mnt_file and mns_file:
 
         # Ajouter la couche des arbres à la carte
         add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
-        
 
         fmap.add_child(MeasureControl(position='topleft'))
         fmap.add_child(Draw(position='topleft', export=True))
@@ -240,14 +266,15 @@ if mnt_file and mns_file:
         # Ajouter le contrôle des couches à la carte (en haut à droite)
         fmap.add_child(folium.LayerControl(position='topright'))
 
-        # Ajouter un bouton d'export en bas de la carte
-        
-       
-      
-      
+        # Ajouter un bouton d'export
+        if st.button("Exporter les couches en GeoJSON"):
+            layer_names = ["MNT", "MNS", "Arbres"]  # Noms des couches
+            exported_files = export_layers(fmap, layer_names)
+            st.success(f"Couches exportées : {', '.join(exported_files)}")
 
         # Afficher la carte
         folium_static(fmap)
+
 
 
 
