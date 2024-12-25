@@ -320,7 +320,7 @@ if mnt_file and mns_file:
                             'fillColor': 'transparent',
                             'color': 'white',
                             'weight': 2
-                            }
+                        }
                         
 
                     polygon = geojson_data
