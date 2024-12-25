@@ -114,7 +114,6 @@ from sklearn.cluster import DBSCAN
 import folium
 from folium.plugins import MeasureControl, Draw
 from streamlit_folium import folium_static
-import json
 
 # Fonction pour charger un fichier TIFF et reprojeter les bornes
 def load_tiff(file_path, target_crs="EPSG:4326"):
@@ -158,33 +157,30 @@ def calculate_cluster_centroids(coords, clusters):
 
     return centroids
 
-# Fonction pour créer un GeoJSON à partir des centroïdes
-def create_tree_geojson(centroids, bounds, image_shape):
+# Fonction pour ajouter les centroïdes des arbres sous forme de cercles
+def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_name):
     height = bounds[3] - bounds[1]
     width = bounds[2] - bounds[0]
     img_height, img_width = image_shape[:2]
 
-    features = []
+    feature_group = folium.FeatureGroup(name=layer_name)
     for _, centroid in centroids:
         lat = bounds[3] - height * (centroid[0] / img_height)
         lon = bounds[0] + width * (centroid[1] / img_width)
 
-        features.append({
-            "type": "Feature",
-            "geometry": {
-                "type": "Point",
-                "coordinates": [lon, lat]
-            },
-            "properties": {}
-        })
+        folium.CircleMarker(
+            location=[lat, lon],
+            radius=3,  # Rayon du cercle en pixels
+            color="green",
+            fill=True,
+            fill_color="green",
+            fill_opacity=0.8,
+        ).add_to(feature_group)
 
-    return {
-        "type": "FeatureCollection",
-        "features": features
-    }
+    feature_group.add_to(map_object)
 
 # Interface Streamlit
-st.title("Détection d'arbres automatique")
+st.title("Détection d'arbres automatique par African Techno Lab ")
 
 mnt_file = st.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
 mns_file = st.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
@@ -213,43 +209,45 @@ if mnt_file and mns_file:
         # Calcul des centroïdes
         centroids = calculate_cluster_centroids(coords, tree_clusters)
 
-        # Création des GeoJSON
-        tree_geojson = create_tree_geojson(centroids, mnt_bounds, mnt.shape)
-
-        # Ajouter les boutons de téléchargement
-        st.sidebar.title("Téléchargement des couches")
-        st.sidebar.download_button(
-            label="Télécharger les arbres détectés (GeoJSON)",
-            data=json.dumps(tree_geojson),
-            file_name="arbres.geojson",
-            mime="application/json"
-        )
-
-        # Afficher la carte
+        # Création de la carte
         center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
         center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
         fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
+        # Ajout du fichier TIFF MNT à la carte
+        folium.raster_layers.ImageOverlay(
+            image=mnt,
+            bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
+            opacity=0.5,
+            name="MNT"
+        ).add_to(fmap)
+
+        # Ajout du fichier TIFF MNS à la carte
+        folium.raster_layers.ImageOverlay(
+            image=mns,
+            bounds=[[mns_bounds[1], mns_bounds[0]], [mns_bounds[3], mns_bounds[2]]],
+            opacity=0.5,
+            name="MNS"
+        ).add_to(fmap)
+
         # Ajouter la couche des arbres à la carte
-        for _, centroid in centroids:
-            folium.CircleMarker(
-                location=[
-                    mnt_bounds[3] - (mnt_bounds[3] - mnt_bounds[1]) * (centroid[0] / mnt.shape[0]),
-                    mnt_bounds[0] + (mnt_bounds[2] - mnt_bounds[0]) * (centroid[1] / mnt.shape[1])
-                ],
-                radius=3,
-                color="green",
-                fill=True,
-                fill_color="green",
-                fill_opacity=0.8,
-            ).add_to(fmap)
+        add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
+        
 
         fmap.add_child(MeasureControl(position='topleft'))
         fmap.add_child(Draw(position='topleft', export=True))
 
+        # Ajouter le contrôle des couches à la carte (en haut à droite)
+        fmap.add_child(folium.LayerControl(position='topright'))
+
+        # Ajouter un bouton d'export en bas de la carte
+        
+       
+      
+      
+
+        # Afficher la carte
         folium_static(fmap)
-
-
 
 
 
