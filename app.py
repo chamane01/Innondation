@@ -17,87 +17,63 @@ import rasterio
 
 
 import streamlit as st
-import numpy as np
-import rasterio
-from rasterio.io import MemoryFile
-from scipy.ndimage import binary_erosion
-from scipy.interpolate import griddata
-import matplotlib.pyplot as plt
+import geopandas as gpd
+from shapely.geometry import Point
 
-# Fonction pour charger un fichier TIFF
-def load_tiff(file_path):
-    with rasterio.open(file_path) as src:
-        data = src.read(1)  # On lit uniquement la première bande
-        profile = src.profile
-    return data, profile
-
-# Fonction pour générer un MNT
-def generate_mnt(elevation_data, structure_size=3):
-    """
-    Génère un MNT en filtrant les objets élevés et en interpolant les données manquantes.
-    """
-    # Étape 1 : Filtrage morphologique pour détecter le sol
-    ground_mask = binary_erosion(elevation_data > 0, structure=np.ones((structure_size, structure_size)))
-
-    # Étape 2 : Interpolation pour combler les trous
-    x, y = np.meshgrid(np.arange(elevation_data.shape[1]), np.arange(elevation_data.shape[0]))
-    points = np.column_stack((x[ground_mask], y[ground_mask]))
-    values = elevation_data[ground_mask]
-    grid_z = griddata(points, values, (x, y), method='linear', fill_value=np.nan)
-
-    # Étape 3 : Remplir les valeurs NaN par une moyenne locale
-    grid_z_filled = np.nan_to_num(grid_z, nan=np.nanmean(grid_z))
-    return grid_z_filled
-
-# Fonction pour exporter le MNT en TIFF dans un fichier mémoire
-def export_mnt_to_tiff(mnt, profile):
-    """
-    Exporte le MNT dans un fichier TIFF et retourne un objet binaire pour le téléchargement.
-    """
-    profile.update({
-        "dtype": "float32",
-        "count": 1,
-        "compress": "lzw",
-    })
-
-    with MemoryFile() as memfile:
-        with memfile.open(**profile) as dataset:
-            dataset.write(mnt, 1)
-        return memfile.read()
+# Fonction pour vérifier si les points sont à l'intérieur de la polygonale
+def check_points_inside(polygon, points_gdf):
+    count_inside = 0
+    for _, row in points_gdf.iterrows():
+        point = Point(row['geometry'].x, row['geometry'].y)
+        if polygon.contains(point):
+            count_inside += 1
+    return count_inside
 
 # Interface Streamlit
-st.title("Génération d'un MNT à partir d'un fichier TIFF")
+def app():
+    st.title("Vérification des points à l'intérieur d'une polygonale")
 
-# Chargement du fichier TIFF
-tiff_file = st.file_uploader("Téléchargez un fichier TIFF contenant des données d'altitude", type=["tif", "tiff"])
+    # Téléchargement de la polygonale GeoJSON
+    geojson_file = st.file_uploader("Téléverser le fichier de la polygonale (GeoJSON)", type=["geojson"])
+    if geojson_file is not None:
+        # Charger le fichier GeoJSON avec GeoPandas
+        polygon_gdf = gpd.read_file(geojson_file)
+        st.write("Polygonale téléversée:")
+        st.write(polygon_gdf)
 
-if tiff_file:
-    # Charger les données
-    elevation_data, profile = load_tiff(tiff_file)
-    st.write("Données d'altitude chargées :")
-    st.image(elevation_data, caption="Image d'altitude", use_column_width=True, clamp=True)
+        # Vérification si le GeoJSON contient des polygones
+        if polygon_gdf.geometry.type[0] != 'Polygon' and polygon_gdf.geometry.type[0] != 'MultiPolygon':
+            st.error("Le fichier GeoJSON doit contenir des polygones.")
+            return
 
-    # Générer le MNT
-    structure_size = st.sidebar.slider("Taille du filtre morphologique (px)", 1, 10, 3)
-    mnt = generate_mnt(elevation_data, structure_size=structure_size)
+        # Récupérer le premier polygone (dans le cas où il y en a plusieurs)
+        polygon = polygon_gdf.geometry[0]
 
-    # Afficher les résultats
-    st.write("Modèle Numérique de Terrain (MNT) généré :")
-    fig, ax = plt.subplots(1, 2, figsize=(12, 6))
-    ax[0].imshow(elevation_data, cmap="terrain", interpolation="none")
-    ax[0].set_title("Données originales")
-    ax[1].imshow(mnt, cmap="terrain", interpolation="none")
-    ax[1].set_title("MNT généré")
-    st.pyplot(fig)
+        # Téléchargement du fichier de points GeoJSON
+        points_file = st.file_uploader("Téléverser le fichier de points (GeoJSON)", type=["geojson"])
+        if points_file is not None:
+            # Charger le fichier GeoJSON avec GeoPandas pour les points
+            points_gdf = gpd.read_file(points_file)
+            st.write("Fichier de points téléversé:")
+            st.write(points_gdf)
 
-    # Exportation et téléchargement
-    tiff_data = export_mnt_to_tiff(mnt, profile)
-    st.download_button(
-        label="Télécharger le MNT en TIFF",
-        data=tiff_data,
-        file_name="mnt_generated.tif",
-        mime="image/tiff"
-    )
+            # Vérification que le fichier de points contient des géométries de type 'Point'
+            if points_gdf.geometry.type[0] != 'Point':
+                st.error("Le fichier des points doit contenir des géométries de type 'Point'.")
+                return
+
+            # Vérification des points à l'intérieur de la polygonale
+            total_points = len(points_gdf)
+            points_inside = check_points_inside(polygon, points_gdf)
+
+            st.subheader("Résultats:")
+            st.write(f"Nombre total de points : {total_points}")
+            st.write(f"Nombre de points à l'intérieur de la polygonale : {points_inside}")
+        else:
+            st.warning("Veuillez téléverser un fichier de points GeoJSON.")
+
+if __name__ == "__main__":
+    app()
 
 
 
