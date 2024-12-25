@@ -306,6 +306,32 @@ if mnt_file and mns_file:
                         }
                     ).add_to(fmap)
 
+            if geojson_file:
+                polygon_data = load_geojson(geojson_file)
+                if polygon_data is not None:
+                    polygon = Polygon(polygon_data.geometry[0].coordinates[0])  # Assumer qu'il n'y a qu'un seul polygone
+                    # Compter les arbres dans la polygonale
+                    trees_in_polygon = 0
+                    for _, centroid in centroids:
+                        point = Point(centroid[1], centroid[0])  # (latitude, longitude)
+                        if point.within(polygon):
+                            trees_in_polygon += 1
+                    st.write(f"Nombre d'arbres à l'intérieur de la polygonale : {trees_in_polygon}")
+
+        
+                
+            
+            
+        
+                    
+        
+        
+        
+        
+        
+    
+    
+
             # Si un fichier de route est téléchargé, l'ajouter à la carte
             if route_file:
                 route_data = load_geojson(route_file)
