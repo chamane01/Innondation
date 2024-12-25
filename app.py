@@ -211,7 +211,7 @@ if mnt_file and mns_file:
 
         
         # Création des GeoJSON
-        tree_geojson = create_tree_geojson(centroids, mnt_bounds, mnt.shape)
+        tree_geojson = create_tree_geojson(centroids)
         
         # Ajouter les boutons de téléchargement
         st.sidebar.title("Téléchargement des couches")
