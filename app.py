@@ -116,7 +116,7 @@ from folium.plugins import MeasureControl, Draw
 from streamlit_folium import folium_static
 import json
 import geopandas as gpd
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, Point
 
 # Fonction pour charger un fichier TIFF et reprojeter les bornes
 def load_tiff(file_path, target_crs="EPSG:4326"):
@@ -170,6 +170,10 @@ def calculate_cluster_centroids(coords, clusters):
 
     return centroids
 
+# Fonction pour vérifier si un point est dans un polygone
+def is_point_in_polygon(point, polygon):
+    return polygon.contains(Point(point))
+
 # Fonction pour ajouter les centroïdes des arbres sous forme de cercles
 def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_name):
     height = bounds[3] - bounds[1]
@@ -193,14 +197,14 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
     feature_group.add_to(map_object)
 
 # Fonction pour exporter une couche en GeoJSON
-def export_layer(data, bounds, layer_name):
+def export_layer(data, bounds, centroids, layer_name):
     """Créer un GeoJSON pour une couche donnée."""
     features = []
     if layer_name == "Arbres":
         for centroid in centroids:
             _, (row, col) = centroid
-            lat1 = bounds[3] - (bounds[3] - bounds[1]) * (row / mnt.shape[0])
-            lon1 = bounds[0] + (bounds[2] - bounds[0]) * (col / mnt.shape[1])
+            lat1 = bounds[3] - (bounds[3] - bounds[1]) * (row / data.shape[0])
+            lon1 = bounds[0] + (bounds[2] - bounds[0]) * (col / data.shape[1])
             features.append({
                 "type": "Feature",
                 "geometry": {
@@ -265,6 +269,14 @@ if mnt_file and mns_file:
         # Calcul des centroïdes
         centroids = calculate_cluster_centroids(coords, tree_clusters)
 
+        # Calcul des arbres à l'intérieur de la polygonale
+        if geojson_file:
+            geojson_data = load_geojson(geojson_file)
+            if geojson_data is not None:
+                polygon = Polygon(geojson_data['geometry']['coordinates'][0])
+                trees_inside_polygon = [centroid for centroid in centroids if is_point_in_polygon((centroid[1][1], centroid[1][0]), polygon)]
+                st.write(f"Nombre d'arbres à l'intérieur de la polygonale : {len(trees_inside_polygon)}")
+
         # Ajouter un bouton pour afficher la carte
         if st.button("Afficher la carte"):
             # Création de la carte
@@ -316,15 +328,15 @@ if mnt_file and mns_file:
         # Ajouter un bouton pour exporter toutes les couches en GeoJSON
         if st.button("Exporter les couches en GeoJSON"):
             # Export du MNT
-            mnt_geojson = export_layer(mnt, mnt_bounds, "MNT")
+            mnt_geojson = export_layer(mnt, mnt_bounds, centroids, "MNT")
             st.download_button("Télécharger MNT", data=mnt_geojson, file_name="mnt.geojson", mime="application/json")
             
             # Export du MNS
-            mns_geojson = export_layer(mns, mns_bounds, "MNS")
+            mns_geojson = export_layer(mns, mns_bounds, centroids, "MNS")
             st.download_button("Télécharger MNS", data=mns_geojson, file_name="mns.geojson", mime="application/json")
             
             # Export des arbres
-            arbres_geojson = export_layer(None, mnt_bounds, "Arbres")
+            arbres_geojson = export_layer(None, mnt_bounds, centroids, "Arbres")
             st.download_button("Télécharger Arbres", data=arbres_geojson, file_name="arbres.geojson", mime="application/json")
 
 
