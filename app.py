@@ -103,6 +103,71 @@ if tiff_file:
 
 
 
+import streamlit as st
+import pandas as pd
+from shapely.geometry import Point, Polygon
+import io
+
+# Fonction pour lire un fichier CSV
+def load_csv(file):
+    return pd.read_csv(file)
+
+# Fonction pour vérifier si les points sont à l'intérieur de la polygonale
+def check_points_inside(polygon, points_df):
+    count_inside = 0
+    for _, row in points_df.iterrows():
+        point = Point(row['x'], row['y'])
+        if polygon.contains(point):
+            count_inside += 1
+    return count_inside
+
+# Interface Streamlit
+def app():
+    st.title("Vérification des points à l'intérieur d'une polygonale")
+
+    # Téléchargement de la polygonale
+    polygon_file = st.file_uploader("Téléverser le fichier de la polygonale (CSV avec colonnes x, y)", type=["csv"])
+    if polygon_file is not None:
+        polygon_df = load_csv(polygon_file)
+        st.write("Polygonale téléversée:")
+        st.write(polygon_df)
+
+        # Vérification de la validité des coordonnées
+        if not all(col in polygon_df.columns for col in ['x', 'y']):
+            st.error("Le fichier de la polygonale doit contenir les colonnes 'x' et 'y'.")
+            return
+
+        # Créer la polygonale à partir des points
+        polygon_points = list(zip(polygon_df['x'], polygon_df['y']))
+        polygon = Polygon(polygon_points)
+
+        # Affichage de la polygonale
+        st.map(polygon_df)
+
+        # Téléchargement du fichier de points
+        points_file = st.file_uploader("Téléverser le fichier de points (CSV avec colonnes x, y)", type=["csv"])
+        if points_file is not None:
+            points_df = load_csv(points_file)
+            st.write("Fichier de points téléversé:")
+            st.write(points_df)
+
+            # Vérification de la validité des coordonnées des points
+            if not all(col in points_df.columns for col in ['x', 'y']):
+                st.error("Le fichier des points doit contenir les colonnes 'x' et 'y'.")
+                return
+
+            # Vérification des points à l'intérieur de la polygonale
+            total_points = len(points_df)
+            points_inside = check_points_inside(polygon, points_df)
+
+            st.subheader("Résultats:")
+            st.write(f"Nombre total de points : {total_points}")
+            st.write(f"Nombre de points à l'intérieur de la polygonale : {points_inside}")
+        else:
+            st.warning("Veuillez téléverser un fichier de points.")
+
+if __name__ == "__main__":
+    app()
 
 
 
