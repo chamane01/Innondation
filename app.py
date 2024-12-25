@@ -118,7 +118,6 @@ from streamlit_folium import folium_static
 import json
 import geopandas as gpd
 from shapely.geometry import Polygon
-from shapely.geometry import Point
 
 # Fonction pour charger un fichier TIFF et reprojeter les bornes
 def load_tiff(file_path, target_crs="EPSG:4326"):
@@ -141,14 +140,7 @@ def load_geojson(file_path, target_crs="EPSG:4326"):
     try:
         gdf = gpd.read_file(file_path)
         gdf = gdf.to_crs(target_crs)  # Reprojection vers le CRS cible
-        
-        # Assurez-vous que le GeoDataFrame contient bien un polygone
-        if not gdf.empty and isinstance(gdf.geometry.iloc[0], Polygon):
-            polygon = gdf.geometry.iloc[0]  # Accéder au premier polygone
-            return polygon
-        else:
-            st.error("Le fichier GeoJSON ne contient pas de polygone valide.")
-            return None
+        return gdf
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
         return None
@@ -200,15 +192,6 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
         ).add_to(feature_group)
 
     feature_group.add_to(map_object)
-
-def count_trees_in_polygon(centroids, polygon):
-    count = 0
-    for _, centroid in centroids:
-        lat, lon = centroid
-        point = Point(lon, lat)  # Créer un objet Point à partir des coordonnées de l'arbre
-        if polygon.contains(point):
-            count += 1
-    return count
 
 # Fonction pour exporter une couche en GeoJSON
 def export_layer(data, bounds, layer_name):
@@ -322,11 +305,6 @@ if mnt_file and mns_file:
                             'weight': 2
                         }
                     ).add_to(fmap)
-                    
-                    num_trees_in_polygon = count_trees_in_polygon(centroids, geojson_data)
-                    st.write(f"Nombre d'arbres à l'intérieur du polygone : {num_trees_in_polygon}")
-
-                  
 
             # Si un fichier de route est téléchargé, l'ajouter à la carte
             if route_file:
