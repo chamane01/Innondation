@@ -176,6 +176,7 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
             fill=True,
             fill_color="green",
             fill_opacity=0.8,
+            popup=f"Centroïde: {lat}, {lon}"  # Afficher les coordonnées dans un popup
         ).add_to(feature_group)
 
     feature_group.add_to(map_object)
@@ -276,9 +277,10 @@ if mnt_file and mns_file:
         # Ajouter la couche des arbres à la carte
         add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
 
-        # Ajouter un contrôle de mesure (comme un onglet)
+        # Ajouter les outils de mesure et de dessin
         fmap.add_child(MeasureControl(position='topleft'))
-        fmap.add_child(Draw(position='topleft', export=True))
+        draw_control = Draw(position='topleft', export=True)
+        fmap.add_child(draw_control)
 
         # Ajouter le contrôle des couches à la carte (en haut à droite)
         fmap.add_child(folium.LayerControl(position='topright'))
@@ -286,6 +288,14 @@ if mnt_file and mns_file:
         # Afficher la carte
         folium_static(fmap)
 
+        # Afficher les informations du dessin dans le panneau latéral
+        draw_control.add_to(fmap)
+        st.sidebar.header("Informations sur l'élément")
+        st.sidebar.write("Cliquez sur un élément pour afficher ses informations ici.")
+        
+        # Capture des événements de dessin pour afficher les informations
+        draw_control.on_draw(lambda e: st.sidebar.write(f"Coordonnées : {e['latlng']}"))
+        
         # Ajouter un bouton pour exporter toutes les couches en GeoJSON
         if st.button("Exporter les couches en GeoJSON"):
             # Export du MNT
