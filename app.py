@@ -321,12 +321,10 @@ if mnt_file and mns_file:
                             'color': 'white',
                             'weight': 2
                         }
-                        
-
-                    polygon = geojson_data
-                    num_trees_in_polygon = count_trees_in_polygon(centroids, polygon)
-                    st.write(f"Nombre d'arbres à l'intérieur du polygone : {num_trees_in_polygon}")
                     ).add_to(fmap)
+                    
+                    num_trees_in_polygon = count_trees_in_polygon(centroids, geojson_data)
+                    st.write(f"Nombre d'arbres à l'intérieur du polygone : {num_trees_in_polygon}")
 
                   
 
