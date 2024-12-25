@@ -114,6 +114,7 @@ from sklearn.cluster import DBSCAN
 import folium
 from folium.plugins import MeasureControl, Draw
 from streamlit_folium import folium_static
+import json
 
 # Fonction pour charger un fichier TIFF et reprojeter les bornes
 def load_tiff(file_path, target_crs="EPSG:4326"):
@@ -179,8 +180,33 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
 
     feature_group.add_to(map_object)
 
+# Fonction pour créer un GeoJSON à partir des centroïdes
+def create_tree_geojson(centroids, bounds, image_shape):
+    height = bounds[3] - bounds[1]
+    width = bounds[2] - bounds[0]
+    img_height, img_width = image_shape[:2]
+
+    features = []
+    for _, centroid in centroids:
+        lat = bounds[3] - height * (centroid[0] / img_height)
+        lon = bounds[0] + width * (centroid[1] / img_width)
+
+        features.append({
+            "type": "Feature",
+            "geometry": {
+                "type": "Point",
+                "coordinates": [lon, lat]
+            },
+            "properties": {}
+        })
+
+    return {
+        "type": "FeatureCollection",
+        "features": features
+    }
+
 # Interface Streamlit
-st.title("Détection d'arbres automatique par African Techno Lab ")
+st.title("Détection d'arbres automatique")
 
 mnt_file = st.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
 mns_file = st.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
@@ -232,7 +258,6 @@ if mnt_file and mns_file:
 
         # Ajouter la couche des arbres à la carte
         add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
-        
 
         fmap.add_child(MeasureControl(position='topleft'))
         fmap.add_child(Draw(position='topleft', export=True))
@@ -240,14 +265,74 @@ if mnt_file and mns_file:
         # Ajouter le contrôle des couches à la carte (en haut à droite)
         fmap.add_child(folium.LayerControl(position='topright'))
 
-        # Ajouter un bouton d'export en bas de la carte
-        
-       
-      
-      
+        # Ajouter des boutons pour télécharger les couches
+        st.sidebar.title("Téléchargement des couches")
+
+        # Télécharger le fichier MNT en GeoJSON
+        if st.sidebar.button("Télécharger MNT en GeoJSON"):
+            mnt_geojson = {
+                "type": "FeatureCollection",
+                "features": [{
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [[
+                            [mnt_bounds[0], mnt_bounds[1]],
+                            [mnt_bounds[0], mnt_bounds[3]],
+                            [mnt_bounds[2], mnt_bounds[3]],
+                            [mnt_bounds[2], mnt_bounds[1]],
+                            [mnt_bounds[0], mnt_bounds[1]]
+                        ]]
+                    },
+                    "properties": {"name": "MNT"}
+                }]
+            }
+            st.download_button(
+                label="Télécharger MNT",
+                data=json.dumps(mnt_geojson),
+                file_name="mnt.geojson",
+                mime="application/json"
+            )
+
+        # Télécharger le fichier MNS en GeoJSON
+        if st.sidebar.button("Télécharger MNS en GeoJSON"):
+            mns_geojson = {
+                "type": "FeatureCollection",
+                "features": [{
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [[
+                            [mns_bounds[0], mns_bounds[1]],
+                            [mns_bounds[0], mns_bounds[3]],
+                            [mns_bounds[2], mns_bounds[3]],
+                            [mns_bounds[2], mns_bounds[1]],
+                            [mns_bounds[0], mns_bounds[1]]
+                        ]]
+                    },
+                    "properties": {"name": "MNS"}
+                }]
+            }
+            st.download_button(
+                label="Télécharger MNS",
+                data=json.dumps(mns_geojson),
+                file_name="mns.geojson",
+                mime="application/json"
+            )
+
+        # Télécharger les arbres détectés en GeoJSON
+        if st.sidebar.button("Télécharger arbres en GeoJSON"):
+            tree_geojson = create_tree_geojson(centroids, mnt_bounds, mnt.shape)
+            st.download_button(
+                label="Télécharger arbres",
+                data=json.dumps(tree_geojson),
+                file_name="arbres.geojson",
+                mime="application/json"
+            )
 
         # Afficher la carte
         folium_static(fmap)
+
 
 
 
