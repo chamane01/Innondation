@@ -114,6 +114,7 @@ from sklearn.cluster import DBSCAN
 import folium
 from folium.plugins import MeasureControl, Draw
 from streamlit_folium import folium_static
+import json
 
 # Fonction pour charger un fichier TIFF et reprojeter les bornes
 def load_tiff(file_path, target_crs="EPSG:4326"):
@@ -179,8 +180,50 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
 
     feature_group.add_to(map_object)
 
+# Fonction pour exporter une couche en GeoJSON
+def export_layer(data, bounds, layer_name):
+    """Créer un GeoJSON pour une couche donnée."""
+    features = []
+    if layer_name == "Arbres":
+        for centroid in centroids:
+            _, (row, col) = centroid
+            lat = bounds[3] - (bounds[3] - bounds[1]) * (row / mnt.shape[0])
+            lon = bounds[0] + (bounds[2] - bounds[0]) * (col / mnt.shape[1])
+            features.append({
+                "type": "Feature",
+                "geometry": {
+                    "type": "Point",
+                    "coordinates": [lon, lat]
+                },
+                "properties": {"type": "Arbre"}
+            })
+    else:
+        # Ajouter les bornes et valeurs en tant que polygones
+        for i, row in enumerate(data):
+            for j, value in enumerate(row):
+                lat1 = bounds[3] - (bounds[3] - bounds[1]) * (i / data.shape[0])
+                lat2 = bounds[3] - (bounds[3] - bounds[1]) * ((i + 1) / data.shape[0])
+                lon1 = bounds[0] + (bounds[2] - bounds[0]) * (j / data.shape[1])
+                lon2 = bounds[0] + (bounds[2] - bounds[0]) * ((j + 1) / data.shape[1])
+                features.append({
+                    "type": "Feature",
+                    "geometry": {
+                        "type": "Polygon",
+                        "coordinates": [[
+                            [lon1, lat1], [lon2, lat1], [lon2, lat2], [lon1, lat2], [lon1, lat1]
+                        ]]
+                    },
+                    "properties": {"value": value}
+                })
+
+    geojson = {
+        "type": "FeatureCollection",
+        "features": features
+    }
+    return json.dumps(geojson)
+
 # Interface Streamlit
-st.title("Détection d'arbres automatique par African Techno Lab ")
+st.title("Détection d'arbres automatique ")
 
 mnt_file = st.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
 mns_file = st.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
@@ -209,19 +252,6 @@ if mnt_file and mns_file:
         # Calcul des centroïdes
         centroids = calculate_cluster_centroids(coords, tree_clusters)
 
-        
-        # Création des GeoJSON
-        tree_geojson = create_tree_geojson(centroids)
-        
-        # Ajouter les boutons de téléchargement
-        st.sidebar.title("Téléchargement des couches")
-        st.sidebar.download_button(
-            label="Télécharger les arbres détectés (GeoJSON)",
-            data=json.dumps(tree_geojson),
-            file_name="arbres.geojson",
-            mime="application/json"
-        )
-        
         # Création de la carte
         center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
         center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
@@ -245,7 +275,6 @@ if mnt_file and mns_file:
 
         # Ajouter la couche des arbres à la carte
         add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
-        
 
         fmap.add_child(MeasureControl(position='topleft'))
         fmap.add_child(Draw(position='topleft', export=True))
@@ -253,14 +282,23 @@ if mnt_file and mns_file:
         # Ajouter le contrôle des couches à la carte (en haut à droite)
         fmap.add_child(folium.LayerControl(position='topright'))
 
-        # Ajouter un bouton d'export en bas de la carte
-        
-       
-      
-      
-
         # Afficher la carte
         folium_static(fmap)
+
+        # Ajouter un bouton pour exporter toutes les couches en GeoJSON
+        if st.button("Exporter toutes les couches en GeoJSON"):
+            # Export du MNT
+            mnt_geojson = export_layer(mnt, mnt_bounds, "MNT")
+            st.download_button("Télécharger MNT", data=mnt_geojson, file_name="mnt.geojson", mime="application/json")
+            
+            # Export du MNS
+            mns_geojson = export_layer(mns, mns_bounds, "MNS")
+            st.download_button("Télécharger MNS", data=mns_geojson, file_name="mns.geojson", mime="application/json")
+            
+            # Export des arbres
+            arbres_geojson = export_layer(None, mnt_bounds, "Arbres")
+            st.download_button("Télécharger Arbres", data=arbres_geojson, file_name="arbres.geojson", mime="application/json")
+
 
 
 
