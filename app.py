@@ -320,8 +320,8 @@ if mnt_file and mns_file:
                             'fillColor': 'transparent',
                             'color': 'white',
                             'weight': 2
-                        }
-
+                            }
+                        
 
                     polygon = geojson_data
                     num_trees_in_polygon = count_trees_in_polygon(centroids, polygon)
