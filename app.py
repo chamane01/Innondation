@@ -237,18 +237,22 @@ def export_layer(data, bounds, centroids, layer_name):
 
 # Fonction pour compter les arbres à l'intérieur de la polygonale
 def count_trees_in_polygon(centroids, geojson_data):
-    # Charger le GeoJSON avec les arbres
+    # Assurez-vous que geojson_data est un GeoDataFrame
     tree_count = 0
-    for feature in geojson_data['features']:
-        # Vérifier si le point est à l'intérieur de la zone polygonale
+    for _, feature in geojson_data.iterrows():
+        # Vous pouvez accéder à la géométrie avec feature['geometry']
         for centroid in centroids:
-            point = Point(centroid[1], centroid[0])  # Crée un point à partir des coordonnées du centroïde
-            polygon = shape(feature['geometry'])
+            point = Point(centroid[1], centroid[0])  # Crée un point avec les coordonnées du centroïde
+            polygon = feature['geometry']
             if polygon.contains(point):
                 tree_count += 1
-
     return tree_count
 
+# Exemple d'utilisation
+geojson_data = gpd.read_file("chemin/vers/votre_fichier.geojson")  # Lire le fichier GeoJSON
+centroids = [(lat1, lon1), (lat2, lon2)]  # Exemple de liste de centroids
+tree_count = count_trees_in_polygon(centroids, geojson_data)
+print(f"Nombre d'arbres détectés : {tree_count}")
 # Interface Streamlit
 st.title("Détection d'arbres automatique ")
 
