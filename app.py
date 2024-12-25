@@ -276,6 +276,7 @@ if mnt_file and mns_file:
         # Ajouter la couche des arbres à la carte
         add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
 
+        # Ajouter un contrôle de mesure (comme un onglet)
         fmap.add_child(MeasureControl(position='topleft'))
         fmap.add_child(Draw(position='topleft', export=True))
 
@@ -298,6 +299,7 @@ if mnt_file and mns_file:
             # Export des arbres
             arbres_geojson = export_layer(None, mnt_bounds, "Arbres")
             st.download_button("Télécharger Arbres", data=arbres_geojson, file_name="arbres.geojson", mime="application/json")
+
 
 
 
