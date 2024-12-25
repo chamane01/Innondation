@@ -176,7 +176,6 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
             fill=True,
             fill_color="green",
             fill_opacity=0.8,
-            popup=f"Centroïde: {lat}, {lon}"  # Afficher les coordonnées dans un popup
         ).add_to(feature_group)
 
     feature_group.add_to(map_object)
@@ -277,22 +276,14 @@ if mnt_file and mns_file:
         # Ajouter la couche des arbres à la carte
         add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
 
-        # Ajouter les outils de mesure et de dessin
         fmap.add_child(MeasureControl(position='topleft'))
-        draw_control = Draw(position='topleft', export=True)
-        fmap.add_child(draw_control)
+        fmap.add_child(Draw(position='topleft', export=True))
 
         # Ajouter le contrôle des couches à la carte (en haut à droite)
         fmap.add_child(folium.LayerControl(position='topright'))
 
         # Afficher la carte
         folium_static(fmap)
-
-        # Export des dessins en GeoJSON après ajout
-        if draw_control._drawn_items:
-            geojson_data = json.dumps(draw_control._drawn_items)
-            st.sidebar.header("Données du dessin")
-            st.sidebar.json(geojson_data)
 
         # Ajouter un bouton pour exporter toutes les couches en GeoJSON
         if st.button("Exporter les couches en GeoJSON"):
@@ -307,7 +298,6 @@ if mnt_file and mns_file:
             # Export des arbres
             arbres_geojson = export_layer(None, mnt_bounds, "Arbres")
             st.download_button("Télécharger Arbres", data=arbres_geojson, file_name="arbres.geojson", mime="application/json")
-
 
 
 
