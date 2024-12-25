@@ -144,25 +144,6 @@ def load_geojson(file_path, target_crs="EPSG:4326"):
         st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
         return None
 
-# Fonction pour compter les centroïdes à l'intérieur de la polygonale
-def count_centroids_in_polygon(centroids, polygon_geom):
-    """
-    Compte le nombre de centroïdes qui se trouvent à l'intérieur de la polygonale.
-    Args:
-        centroids (list): Liste des coordonnées des centroïdes [(id, (x, y))].
-        polygon_geom (Polygon): Géométrie de la polygonale (Shapely Polygon).
-    Returns:
-        int: Nombre de centroïdes à l'intérieur de la polygonale.
-    """
-    count = 0
-    for _, (x, y) in centroids:
-        point = Polygon([x, y])
-        if polygon_geom.contains(point):
-            count += 1
-    return count
-
-
-
 # Fonction pour calculer la hauteur relative (MNS - MNT)
 def calculate_heights(mns, mnt):
     return np.maximum(0, mns - mnt)  # Évite les valeurs négatives
@@ -324,17 +305,42 @@ if mnt_file and mns_file:
                         }
                     ).add_to(fmap)
 
-            if geojson_file:
-                geojson_data = load_geojson(geojson_file)
-                
-                if geojson_data is not None:
-                    # Assurez-vous qu'il y a une seule géométrie polygonale
-                    polygon_geom = geojson_data.geometry.unary_union  # Combine les géométries multiples
-                    if isinstance(polygon_geom, Polygon):
-                        num_centroids_in_polygon = count_centroids_in_polygon(centroids, polygon_geom)
-                        st.write(f"Nombre de centroïdes à l'intérieur de la polygonale : {num_centroids_in_polygon}")
-                    else:
-                        st.error("Le fichier GeoJSON doit contenir une géométrie polygonale.")
+            # Si un fichier de route est téléchargé, l'ajouter à la carte
+            if route_file:
+                route_data = load_geojson(route_file)
+                if route_data is not None:
+                    folium.GeoJson(
+                        route_data,
+                        style_function=lambda x: {
+                            'fillColor': 'transparent',
+                            'color': 'blue',
+                            'weight': 3
+                        },
+                        name="Route"
+                    ).add_to(fmap)
+
+            fmap.add_child(MeasureControl(position='topleft'))
+            fmap.add_child(Draw(position='topleft', export=True))
+
+            # Ajouter le contrôle des couches à la carte (en haut à droite)
+            fmap.add_child(folium.LayerControl(position='topright'))
+
+            # Afficher la carte
+            folium_static(fmap)
+
+        # Ajouter un bouton pour exporter toutes les couches en GeoJSON
+        if st.button("Exporter les couches en GeoJSON"):
+            # Export du MNT
+            mnt_geojson = export_layer(mnt, mnt_bounds, "MNT")
+            st.download_button("Télécharger MNT", data=mnt_geojson, file_name="mnt.geojson", mime="application/json")
+
+            # Export du MNS
+            mns_geojson = export_layer(mns, mns_bounds, "MNS")
+            st.download_button("Télécharger MNS", data=mns_geojson, file_name="mns.geojson", mime="application/json")
+
+            # Export des arbres
+            tree_geojson = export_layer(centroids, mnt_bounds, "Arbres")
+            st.download_button("Télécharger Arbres", data=tree_geojson, file_name="arbres.geojson", mime="application/json")
             
         
             
