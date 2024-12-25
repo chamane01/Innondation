@@ -117,6 +117,7 @@ from streamlit_folium import folium_static
 import json
 import geopandas as gpd
 from shapely.geometry import Polygon, shape
+from shapely.geometry import Point
 
 # Fonction pour charger un fichier TIFF et reprojeter les bornes
 def load_tiff(file_path, target_crs="EPSG:4326"):
@@ -235,16 +236,18 @@ def export_layer(data, bounds, centroids, layer_name):
     return json.dumps(geojson)
 
 # Fonction pour compter les arbres à l'intérieur de la polygonale
-def count_trees_in_polygon(centroids, geojson_polygon):
-    polygon = shape(geojson_polygon.geometry.iloc[0])  # On prend la première (seule) géométrie dans le GeoJSON
+def count_trees_in_polygon(centroids, geojson_data):
+    # Charger le GeoJSON avec les arbres
+    tree_count = 0
+    for feature in geojson_data['features']:
+        # Vérifier si le point est à l'intérieur de la zone polygonale
+        for centroid in centroids:
+            point = Point(centroid[1], centroid[0])  # Crée un point à partir des coordonnées du centroïde
+            polygon = shape(feature['geometry'])
+            if polygon.contains(point):
+                tree_count += 1
 
-    count = 0
-    for _, centroid in centroids:
-        point = Polygon([(centroid[1], centroid[0])])  # Crée un point à partir des coordonnées du centroïde
-        if polygon.contains(point):
-            count += 1
-
-    return count
+    return tree_count
 
 # Interface Streamlit
 st.title("Détection d'arbres automatique ")
