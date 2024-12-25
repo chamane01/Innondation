@@ -139,21 +139,15 @@ def load_tiff(file_path, target_crs="EPSG:4326"):
 # Fonction pour charger un fichier GeoJSON et le projeter
 def load_geojson(file_path, target_crs="EPSG:4326"):
     try:
-        # Charger le fichier GeoJSON
         gdf = gpd.read_file(file_path)
         gdf = gdf.to_crs(target_crs)  # Reprojection vers le CRS cible
         
-        # Afficher la structure pour déboguer
-        st.write("Structure du GeoDataFrame:", gdf)
-        
-        # Vérifier si la première géométrie est un Polygon ou MultiPolygon
-        geometry_type = gdf.geometry.iloc[0].geom_type
-        st.write(f"Type de la première géométrie : {geometry_type}")
-        
-        if geometry_type == 'Polygon' or geometry_type == 'MultiPolygon':
-            return gdf.geometry.iloc[0]  # Retourner le polygone ou multipolygone
+        # Assurez-vous que le GeoDataFrame contient bien un polygone
+        if not gdf.empty and isinstance(gdf.geometry.iloc[0], Polygon):
+            polygon = gdf.geometry.iloc[0]  # Accéder au premier polygone
+            return polygon
         else:
-            st.error("Le fichier GeoJSON ne contient pas un polygone ou multipolygone valide.")
+            st.error("Le fichier GeoJSON ne contient pas de polygone valide.")
             return None
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
@@ -206,6 +200,15 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
         ).add_to(feature_group)
 
     feature_group.add_to(map_object)
+
+def count_trees_in_polygon(centroids, polygon):
+    count = 0
+    for _, centroid in centroids:
+        lat, lon = centroid
+        point = Point(lon, lat)  # Créer un objet Point à partir des coordonnées de l'arbre
+        if polygon.contains(point):
+            count += 1
+    return count
 
 # Fonction pour exporter une couche en GeoJSON
 def export_layer(data, bounds, layer_name):
@@ -318,14 +321,14 @@ if mnt_file and mns_file:
                             'color': 'white',
                             'weight': 2
                         }
+
+
+                    polygon = geojson_data
+                    num_trees_in_polygon = count_trees_in_polygon(centroids, polygon)
+                    st.write(f"Nombre d'arbres à l'intérieur du polygone : {num_trees_in_polygon}")
                     ).add_to(fmap)
 
-                    # Convertir le GeoDataFrame en objet Shapely Polygon
-                    polygon = Polygon(geojson_data.geometry[0].coordinates[0])
-                    
-                    # Compter les arbres à l'intérieur de la polygonale
-                    num_trees_inside = count_trees_inside_polygon(centroids, polygon)
-                    st.write(f"Nombre d'arbres à l'intérieur de la polygonale : {num_trees_inside}")
+                  
 
             # Si un fichier de route est téléchargé, l'ajouter à la carte
             if route_file:
