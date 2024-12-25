@@ -288,14 +288,12 @@ if mnt_file and mns_file:
         # Afficher la carte
         folium_static(fmap)
 
-        # Afficher les informations du dessin dans le panneau latéral
-        draw_control.add_to(fmap)
-        st.sidebar.header("Informations sur l'élément")
-        st.sidebar.write("Cliquez sur un élément pour afficher ses informations ici.")
-        
-        # Capture des événements de dessin pour afficher les informations
-        draw_control.on_draw(lambda e: st.sidebar.write(f"Coordonnées : {e['latlng']}"))
-        
+        # Export des dessins en GeoJSON après ajout
+        if draw_control._drawn_items:
+            geojson_data = json.dumps(draw_control._drawn_items)
+            st.sidebar.header("Données du dessin")
+            st.sidebar.json(geojson_data)
+
         # Ajouter un bouton pour exporter toutes les couches en GeoJSON
         if st.button("Exporter les couches en GeoJSON"):
             # Export du MNT
