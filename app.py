@@ -105,8 +105,8 @@ if tiff_file:
 
 import streamlit as st
 import pandas as pd
-from shapely.geometry import Point, Polygon
-import io
+import geopandas as gpd
+from shapely.geometry import Point
 
 # Fonction pour lire un fichier CSV
 def load_csv(file):
@@ -123,26 +123,25 @@ def check_points_inside(polygon, points_df):
 
 # Interface Streamlit
 def app():
-    st.title("Vérification des points à l'intérieur d'une polygonale")
+    st.title("Vérification des points à l'intérieur d'une polygonale (GeoJSON)")
 
-    # Téléchargement de la polygonale
-    polygon_file = st.file_uploader("Téléverser le fichier de la polygonale (CSV avec colonnes x, y)", type=["csv"])
+    # Téléchargement du fichier GeoJSON pour la polygonale
+    polygon_file = st.file_uploader("Téléverser le fichier de la polygonale (GeoJSON)", type=["geojson"])
     if polygon_file is not None:
-        polygon_df = load_csv(polygon_file)
-        st.write("Polygonale téléversée:")
-        st.write(polygon_df)
-
-        # Vérification de la validité des coordonnées
-        if not all(col in polygon_df.columns for col in ['x', 'y']):
-            st.error("Le fichier de la polygonale doit contenir les colonnes 'x' et 'y'.")
+        # Charger la polygonale à partir du fichier GeoJSON
+        polygon_gdf = gpd.read_file(polygon_file)
+        
+        # Vérification que le fichier contient bien une géométrie polygonale
+        if polygon_gdf.geom_type[0] != 'Polygon' and polygon_gdf.geom_type[0] != 'MultiPolygon':
+            st.error("Le fichier GeoJSON doit contenir une géométrie de type 'Polygon' ou 'MultiPolygon'.")
             return
+        
+        # Afficher la polygonale
+        st.write("Polygonale téléversée:")
+        st.write(polygon_gdf)
 
-        # Créer la polygonale à partir des points
-        polygon_points = list(zip(polygon_df['x'], polygon_df['y']))
-        polygon = Polygon(polygon_points)
-
-        # Affichage de la polygonale
-        st.map(polygon_df)
+        # Récupérer la première géométrie du GeoDataFrame (si c'est une seule polygonale)
+        polygon = polygon_gdf.geometry[0]
 
         # Téléchargement du fichier de points
         points_file = st.file_uploader("Téléverser le fichier de points (CSV avec colonnes x, y)", type=["csv"])
@@ -163,6 +162,11 @@ def app():
             st.subheader("Résultats:")
             st.write(f"Nombre total de points : {total_points}")
             st.write(f"Nombre de points à l'intérieur de la polygonale : {points_inside}")
+
+            # Affichage de la polygonale sur une carte
+            st.subheader("Affichage de la polygonale")
+            st.map(polygon_gdf)
+
         else:
             st.warning("Veuillez téléverser un fichier de points.")
 
