@@ -115,6 +115,8 @@ import folium
 from folium.plugins import MeasureControl, Draw
 from streamlit_folium import folium_static
 import json
+import geopandas as gpd
+from shapely.geometry import Polygon
 
 # Fonction pour charger un fichier TIFF et reprojeter les bornes
 def load_tiff(file_path, target_crs="EPSG:4326"):
@@ -131,6 +133,16 @@ def load_tiff(file_path, target_crs="EPSG:4326"):
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None
+
+# Fonction pour charger un fichier GeoJSON et le projeter
+def load_geojson(file_path, target_crs="EPSG:4326"):
+    try:
+        gdf = gpd.read_file(file_path)
+        gdf = gdf.to_crs(target_crs)  # Reprojection vers le CRS cible
+        return gdf
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
+        return None
 
 # Fonction pour calculer la hauteur relative (MNS - MNT)
 def calculate_heights(mns, mnt):
@@ -187,13 +199,13 @@ def export_layer(data, bounds, layer_name):
     if layer_name == "Arbres":
         for centroid in centroids:
             _, (row, col) = centroid
-            lat = bounds[3] - (bounds[3] - bounds[1]) * (row / mnt.shape[0])
-            lon = bounds[0] + (bounds[2] - bounds[0]) * (col / mnt.shape[1])
+            lat1 = bounds[3] - (bounds[3] - bounds[1]) * (row / mnt.shape[0])
+            lon1 = bounds[0] + (bounds[2] - bounds[0]) * (col / mnt.shape[1])
             features.append({
                 "type": "Feature",
                 "geometry": {
                     "type": "Point",
-                    "coordinates": [lon, lat]
+                    "coordinates": [lon1, lat1]
                 },
                 "properties": {"type": "Arbre"}
             })
@@ -227,6 +239,7 @@ st.title("Détection d'arbres automatique ")
 
 mnt_file = st.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
 mns_file = st.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
+geojson_file = st.file_uploader("Téléchargez la polygonale (GeoJSON)", type=["geojson"])
 
 if mnt_file and mns_file:
     mnt, mnt_bounds = load_tiff(mnt_file)
@@ -278,6 +291,19 @@ if mnt_file and mns_file:
             # Ajouter la couche des arbres à la carte
             add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
 
+            # Si un fichier GeoJSON est téléchargé, l'ajouter à la carte
+            if geojson_file:
+                geojson_data = load_geojson(geojson_file)
+                if geojson_data is not None:
+                    folium.GeoJson(
+                        geojson_data,
+                        style_function=lambda x: {
+                            'fillColor': 'transparent',
+                            'color': 'white',
+                            'weight': 2
+                        }
+                    ).add_to(fmap)
+
             fmap.add_child(MeasureControl(position='topleft'))
             fmap.add_child(Draw(position='topleft', export=True))
 
@@ -300,6 +326,7 @@ if mnt_file and mns_file:
             # Export des arbres
             arbres_geojson = export_layer(None, mnt_bounds, "Arbres")
             st.download_button("Télécharger Arbres", data=arbres_geojson, file_name="arbres.geojson", mime="application/json")
+
 
 
 
