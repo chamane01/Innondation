@@ -1,5 +1,6 @@
 
 
+
 # Importer les bibliothèques nécessaires
 import streamlit as st
 import pandas as pd
@@ -140,14 +141,22 @@ def load_geojson(file_path, target_crs="EPSG:4326"):
     try:
         gdf = gpd.read_file(file_path)
         gdf = gdf.to_crs(target_crs)  # Reprojection vers le CRS cible
-        return gdf
+        
+        # Assurez-vous que le GeoDataFrame contient bien un polygone
+        if not gdf.empty and isinstance(gdf.geometry.iloc[0], Polygon):
+            polygon = gdf.geometry.iloc[0]  # Accéder au premier polygone
+            return polygon
+        else:
+            st.error("Le fichier GeoJSON ne contient pas de polygone valide.")
+            return None
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
         return None
-def count_trees_inside_polygon(centroids, polygon):
+def count_trees_in_polygon(centroids, polygon):
     count = 0
     for _, centroid in centroids:
-        point = Point(centroid)
+        lat, lon = centroid
+        point = Point(lon, lat)  # Créer un objet Point à partir des coordonnées de l'arbre
         if polygon.contains(point):
             count += 1
     return count
