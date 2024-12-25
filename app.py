@@ -114,7 +114,6 @@ from sklearn.cluster import DBSCAN
 import folium
 from folium.plugins import MeasureControl, Draw
 from streamlit_folium import folium_static
-import json
 
 # Fonction pour charger un fichier TIFF et reprojeter les bornes
 def load_tiff(file_path, target_crs="EPSG:4326"):
@@ -181,7 +180,7 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
     feature_group.add_to(map_object)
 
 # Interface Streamlit
-st.title("Détection d'arbres automatique avec export GeoJSON")
+st.title("Détection d'arbres automatique par African Techno Lab ")
 
 mnt_file = st.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
 mns_file = st.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
@@ -215,22 +214,40 @@ if mnt_file and mns_file:
         center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
         fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-        # Ajout des couches dynamiques
+        # Ajout du fichier TIFF MNT à la carte
+        folium.raster_layers.ImageOverlay(
+            image=mnt,
+            bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
+            opacity=0.5,
+            name="MNT"
+        ).add_to(fmap)
+
+        # Ajout du fichier TIFF MNS à la carte
+        folium.raster_layers.ImageOverlay(
+            image=mns,
+            bounds=[[mns_bounds[1], mns_bounds[0]], [mns_bounds[3], mns_bounds[2]]],
+            opacity=0.5,
+            name="MNS"
+        ).add_to(fmap)
+
+        # Ajouter la couche des arbres à la carte
         add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
+        
 
-        # Ajout des outils de dessin et d'exportation
-        draw = Draw(export=True)
-        fmap.add_child(draw)
+        fmap.add_child(MeasureControl(position='topleft'))
+        fmap.add_child(Draw(position='topleft', export=True))
 
-        # Ajouter des outils de mesure et contrôle des couches
-        fmap.add_child(MeasureControl())
-        fmap.add_child(folium.LayerControl())
+        # Ajouter le contrôle des couches à la carte (en haut à droite)
+        fmap.add_child(folium.LayerControl(position='topright'))
+
+        # Ajouter un bouton d'export en bas de la carte
+        
+       
+      
+      
 
         # Afficher la carte
         folium_static(fmap)
-
-
-
 
 
 
