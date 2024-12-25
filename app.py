@@ -286,7 +286,7 @@ if mnt_file and mns_file:
         folium_static(fmap)
 
         # Ajouter un bouton pour exporter toutes les couches en GeoJSON
-        if st.button("Exporter toutes les couches en GeoJSON"):
+        if st.button("Exporter les couches en GeoJSON"):
             # Export du MNT
             mnt_geojson = export_layer(mnt, mnt_bounds, "MNT")
             st.download_button("Télécharger MNT", data=mnt_geojson, file_name="mnt.geojson", mime="application/json")
