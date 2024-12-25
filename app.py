@@ -181,11 +181,12 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
     feature_group.add_to(map_object)
 
 # Fonction pour exporter une couche en GeoJSON
-def export_layer(data, bounds, centroids, layer_name):
+def export_layer(data, bounds, layer_name, centroids=None):
     """Créer un GeoJSON pour une couche donnée."""
     features = []
-    if layer_name == "Arbres":
-        for _, centroid in centroids:
+    
+    if layer_name == "Arbres" and centroids is not None:
+        for centroid in centroids:
             _, (row, col) = centroid
             lat = bounds[3] - (bounds[3] - bounds[1]) * (row / data.shape[0])
             lon = bounds[0] + (bounds[2] - bounds[0]) * (col / data.shape[1])
@@ -198,7 +199,7 @@ def export_layer(data, bounds, centroids, layer_name):
                 "properties": {"type": "Arbre"}
             })
     else:
-        # Ajouter les bornes et valeurs en tant que polygones
+        # Ajouter les bornes et valeurs en tant que polygones pour MNT/MNS
         for i, row in enumerate(data):
             for j, value in enumerate(row):
                 lat1 = bounds[3] - (bounds[3] - bounds[1]) * (i / data.shape[0])
@@ -240,68 +241,67 @@ if mnt_file and mns_file:
         heights = calculate_heights(mns, mnt)
         st.write("Hauteurs calculées (MNS - MNT)")
 
-        # Paramètres de détection
         st.sidebar.title("Paramètres de détection")
         height_threshold = st.sidebar.slider("Seuil de hauteur", 0.1, 20.0, 2.0, 0.1)
         eps = st.sidebar.slider("Rayon de voisinage", 0.1, 10.0, 2.0, 0.1)
         min_samples = st.sidebar.slider("Min. points pour un cluster", 1, 10, 5, 1)
 
-        # Sauvegarder les paramètres dans session_state
-        st.session_state.height_threshold = height_threshold
-        st.session_state.eps = eps
-        st.session_state.min_samples = min_samples
-
-        # Détecter les arbres avec DBSCAN chaque fois que les paramètres changent
-        coords, tree_clusters = detect_trees(heights, st.session_state.height_threshold, 
-                                             st.session_state.eps, st.session_state.min_samples)
+        coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
         num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
         st.write(f"Nombre d'arbres détectés : {num_trees}")
 
         # Calcul des centroïdes
         centroids = calculate_cluster_centroids(coords, tree_clusters)
 
-        # Création et mise à jour de la carte
-        center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
-        center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
-        fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+        # Ajouter un bouton pour afficher la carte
+        if st.button("Afficher la carte"):
+            # Création de la carte
+            center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
+            center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
+            fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-        # Ajout du fichier TIFF MNT à la carte
-        folium.raster_layers.ImageOverlay(
-            image=mnt,
-            bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
-            opacity=0.5,
-            name="MNT"
-        ).add_to(fmap)
+            # Ajout du fichier TIFF MNT à la carte
+            folium.raster_layers.ImageOverlay(
+                image=mnt,
+                bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
+                opacity=0.5,
+                name="MNT"
+            ).add_to(fmap)
 
-        # Ajout du fichier TIFF MNS à la carte
-        folium.raster_layers.ImageOverlay(
-            image=mns,
-            bounds=[[mns_bounds[1], mns_bounds[0]], [mns_bounds[3], mns_bounds[2]]],
-            opacity=0.5,
-            name="MNS"
-        ).add_to(fmap)
+            # Ajout du fichier TIFF MNS à la carte
+            folium.raster_layers.ImageOverlay(
+                image=mns,
+                bounds=[[mns_bounds[1], mns_bounds[0]], [mns_bounds[3], mns_bounds[2]]],
+                opacity=0.5,
+                name="MNS"
+            ).add_to(fmap)
 
-        # Ajouter la couche des arbres à la carte
-        add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
+            # Ajouter la couche des arbres à la carte
+            add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
 
-        fmap.add_child(MeasureControl(position='topleft'))
-        fmap.add_child(Draw(position='topleft', export=True))
+            fmap.add_child(MeasureControl(position='topleft'))
+            fmap.add_child(Draw(position='topleft', export=True))
 
-        # Ajouter le contrôle des couches à la carte (en haut à droite)
-        fmap.add_child(folium.LayerControl(position='topright'))
+            # Ajouter le contrôle des couches à la carte (en haut à droite)
+            fmap.add_child(folium.LayerControl(position='topright'))
 
-        # Afficher la carte
-        folium_static(fmap)
+            # Afficher la carte
+            folium_static(fmap)
 
-        # Exporter les couches en GeoJSON
-        mnt_geojson = export_layer(mnt, mnt_bounds, centroids, "MNT")
-        st.download_button("Télécharger MNT", data=mnt_geojson, file_name="mnt.geojson", mime="application/json")
-        
-        mns_geojson = export_layer(mns, mns_bounds, centroids, "MNS")
-        st.download_button("Télécharger MNS", data=mns_geojson, file_name="mns.geojson", mime="application/json")
-        
-        arbres_geojson = export_layer(None, mnt_bounds, centroids, "Arbres")
-        st.download_button("Télécharger Arbres", data=arbres_geojson, file_name="arbres.geojson", mime="application/json")
+        # Ajouter un bouton pour exporter toutes les couches en GeoJSON
+        if st.button("Exporter les couches en GeoJSON"):
+            # Export du MNT
+            mnt_geojson = export_layer(mnt, mnt_bounds, "MNT")
+            st.download_button("Télécharger MNT", data=mnt_geojson, file_name="mnt.geojson", mime="application/json")
+            
+            # Export du MNS
+            mns_geojson = export_layer(mns, mns_bounds, "MNS")
+            st.download_button("Télécharger MNS", data=mns_geojson, file_name="mns.geojson", mime="application/json")
+            
+            # Export des arbres
+            arbres_geojson = export_layer(None, mnt_bounds, "Arbres", centroids=centroids)
+            st.download_button("Télécharger Arbres", data=arbres_geojson, file_name="arbres.geojson", mime="application/json")
+
 
 
 
