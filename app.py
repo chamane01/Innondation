@@ -231,7 +231,7 @@ def utm_to_geographic(easting, northing, zone_number, zone_letter='N'):
     return lat, lon
 
 # Fonction de conversion des coordonnées géographiques à UTM
-def geographic_to_utm(lat, lon, zone_number=30, zone_letter='N'):
+def geographic_to_utm(lat, lon, zone_number=33, zone_letter='N'):
     wgs84 = Proj(init='epsg:4326')
     utm_proj = Proj(proj="utm", zone=zone_number, datum="WGS84")
     easting, northing = transform(wgs84, utm_proj, lon, lat)
