@@ -117,8 +117,6 @@ from streamlit_folium import folium_static
 import json
 import geopandas as gpd
 from shapely.geometry import Polygon
-from shapely.geometry import Point
-
 
 # Fonction pour charger un fichier TIFF et reprojeter les bornes
 def load_tiff(file_path, target_crs="EPSG:4326"):
@@ -145,19 +143,6 @@ def load_geojson(file_path, target_crs="EPSG:4326"):
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
         return None
-def count_trees_within_polygon(centroids, geojson_data, mnt_bounds, mnt_shape):
-    if geojson_data is None:
-        return 0
-    polygon = geojson_data.unary_union  # Combine tous les polygones en un seul
-    count = 0
-    for centroid in centroids:
-        lat = mnt_bounds[3] - (mnt_bounds[3] - mnt_bounds[1]) * (centroid[0] / mnt_shape[0])
-        lon = mnt_bounds[0] + (mnt_bounds[2] - mnt_bounds[0]) * (centroid[1] / mnt_shape[1])
-        point = Point(lon, lat)
-        if polygon.contains(point):
-            count += 1
-    return count
-
 
 # Fonction pour calculer la hauteur relative (MNS - MNT)
 def calculate_heights(mns, mnt):
@@ -334,17 +319,6 @@ if mnt_file and mns_file:
                         name="Route"
                     ).add_to(fmap)
 
-                    
-                    # Calcul et affichage du nombre d'arbres à l'intérieur de la polygonale
-                    num_trees_within_polygon = count_trees_within_polygon(
-                        centroids, geojson_data, mnt_bounds, mnt.shape
-                    )
-                    st.write(f"Nombre d'arbres à l'intérieur de la polygonale : {num_trees_within_polygon}")
-                    
-                        
-                
-                
-
             fmap.add_child(MeasureControl(position='topleft'))
             fmap.add_child(Draw(position='topleft', export=True))
 
@@ -353,7 +327,6 @@ if mnt_file and mns_file:
 
             # Afficher la carte
             folium_static(fmap)
-            
 
         # Ajouter un bouton pour exporter toutes les couches en GeoJSON
         if st.button("Exporter les couches en GeoJSON"):
