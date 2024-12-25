@@ -240,6 +240,7 @@ st.title("Détection d'arbres automatique ")
 mnt_file = st.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
 mns_file = st.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
 geojson_file = st.file_uploader("Téléchargez la polygonale (GeoJSON)", type=["geojson"])
+route_file = st.file_uploader("Téléchargez le fichier de route (GeoJSON)", type=["geojson"])  # Nouveau
 
 if mnt_file and mns_file:
     mnt, mnt_bounds = load_tiff(mnt_file)
@@ -304,6 +305,20 @@ if mnt_file and mns_file:
                         }
                     ).add_to(fmap)
 
+            # Si un fichier de route est téléchargé, l'ajouter à la carte
+            if route_file:
+                route_data = load_geojson(route_file)
+                if route_data is not None:
+                    folium.GeoJson(
+                        route_data,
+                        style_function=lambda x: {
+                            'fillColor': 'transparent',
+                            'color': 'blue',
+                            'weight': 3
+                        },
+                        name="Route"
+                    ).add_to(fmap)
+
             fmap.add_child(MeasureControl(position='topleft'))
             fmap.add_child(Draw(position='topleft', export=True))
 
@@ -318,14 +333,15 @@ if mnt_file and mns_file:
             # Export du MNT
             mnt_geojson = export_layer(mnt, mnt_bounds, "MNT")
             st.download_button("Télécharger MNT", data=mnt_geojson, file_name="mnt.geojson", mime="application/json")
-            
+
             # Export du MNS
             mns_geojson = export_layer(mns, mns_bounds, "MNS")
             st.download_button("Télécharger MNS", data=mns_geojson, file_name="mns.geojson", mime="application/json")
-            
+
             # Export des arbres
-            arbres_geojson = export_layer(None, mnt_bounds, "Arbres")
-            st.download_button("Télécharger Arbres", data=arbres_geojson, file_name="arbres.geojson", mime="application/json")
+            tree_geojson = export_layer(centroids, mnt_bounds, "Arbres")
+            st.download_button("Télécharger Arbres", data=tree_geojson, file_name="arbres.geojson", mime="application/json")
+
 
 
 
