@@ -109,12 +109,13 @@ if tiff_file:
 import streamlit as st
 import numpy as np
 import rasterio
-from rasterio.warp import transform_bounds
+from rasterio.warp import transform_bounds, CRS
 from sklearn.cluster import DBSCAN
 import folium
 from folium.plugins import MeasureControl, Draw
 from streamlit_folium import folium_static
 import json
+from pyproj import Proj, transform
 
 # Fonction pour charger un fichier TIFF et reprojeter les bornes
 def load_tiff(file_path, target_crs="EPSG:4326"):
@@ -127,10 +128,10 @@ def load_tiff(file_path, target_crs="EPSG:4326"):
             # Reprojeter les bornes vers le CRS cible
             target_bounds = transform_bounds(src_crs, target_crs, *bounds)
 
-        return data, target_bounds
+        return data, target_bounds, src_crs
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
-        return None, None
+        return None, None, None
 
 # Fonction pour calculer la hauteur relative (MNS - MNT)
 def calculate_heights(mns, mnt):
@@ -181,14 +182,14 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
     feature_group.add_to(map_object)
 
 # Fonction pour exporter une couche en GeoJSON
-def export_layer(data, bounds, layer_name):
+def export_layer(data, bounds, layer_name, mnt_shape=None):
     """Créer un GeoJSON pour une couche donnée."""
     features = []
     if layer_name == "Arbres":
         for centroid in centroids:
             _, (row, col) = centroid
-            lat = bounds[3] - (bounds[3] - bounds[1]) * (row / mnt.shape[0])
-            lon = bounds[0] + (bounds[2] - bounds[0]) * (col / mnt.shape[1])
+            lat = bounds[3] - (bounds[3] - bounds[1]) * (row / mnt_shape[0])
+            lon = bounds[0] + (bounds[2] - bounds[0]) * (col / mnt_shape[1])
             features.append({
                 "type": "Feature",
                 "geometry": {
@@ -222,6 +223,20 @@ def export_layer(data, bounds, layer_name):
     }
     return json.dumps(geojson)
 
+# Fonction de conversion des coordonnées UTM à géographiques
+def utm_to_geographic(easting, northing, zone_number, zone_letter='N'):
+    wgs84 = Proj(init='epsg:4326')
+    utm_proj = Proj(proj="utm", zone=zone_number, datum="WGS84")
+    lon, lat = transform(utm_proj, wgs84, easting, northing)
+    return lat, lon
+
+# Fonction de conversion des coordonnées géographiques à UTM
+def geographic_to_utm(lat, lon, zone_number=30, zone_letter='N'):
+    wgs84 = Proj(init='epsg:4326')
+    utm_proj = Proj(proj="utm", zone=zone_number, datum="WGS84")
+    easting, northing = transform(wgs84, utm_proj, lon, lat)
+    return easting, northing
+
 # Interface Streamlit
 st.title("Détection d'arbres automatique ")
 
@@ -229,8 +244,8 @@ mnt_file = st.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", 
 mns_file = st.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
 
 if mnt_file and mns_file:
-    mnt, mnt_bounds = load_tiff(mnt_file)
-    mns, mns_bounds = load_tiff(mns_file)
+    mnt, mnt_bounds, mnt_crs = load_tiff(mnt_file)
+    mns, mns_bounds, mns_crs = load_tiff(mns_file)
 
     if mnt is None or mns is None:
         st.error("Erreur lors du chargement des fichiers.")
@@ -288,16 +303,17 @@ if mnt_file and mns_file:
         # Ajouter un bouton pour exporter toutes les couches en GeoJSON
         if st.button("Exporter les couches en GeoJSON"):
             # Export du MNT
-            mnt_geojson = export_layer(mnt, mnt_bounds, "MNT")
+            mnt_geojson = export_layer(mnt, mnt_bounds, "MNT", mnt.shape)
             st.download_button("Télécharger MNT", data=mnt_geojson, file_name="mnt.geojson", mime="application/json")
             
             # Export du MNS
-            mns_geojson = export_layer(mns, mns_bounds, "MNS")
+            mns_geojson = export_layer(mns, mns_bounds, "MNS", mns.shape)
             st.download_button("Télécharger MNS", data=mns_geojson, file_name="mns.geojson", mime="application/json")
             
             # Export des arbres
-            arbres_geojson = export_layer(None, mnt_bounds, "Arbres")
+            arbres_geojson = export_layer(None, mnt_bounds, "Arbres", mnt.shape)
             st.download_button("Télécharger Arbres", data=arbres_geojson, file_name="arbres.geojson", mime="application/json")
+
 
 
 
