@@ -181,15 +181,14 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
     feature_group.add_to(map_object)
 
 # Fonction pour exporter une couche en GeoJSON
-def export_layer(data, bounds, layer_name, centroids=None):
+def export_layer(data, bounds, layer_name):
     """Créer un GeoJSON pour une couche donnée."""
     features = []
-    
-    if layer_name == "Arbres" and centroids is not None:
+    if layer_name == "Arbres":
         for centroid in centroids:
             _, (row, col) = centroid
-            lat = bounds[3] - (bounds[3] - bounds[1]) * (row / data.shape[0])
-            lon = bounds[0] + (bounds[2] - bounds[0]) * (col / data.shape[1])
+            lat = bounds[3] - (bounds[3] - bounds[1]) * (row / mnt.shape[0])
+            lon = bounds[0] + (bounds[2] - bounds[0]) * (col / mnt.shape[1])
             features.append({
                 "type": "Feature",
                 "geometry": {
@@ -199,7 +198,7 @@ def export_layer(data, bounds, layer_name, centroids=None):
                 "properties": {"type": "Arbre"}
             })
     else:
-        # Ajouter les bornes et valeurs en tant que polygones pour MNT/MNS
+        # Ajouter les bornes et valeurs en tant que polygones
         for i, row in enumerate(data):
             for j, value in enumerate(row):
                 lat1 = bounds[3] - (bounds[3] - bounds[1]) * (i / data.shape[0])
@@ -299,10 +298,8 @@ if mnt_file and mns_file:
             st.download_button("Télécharger MNS", data=mns_geojson, file_name="mns.geojson", mime="application/json")
             
             # Export des arbres
-            arbres_geojson = export_layer(None, mnt_bounds, "Arbres", centroids=centroids)
+            arbres_geojson = export_layer(None, mnt_bounds, "Arbres")
             st.download_button("Télécharger Arbres", data=arbres_geojson, file_name="arbres.geojson", mime="application/json")
-
-
 
 
 
