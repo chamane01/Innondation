@@ -117,6 +117,7 @@ from streamlit_folium import folium_static
 import json
 import geopandas as gpd
 from shapely.geometry import Polygon
+from shapely.geometry import Point
 
 # Fonction pour charger un fichier TIFF et reprojeter les bornes
 def load_tiff(file_path, target_crs="EPSG:4326"):
@@ -143,6 +144,14 @@ def load_geojson(file_path, target_crs="EPSG:4326"):
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
         return None
+def count_trees_inside_polygon(centroids, polygon):
+    count = 0
+    for _, centroid in centroids:
+        point = Point(centroid)
+        if polygon.contains(point):
+            count += 1
+    return count
+
 
 # Fonction pour calculer la hauteur relative (MNS - MNT)
 def calculate_heights(mns, mnt):
@@ -304,6 +313,13 @@ if mnt_file and mns_file:
                             'weight': 2
                         }
                     ).add_to(fmap)
+
+                    # Convertir le GeoDataFrame en objet Shapely Polygon
+                    polygon = Polygon(geojson_data.geometry[0].coordinates[0])
+                    
+                    # Compter les arbres à l'intérieur de la polygonale
+                    num_trees_inside = count_trees_inside_polygon(centroids, polygon)
+                    st.write(f"Nombre d'arbres à l'intérieur de la polygonale : {num_trees_inside}")
 
             # Si un fichier de route est téléchargé, l'ajouter à la carte
             if route_file:
