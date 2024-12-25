@@ -252,38 +252,40 @@ if mnt_file and mns_file:
         # Calcul des centroïdes
         centroids = calculate_cluster_centroids(coords, tree_clusters)
 
-        # Création de la carte
-        center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
-        center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
-        fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+        # Ajouter un bouton pour afficher la carte
+        if st.button("Afficher la carte"):
+            # Création de la carte
+            center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
+            center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
+            fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-        # Ajout du fichier TIFF MNT à la carte
-        folium.raster_layers.ImageOverlay(
-            image=mnt,
-            bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
-            opacity=0.5,
-            name="MNT"
-        ).add_to(fmap)
+            # Ajout du fichier TIFF MNT à la carte
+            folium.raster_layers.ImageOverlay(
+                image=mnt,
+                bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
+                opacity=0.5,
+                name="MNT"
+            ).add_to(fmap)
 
-        # Ajout du fichier TIFF MNS à la carte
-        folium.raster_layers.ImageOverlay(
-            image=mns,
-            bounds=[[mns_bounds[1], mns_bounds[0]], [mns_bounds[3], mns_bounds[2]]],
-            opacity=0.5,
-            name="MNS"
-        ).add_to(fmap)
+            # Ajout du fichier TIFF MNS à la carte
+            folium.raster_layers.ImageOverlay(
+                image=mns,
+                bounds=[[mns_bounds[1], mns_bounds[0]], [mns_bounds[3], mns_bounds[2]]],
+                opacity=0.5,
+                name="MNS"
+            ).add_to(fmap)
 
-        # Ajouter la couche des arbres à la carte
-        add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
+            # Ajouter la couche des arbres à la carte
+            add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
 
-        fmap.add_child(MeasureControl(position='topleft'))
-        fmap.add_child(Draw(position='topleft', export=True))
+            fmap.add_child(MeasureControl(position='topleft'))
+            fmap.add_child(Draw(position='topleft', export=True))
 
-        # Ajouter le contrôle des couches à la carte (en haut à droite)
-        fmap.add_child(folium.LayerControl(position='topright'))
+            # Ajouter le contrôle des couches à la carte (en haut à droite)
+            fmap.add_child(folium.LayerControl(position='topright'))
 
-        # Afficher la carte
-        folium_static(fmap)
+            # Afficher la carte
+            folium_static(fmap)
 
         # Ajouter un bouton pour exporter toutes les couches en GeoJSON
         if st.button("Exporter les couches en GeoJSON"):
@@ -298,6 +300,7 @@ if mnt_file and mns_file:
             # Export des arbres
             arbres_geojson = export_layer(None, mnt_bounds, "Arbres")
             st.download_button("Télécharger Arbres", data=arbres_geojson, file_name="arbres.geojson", mime="application/json")
+
 
 
 
