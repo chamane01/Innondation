@@ -125,8 +125,6 @@ def load_tiff(file_path, target_crs="EPSG:4326"):
             data = src.read(1)  # Lire la première bande
             src_crs = src.crs  # CRS source
             bounds = src.bounds  # Bornes source
-
-            # Reprojeter les bornes vers le CRS cible
             target_bounds = transform_bounds(src_crs, target_crs, *bounds)
 
         return data, target_bounds
@@ -144,89 +142,31 @@ def load_geojson(file_path, target_crs="EPSG:4326"):
         st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
         return None
 
-# Fonction pour calculer la hauteur relative (MNS - MNT)
-def calculate_heights(mns, mnt):
-    return np.maximum(0, mns - mnt)  # Évite les valeurs négatives
-
-# Fonction pour détecter les arbres avec DBSCAN
-def detect_trees(heights, threshold, eps, min_samples):
-    tree_mask = heights > threshold
-    coords = np.column_stack(np.where(tree_mask))
-
-    clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
-    tree_clusters = clustering.labels_
-
-    return coords, tree_clusters
-
-# Fonction pour calculer les centroïdes des clusters
-def calculate_cluster_centroids(coords, clusters):
-    unique_clusters = set(clusters) - {-1}  # Ignorer le bruit (-1)
-    centroids = []
-
-    for cluster_id in unique_clusters:
-        cluster_coords = coords[clusters == cluster_id]
-        centroid = cluster_coords.mean(axis=0)
-        centroids.append((cluster_id, centroid))
-
-    return centroids
-
-# Fonction pour ajouter les centroïdes des arbres sous forme de cercles
-def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_name):
-    height = bounds[3] - bounds[1]
-    width = bounds[2] - bounds[0]
-    img_height, img_width = image_shape[:2]
-
-    feature_group = folium.FeatureGroup(name=layer_name)
-    for _, centroid in centroids:
-        lat = bounds[3] - height * (centroid[0] / img_height)
-        lon = bounds[0] + width * (centroid[1] / img_width)
-
-        folium.CircleMarker(
-            location=[lat, lon],
-            radius=3,  # Rayon du cercle en pixels
-            color="green",
-            fill=True,
-            fill_color="green",
-            fill_opacity=0.8,
-        ).add_to(feature_group)
-
-    feature_group.add_to(map_object)
-
-# Fonction pour exporter une couche en GeoJSON
-def export_layer(data, bounds, layer_name):
-    """Créer un GeoJSON pour une couche donnée."""
+# Fonction pour exporter les couches visibles en GeoJSON
+def export_visible_layers(layers_data):
+    """Exporter toutes les couches visibles sur la carte."""
     features = []
-    if layer_name == "Arbres":
-        for centroid in centroids:
-            _, (row, col) = centroid
-            lat1 = bounds[3] - (bounds[3] - bounds[1]) * (row / mnt.shape[0])
-            lon1 = bounds[0] + (bounds[2] - bounds[0]) * (col / mnt.shape[1])
-            features.append({
-                "type": "Feature",
-                "geometry": {
-                    "type": "Point",
-                    "coordinates": [lon1, lat1]
-                },
-                "properties": {"type": "Arbre"}
-            })
-    else:
-        # Ajouter les bornes et valeurs en tant que polygones
-        for i, row in enumerate(data):
-            for j, value in enumerate(row):
-                lat1 = bounds[3] - (bounds[3] - bounds[1]) * (i / data.shape[0])
-                lat2 = bounds[3] - (bounds[3] - bounds[1]) * ((i + 1) / data.shape[0])
-                lon1 = bounds[0] + (bounds[2] - bounds[0]) * (j / data.shape[1])
-                lon2 = bounds[0] + (bounds[2] - bounds[0]) * ((j + 1) / data.shape[1])
-                features.append({
-                    "type": "Feature",
-                    "geometry": {
-                        "type": "Polygon",
-                        "coordinates": [[
-                            [lon1, lat1], [lon2, lat1], [lon2, lat2], [lon1, lat2], [lon1, lat1]
-                        ]]
-                    },
-                    "properties": {"value": value}
-                })
+    for layer_name, layer_data in layers_data.items():
+        if isinstance(layer_data, tuple):  # Raster layer
+            data, bounds = layer_data
+            for i, row in enumerate(data):
+                for j, value in enumerate(row):
+                    lat1 = bounds[3] - (bounds[3] - bounds[1]) * (i / data.shape[0])
+                    lat2 = bounds[3] - (bounds[3] - bounds[1]) * ((i + 1) / data.shape[0])
+                    lon1 = bounds[0] + (bounds[2] - bounds[0]) * (j / data.shape[1])
+                    lon2 = bounds[0] + (bounds[2] - bounds[0]) * ((j + 1) / data.shape[1])
+                    features.append({
+                        "type": "Feature",
+                        "geometry": {
+                            "type": "Polygon",
+                            "coordinates": [[
+                                [lon1, lat1], [lon2, lat1], [lon2, lat2], [lon1, lat2], [lon1, lat1]
+                            ]]
+                        },
+                        "properties": {"layer": layer_name, "value": value}
+                    })
+        elif isinstance(layer_data, gpd.GeoDataFrame):  # Vector layer
+            features.extend(json.loads(layer_data.to_json())['features'])
 
     geojson = {
         "type": "FeatureCollection",
@@ -235,11 +175,15 @@ def export_layer(data, bounds, layer_name):
     return json.dumps(geojson)
 
 # Interface Streamlit
-st.title("Détection d'arbres automatique ")
+st.title("Détection d'arbres automatique")
 
 mnt_file = st.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
 mns_file = st.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
-geojson_file = st.file_uploader("Téléchargez la polygonale (GeoJSON)", type=["geojson"])
+polygon_file = st.file_uploader("Téléchargez une polygonale (GeoJSON)", type=["geojson"])
+routes_file = st.file_uploader("Téléchargez un fichier de routes (GeoJSON)", type=["geojson"])
+
+# Initialisation des couches visibles
+visible_layers = {}
 
 if mnt_file and mns_file:
     mnt, mnt_bounds = load_tiff(mnt_file)
@@ -250,88 +194,55 @@ if mnt_file and mns_file:
     elif mnt_bounds != mns_bounds:
         st.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
     else:
-        heights = calculate_heights(mns, mnt)
-        st.write("Hauteurs calculées (MNS - MNT)")
+        visible_layers["MNT"] = (mnt, mnt_bounds)
+        visible_layers["MNS"] = (mns, mns_bounds)
 
-        st.sidebar.title("Paramètres de détection")
-        height_threshold = st.sidebar.slider("Seuil de hauteur", 0.1, 20.0, 2.0, 0.1)
-        eps = st.sidebar.slider("Rayon de voisinage", 0.1, 10.0, 2.0, 0.1)
-        min_samples = st.sidebar.slider("Min. points pour un cluster", 1, 10, 5, 1)
+        # Charger les fichiers GeoJSON
+        if polygon_file:
+            polygons = load_geojson(polygon_file)
+            if polygons is not None:
+                visible_layers["Polygonale"] = polygons
 
-        coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
-        num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
-        st.write(f"Nombre d'arbres détectés : {num_trees}")
+        if routes_file:
+            routes = load_geojson(routes_file)
+            if routes is not None:
+                visible_layers["Routes"] = routes
 
-        # Calcul des centroïdes
-        centroids = calculate_cluster_centroids(coords, tree_clusters)
-
-        # Ajouter un bouton pour afficher la carte
+        # Bouton pour afficher la carte
         if st.button("Afficher la carte"):
             # Création de la carte
             center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
             center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
             fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-            # Ajout du fichier TIFF MNT à la carte
-            folium.raster_layers.ImageOverlay(
-                image=mnt,
-                bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
-                opacity=0.5,
-                name="MNT"
-            ).add_to(fmap)
-
-            # Ajout du fichier TIFF MNS à la carte
-            folium.raster_layers.ImageOverlay(
-                image=mns,
-                bounds=[[mns_bounds[1], mns_bounds[0]], [mns_bounds[3], mns_bounds[2]]],
-                opacity=0.5,
-                name="MNS"
-            ).add_to(fmap)
-
-            # Ajouter la couche des arbres à la carte
-            add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
-
-            # Si un fichier GeoJSON est téléchargé, l'ajouter à la carte
-            if geojson_file:
-                geojson_data = load_geojson(geojson_file)
-                if geojson_data is not None:
+            # Ajout des couches
+            for name, data in visible_layers.items():
+                if isinstance(data, tuple):  # Raster data
+                    image, bounds = data
+                    folium.raster_layers.ImageOverlay(
+                        image=image,
+                        bounds=[[bounds[1], bounds[0]], [bounds[3], bounds[2]]],
+                        opacity=0.5,
+                        name=name
+                    ).add_to(fmap)
+                elif isinstance(data, gpd.GeoDataFrame):  # Vector data
                     folium.GeoJson(
-                        geojson_data,
-                        style_function=lambda x: {
-                            'fillColor': 'transparent',
-                            'color': 'white',
-                            'weight': 2
-                        }
+                        data,
+                        name=name,
+                        style_function=lambda x: {'fillColor': 'transparent', 'color': 'blue', 'weight': 2}
                     ).add_to(fmap)
 
-            fmap.add_child(MeasureControl(position='topleft'))
-            fmap.add_child(Draw(position='topleft', export=True))
-
-            # Ajouter le contrôle des couches à la carte (en haut à droite)
-            fmap.add_child(folium.LayerControl(position='topright'))
+            fmap.add_child(MeasureControl())
+            fmap.add_child(Draw())
+            fmap.add_child(folium.LayerControl())
 
             # Afficher la carte
             folium_static(fmap)
 
-        # Ajouter un bouton pour exporter toutes les couches en GeoJSON
+        # Bouton pour exporter les couches
         if st.button("Exporter les couches en GeoJSON"):
-            # Export du MNT
-            mnt_geojson = export_layer(mnt, mnt_bounds, "MNT")
-            st.download_button("Télécharger MNT", data=mnt_geojson, file_name="mnt.geojson", mime="application/json")
-            
-            # Export du MNS
-            mns_geojson = export_layer(mns, mns_bounds, "MNS")
-            st.download_button("Télécharger MNS", data=mns_geojson, file_name="mns.geojson", mime="application/json")
-            
-            # Export des arbres
-            arbres_geojson = export_layer(None, mnt_bounds, "Arbres")
-            st.download_button("Télécharger Arbres", data=arbres_geojson, file_name="arbres.geojson", mime="application/json")
-
-
-
-
-
-
+            geojson_data = export_visible_layers(visible_layers)
+            st.download_button("Télécharger les couches", data=geojson_data, file_name="layers.geojson", mime="application/json")
 
 
 
