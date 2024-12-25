@@ -158,28 +158,6 @@ def calculate_cluster_centroids(coords, clusters):
 
     return centroids
 
-# Fonction pour ajouter les centroïdes des arbres sous forme de cercles
-def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_name):
-    height = bounds[3] - bounds[1]
-    width = bounds[2] - bounds[0]
-    img_height, img_width = image_shape[:2]
-
-    feature_group = folium.FeatureGroup(name=layer_name)
-    for _, centroid in centroids:
-        lat = bounds[3] - height * (centroid[0] / img_height)
-        lon = bounds[0] + width * (centroid[1] / img_width)
-
-        folium.CircleMarker(
-            location=[lat, lon],
-            radius=3,  # Rayon du cercle en pixels
-            color="green",
-            fill=True,
-            fill_color="green",
-            fill_opacity=0.8,
-        ).add_to(feature_group)
-
-    feature_group.add_to(map_object)
-
 # Fonction pour créer un GeoJSON à partir des centroïdes
 def create_tree_geojson(centroids, bounds, image_shape):
     height = bounds[3] - bounds[1]
@@ -235,103 +213,42 @@ if mnt_file and mns_file:
         # Calcul des centroïdes
         centroids = calculate_cluster_centroids(coords, tree_clusters)
 
-        # Création de la carte
+        # Création des GeoJSON
+        tree_geojson = create_tree_geojson(centroids, mnt_bounds, mnt.shape)
+
+        # Ajouter les boutons de téléchargement
+        st.sidebar.title("Téléchargement des couches")
+        st.sidebar.download_button(
+            label="Télécharger les arbres détectés (GeoJSON)",
+            data=json.dumps(tree_geojson),
+            file_name="arbres.geojson",
+            mime="application/json"
+        )
+
+        # Afficher la carte
         center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
         center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
         fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-        # Ajout du fichier TIFF MNT à la carte
-        folium.raster_layers.ImageOverlay(
-            image=mnt,
-            bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
-            opacity=0.5,
-            name="MNT"
-        ).add_to(fmap)
-
-        # Ajout du fichier TIFF MNS à la carte
-        folium.raster_layers.ImageOverlay(
-            image=mns,
-            bounds=[[mns_bounds[1], mns_bounds[0]], [mns_bounds[3], mns_bounds[2]]],
-            opacity=0.5,
-            name="MNS"
-        ).add_to(fmap)
-
         # Ajouter la couche des arbres à la carte
-        add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
+        for _, centroid in centroids:
+            folium.CircleMarker(
+                location=[
+                    mnt_bounds[3] - (mnt_bounds[3] - mnt_bounds[1]) * (centroid[0] / mnt.shape[0]),
+                    mnt_bounds[0] + (mnt_bounds[2] - mnt_bounds[0]) * (centroid[1] / mnt.shape[1])
+                ],
+                radius=3,
+                color="green",
+                fill=True,
+                fill_color="green",
+                fill_opacity=0.8,
+            ).add_to(fmap)
 
         fmap.add_child(MeasureControl(position='topleft'))
         fmap.add_child(Draw(position='topleft', export=True))
 
-        # Ajouter le contrôle des couches à la carte (en haut à droite)
-        fmap.add_child(folium.LayerControl(position='topright'))
-
-        # Ajouter des boutons pour télécharger les couches
-        st.sidebar.title("Téléchargement des couches")
-
-        # Télécharger le fichier MNT en GeoJSON
-        if st.sidebar.button("Télécharger MNT en GeoJSON"):
-            mnt_geojson = {
-                "type": "FeatureCollection",
-                "features": [{
-                    "type": "Feature",
-                    "geometry": {
-                        "type": "Polygon",
-                        "coordinates": [[
-                            [mnt_bounds[0], mnt_bounds[1]],
-                            [mnt_bounds[0], mnt_bounds[3]],
-                            [mnt_bounds[2], mnt_bounds[3]],
-                            [mnt_bounds[2], mnt_bounds[1]],
-                            [mnt_bounds[0], mnt_bounds[1]]
-                        ]]
-                    },
-                    "properties": {"name": "MNT"}
-                }]
-            }
-            st.download_button(
-                label="Télécharger MNT",
-                data=json.dumps(mnt_geojson),
-                file_name="mnt.geojson",
-                mime="application/json"
-            )
-
-        # Télécharger le fichier MNS en GeoJSON
-        if st.sidebar.button("Télécharger MNS en GeoJSON"):
-            mns_geojson = {
-                "type": "FeatureCollection",
-                "features": [{
-                    "type": "Feature",
-                    "geometry": {
-                        "type": "Polygon",
-                        "coordinates": [[
-                            [mns_bounds[0], mns_bounds[1]],
-                            [mns_bounds[0], mns_bounds[3]],
-                            [mns_bounds[2], mns_bounds[3]],
-                            [mns_bounds[2], mns_bounds[1]],
-                            [mns_bounds[0], mns_bounds[1]]
-                        ]]
-                    },
-                    "properties": {"name": "MNS"}
-                }]
-            }
-            st.download_button(
-                label="Télécharger MNS",
-                data=json.dumps(mns_geojson),
-                file_name="mns.geojson",
-                mime="application/json"
-            )
-
-        # Télécharger les arbres détectés en GeoJSON
-        if st.sidebar.button("Télécharger arbres en GeoJSON"):
-            tree_geojson = create_tree_geojson(centroids, mnt_bounds, mnt.shape)
-            st.download_button(
-                label="Télécharger arbres",
-                data=json.dumps(tree_geojson),
-                file_name="arbres.geojson",
-                mime="application/json"
-            )
-
-        # Afficher la carte
         folium_static(fmap)
+
 
 
 
