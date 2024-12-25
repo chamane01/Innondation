@@ -139,28 +139,25 @@ def load_tiff(file_path, target_crs="EPSG:4326"):
 # Fonction pour charger un fichier GeoJSON et le projeter
 def load_geojson(file_path, target_crs="EPSG:4326"):
     try:
+        # Charger le fichier GeoJSON
         gdf = gpd.read_file(file_path)
         gdf = gdf.to_crs(target_crs)  # Reprojection vers le CRS cible
         
-        # Assurez-vous que le GeoDataFrame contient bien un polygone
-        if not gdf.empty and isinstance(gdf.geometry.iloc[0], Polygon):
-            polygon = gdf.geometry.iloc[0]  # Accéder au premier polygone
-            return polygon
+        # Afficher la structure pour déboguer
+        st.write("Structure du GeoDataFrame:", gdf)
+        
+        # Vérifier si la première géométrie est un Polygon ou MultiPolygon
+        geometry_type = gdf.geometry.iloc[0].geom_type
+        st.write(f"Type de la première géométrie : {geometry_type}")
+        
+        if geometry_type == 'Polygon' or geometry_type == 'MultiPolygon':
+            return gdf.geometry.iloc[0]  # Retourner le polygone ou multipolygone
         else:
-            st.error("Le fichier GeoJSON ne contient pas de polygone valide.")
+            st.error("Le fichier GeoJSON ne contient pas un polygone ou multipolygone valide.")
             return None
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
         return None
-def count_trees_in_polygon(centroids, polygon):
-    count = 0
-    for _, centroid in centroids:
-        lat, lon = centroid
-        point = Point(lon, lat)  # Créer un objet Point à partir des coordonnées de l'arbre
-        if polygon.contains(point):
-            count += 1
-    return count
-
 
 # Fonction pour calculer la hauteur relative (MNS - MNT)
 def calculate_heights(mns, mnt):
