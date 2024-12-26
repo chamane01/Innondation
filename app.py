@@ -118,6 +118,8 @@ import json
 import geopandas as gpd
 from shapely.geometry import Polygon
 from shapely.geometry import Point
+from pyproj import Transformer
+
 
 
 # Fonction pour charger un fichier TIFF et reprojeter les bornes
