@@ -143,13 +143,7 @@ def load_geojson(file_path, target_crs="EPSG:4326"):
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
         return None
-def count_points_in_polygon(centroids, polygon):
-    count = 0
-    for _, centroid in centroids:
-        point = Point(centroid[1], centroid[0])  # Notez l'inversion : (lon, lat)
-        if polygon.contains(point):
-            count += 1
-    return count
+
 # Fonction pour calculer la hauteur relative (MNS - MNT)
 def calculate_heights(mns, mnt):
     return np.maximum(0, mns - mnt)  # Évite les valeurs négatives
@@ -301,15 +295,6 @@ if mnt_file and mns_file:
             # Si un fichier GeoJSON est téléchargé, l'ajouter à la carte
             if geojson_file:
                 geojson_data = load_geojson(geojson_file)
-                # Calculer le nombre d'arbres dans la polygonale
-                num_trees_in_polygon = count_points_in_polygon(centroids, polygon)
-                st.write(f"Nombre d'arbres dans la polygonale : {num_trees_in_polygon}")
-        
-                
-        
-        
-
-                
                 if geojson_data is not None:
                     folium.GeoJson(
                         geojson_data,
