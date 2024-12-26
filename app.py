@@ -364,20 +364,26 @@ if mnt_file and mns_file:
                 
                     polygon_geom = geojson_data.geometry.unary_union  # Combine les géométries multiples
                     if isinstance(polygon_geom, Polygon):
-                        num_centroids_in_polygon = count_centroids_in_polygon(centroids, polygon_geom)
+                        num_centroids_in_polygon = count_centroids_in_polygon(
+                                centroids,
+                                polygon_geom,
+                                centroid_crs="EPSG:4326",  # CRS des centroïdes
+                                polygon_crs=geojson_data.crs.to_string()  # CRS de la polygonale
+                        )
+
+                 
+    
+                            
+                            
+    
+
                         st.write(f"Nombre de centroïdes à l'intérieur de la polygonale : {num_centroids_in_polygon}")
                     else:
                         st.error("Le fichier GeoJSON doit contenir une géométrie polygonale.")
             
            
         
-                    
-            
-        
-        
-        
-        
-    
+                
     
 
 
