@@ -192,6 +192,47 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
 
     feature_group.add_to(map_object)
 
+def count_centroids_in_polygon(centroids, polygon_geom):
+    """
+    Compte le nombre de centroïdes qui se trouvent à l'intérieur de la polygonale.
+    Args:
+        centroids (list): Liste des coordonnées des centroïdes [(id, (x, y))].
+        polygon_geom (Polygon): Géométrie de la polygonale (Shapely Polygon).
+    Returns:
+        int: Nombre de centroïdes à l'intérieur de la polygonale.
+    """
+    # Validation des données d'entrée
+    if not isinstance(centroids, list) or not centroids:
+        st.error("Les centroïdes fournis sont vides ou non valides.")
+        return 0
+
+    if not isinstance(polygon_geom, Polygon):
+        st.error("La géométrie fournie n'est pas un Polygon valide.")
+        return 0
+
+    count = 0
+    for centroid in centroids:
+        if len(centroid) != 2:
+            st.error(f"Structure inattendue pour le centroïde : {centroid}")
+            continue
+
+        _, coords = centroid
+        if len(coords) != 2:
+            st.error(f"Coordonnées incorrectes pour le centroïde : {coords}")
+            continue
+
+        try:
+            x, y = coords
+            point = Point(x, y)
+            if polygon_geom.contains(point):
+                count += 1
+        except Exception as e:
+            st.error(f"Erreur lors de la vérification du centroïde : {e}")
+            continue
+
+    return count
+
+
 # Fonction pour exporter une couche en GeoJSON
 def export_layer(data, bounds, layer_name):
     """Créer un GeoJSON pour une couche donnée."""
@@ -304,6 +345,30 @@ if mnt_file and mns_file:
                             'weight': 2
                         }
                     ).add_to(fmap)
+
+            if geojson_file:
+                geojson_data = load_geojson(geojson_file)
+                if geojson_data is not None:
+                    st.write(f"Centroïdes détectés : {centroids}")  # Debugging
+                    st.write(f"Géométrie GeoJSON : {geojson_data.geometry}")
+                    polygon_geom = geojson_data.geometry.unary_union  # Combine les géométries multiples
+                    if isinstance(polygon_geom, Polygon):
+                        num_centroids_in_polygon = count_centroids_in_polygon(centroids, polygon_geom)
+                        st.write(f"Nombre de centroïdes à l'intérieur de la polygonale : {num_centroids_in_polygon}")
+                    else:
+                        st.error("Le fichier GeoJSON doit contenir une géométrie polygonale.")
+            
+           
+        
+                    
+            
+        
+        
+        
+        
+    
+    
+
 
             # Si un fichier de route est téléchargé, l'ajouter à la carte
             if route_file:
