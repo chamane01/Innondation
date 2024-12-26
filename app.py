@@ -118,8 +118,6 @@ import json
 import geopandas as gpd
 from shapely.geometry import Polygon
 from shapely.geometry import Point
-from pyproj import Transformer
-
 
 
 # Fonction pour charger un fichier TIFF et reprojeter les bornes
@@ -196,14 +194,12 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
 
     feature_group.add_to(map_object)
 
-def count_centroids_in_polygon(centroids, polygon_geom, centroid_crs="EPSG:4326", polygon_crs="EPSG:4326"):
+def count_centroids_in_polygon(centroids, polygon_geom):
     """
     Compte le nombre de centroïdes qui se trouvent à l'intérieur de la polygonale.
     Args:
         centroids (list): Liste des coordonnées des centroïdes [(id, (x, y))].
         polygon_geom (Polygon): Géométrie de la polygonale (Shapely Polygon).
-        centroid_crs (str): CRS des centroïdes (par défaut EPSG:4326).
-        polygon_crs (str): CRS de la polygonale (par défaut EPSG:4326).
     Returns:
         int: Nombre de centroïdes à l'intérieur de la polygonale.
     """
@@ -215,11 +211,6 @@ def count_centroids_in_polygon(centroids, polygon_geom, centroid_crs="EPSG:4326"
     if not isinstance(polygon_geom, Polygon):
         st.error("La géométrie fournie n'est pas un Polygon valide.")
         return 0
-
-    # Créer un transformateur pour reprojeter les centroïdes si nécessaire
-    transformer = None
-    if centroid_crs != polygon_crs:
-        transformer = Transformer.from_crs(centroid_crs, polygon_crs, always_xy=True)
 
     count = 0
     for centroid in centroids:
@@ -234,10 +225,6 @@ def count_centroids_in_polygon(centroids, polygon_geom, centroid_crs="EPSG:4326"
 
         try:
             x, y = coords
-            # Reprojeter les centroïdes si nécessaire
-            if transformer:
-                x, y = transformer.transform(x, y)
-
             point = Point(x, y)
             if polygon_geom.contains(point):
                 count += 1
@@ -246,19 +233,7 @@ def count_centroids_in_polygon(centroids, polygon_geom, centroid_crs="EPSG:4326"
             continue
 
     return count
-def reproject_points(points, src_crs, target_crs):
-    src_crs = rasterio.crs.CRS.from_string(src_crs)
-    target_crs = rasterio.crs.CRS.from_string(target_crs)
-    transformer = rasterio.warp.Transformer.from_crs(src_crs, target_crs, always_xy=True)
-    reprojected_points = np.array([transformer.transform(pt[1], pt[0]) for pt in points])  # Y, X inversé en XY
-    return reprojected_points
 
-def trees_in_polygon(centroids, polygon_gdf):
-    tree_points = [Polygon([centroid[::-1]]) for _, centroid in centroids]  # Inverser en XY
-    trees_within_polygon = [
-        any(polygon_gdf.contains(tree_point)) for tree_point in tree_points
-    ]
-    return np.sum(trees_within_polygon)
 
 # Fonction pour exporter une couche en GeoJSON
 def export_layer(data, bounds, layer_name):
@@ -373,34 +348,26 @@ if mnt_file and mns_file:
                         }
                     ).add_to(fmap)
 
-     
-
             if geojson_file:
                 geojson_data = load_geojson(geojson_file)
                 if geojson_data is not None:
                 
                     polygon_geom = geojson_data.geometry.unary_union  # Combine les géométries multiples
                     if isinstance(polygon_geom, Polygon):
-                        num_centroids_in_polygon = count_centroids_in_polygon(
-                                centroids,
-                                polygon_geom,
-                                centroid_crs="EPSG:4326",  # CRS des centroïdes
-                                polygon_crs=geojson_data.crs.to_string()  # CRS de la polygonale
-                        )
-
-                 
-    
-                            
-                            
-    
-
+                        num_centroids_in_polygon = count_centroids_in_polygon(centroids, polygon_geom)
                         st.write(f"Nombre de centroïdes à l'intérieur de la polygonale : {num_centroids_in_polygon}")
                     else:
                         st.error("Le fichier GeoJSON doit contenir une géométrie polygonale.")
             
            
         
-                
+                    
+            
+        
+        
+        
+        
+    
     
 
 
