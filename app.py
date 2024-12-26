@@ -194,12 +194,14 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
 
     feature_group.add_to(map_object)
 
-def count_centroids_in_polygon(centroids, polygon_geom):
+def count_centroids_in_polygon(centroids, polygon_geom, centroid_crs="EPSG:4326", polygon_crs="EPSG:4326"):
     """
     Compte le nombre de centroïdes qui se trouvent à l'intérieur de la polygonale.
     Args:
         centroids (list): Liste des coordonnées des centroïdes [(id, (x, y))].
         polygon_geom (Polygon): Géométrie de la polygonale (Shapely Polygon).
+        centroid_crs (str): CRS des centroïdes (par défaut EPSG:4326).
+        polygon_crs (str): CRS de la polygonale (par défaut EPSG:4326).
     Returns:
         int: Nombre de centroïdes à l'intérieur de la polygonale.
     """
@@ -211,6 +213,11 @@ def count_centroids_in_polygon(centroids, polygon_geom):
     if not isinstance(polygon_geom, Polygon):
         st.error("La géométrie fournie n'est pas un Polygon valide.")
         return 0
+
+    # Créer un transformateur pour reprojeter les centroïdes si nécessaire
+    transformer = None
+    if centroid_crs != polygon_crs:
+        transformer = Transformer.from_crs(centroid_crs, polygon_crs, always_xy=True)
 
     count = 0
     for centroid in centroids:
@@ -225,6 +232,10 @@ def count_centroids_in_polygon(centroids, polygon_geom):
 
         try:
             x, y = coords
+            # Reprojeter les centroïdes si nécessaire
+            if transformer:
+                x, y = transformer.transform(x, y)
+
             point = Point(x, y)
             if polygon_geom.contains(point):
                 count += 1
@@ -233,7 +244,6 @@ def count_centroids_in_polygon(centroids, polygon_geom):
             continue
 
     return count
-
 
 # Fonction pour exporter une couche en GeoJSON
 def export_layer(data, bounds, layer_name):
