@@ -170,29 +170,6 @@ def calculate_cluster_centroids(coords, clusters):
 
     return centroids
 
-# Fonction pour transformer les coordonnées locales en coordonnées géographiques
-def transform_to_geographic_coords(centroids, bounds, image_shape):
-    height = bounds[3] - bounds[1]
-    width = bounds[2] - bounds[0]
-    img_height, img_width = image_shape[:2]
-    
-    geographic_coords = []
-    for _, centroid in centroids:
-        lat = bounds[3] - height * (centroid[0] / img_height)
-        lon = bounds[0] + width * (centroid[1] / img_width)
-        geographic_coords.append((lat, lon))
-    
-    return geographic_coords
-
-# Fonction pour vérifier si un centroid est à l'intérieur du polygone d'intérêt
-def check_centroids_within_polygon(centroids, polygon):
-    inside_centroids = []
-    for lat, lon in centroids:
-        point = Polygon([(lon, lat)])
-        if polygon.contains(point):
-            inside_centroids.append((lat, lon))
-    return inside_centroids
-
 # Fonction pour ajouter les centroïdes des arbres sous forme de cercles
 def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_name):
     height = bounds[3] - bounds[1]
@@ -200,7 +177,10 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
     img_height, img_width = image_shape[:2]
 
     feature_group = folium.FeatureGroup(name=layer_name)
-    for lat, lon in centroids:
+    for _, centroid in centroids:
+        lat = bounds[3] - height * (centroid[0] / img_height)
+        lon = bounds[0] + width * (centroid[1] / img_width)
+
         folium.CircleMarker(
             location=[lat, lon],
             radius=3,  # Rayon du cercle en pixels
@@ -217,9 +197,10 @@ def export_layer(data, bounds, layer_name):
     """Créer un GeoJSON pour une couche donnée."""
     features = []
     if layer_name == "Arbres":
-        for centroid in data:
-            lat1 = bounds[3] - (bounds[3] - bounds[1]) * (centroid[0] / data.shape[0])
-            lon1 = bounds[0] + (bounds[2] - bounds[0]) * (centroid[1] / data.shape[1])
+        for centroid in centroids:
+            _, (row, col) = centroid
+            lat1 = bounds[3] - (bounds[3] - bounds[1]) * (row / mnt.shape[0])
+            lon1 = bounds[0] + (bounds[2] - bounds[0]) * (col / mnt.shape[1])
             features.append({
                 "type": "Feature",
                 "geometry": {
@@ -259,7 +240,7 @@ st.title("Détection d'arbres automatique ")
 mnt_file = st.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
 mns_file = st.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
 geojson_file = st.file_uploader("Téléchargez la polygonale (GeoJSON)", type=["geojson"])
-route_file = st.file_uploader("Téléchargez le fichier de route (GeoJSON)", type=["geojson"])
+route_file = st.file_uploader("Téléchargez le fichier de route (GeoJSON)", type=["geojson"])  # Nouveau
 
 if mnt_file and mns_file:
     mnt, mnt_bounds = load_tiff(mnt_file)
@@ -285,35 +266,6 @@ if mnt_file and mns_file:
         # Calcul des centroïdes
         centroids = calculate_cluster_centroids(coords, tree_clusters)
 
-        # Conversion des coordonnées locales en coordonnées géographiques
-        geographic_coords = transform_to_geographic_coords(centroids, mnt_bounds, mnt.shape)
-
-        # Si un fichier GeoJSON est téléchargé, vérifier la position des centroïdes
-        if geojson_file:
-            geojson_data = load_geojson(geojson_file)
-            if geojson_data is not None:
-    # S'assurer que le fichier contient bien des géométries de type 'Polygon' ou 'MultiPolygon'
-    for feature in geojson_data['features']:
-        geom_type = feature['geometry']['type']
-        if geom_type in ['Polygon', 'MultiPolygon']:
-            # Créer un polygone avec les coordonnées du GeoJSON
-            coords = feature['geometry']['coordinates']
-            if geom_type == 'Polygon':
-                # Si c'est un seul polygone
-                polygon = Polygon(coords[0])  # Coordonnées du premier polygone
-            elif geom_type == 'MultiPolygon':
-                # Si c'est un ensemble de polygones
-                polygons = [Polygon(c[0]) for c in coords]
-                
-            # Vous pouvez maintenant utiliser ce polygone pour l'ajouter à la carte
-            folium.GeoJson(
-                feature,
-                style_function=lambda x: {
-                    'fillColor': 'transparent',
-                    'color': 'white',
-                    'weight': 2
-                }
-            ).add_to(fmap)
         # Ajouter un bouton pour afficher la carte
         if st.button("Afficher la carte"):
             # Création de la carte
@@ -338,28 +290,57 @@ if mnt_file and mns_file:
             ).add_to(fmap)
 
             # Ajouter la couche des arbres à la carte
-            add_tree_centroids_layer(fmap, inside_centroids, mnt_bounds, mnt.shape, "Arbres")
+            add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
 
-            # Ajouter la couche de la polygonale si un fichier est téléchargé
+            # Si un fichier GeoJSON est téléchargé, l'ajouter à la carte
             if geojson_file:
-                folium.GeoJson(
-                    geojson_data,
-                    style_function=lambda x: {
-                        'fillColor': 'transparent',
-                        'color': 'white',
-                        'weight': 2
-                    }
-                ).add_to(fmap)
+                geojson_data = load_geojson(geojson_file)
+                if geojson_data is not None:
+                    folium.GeoJson(
+                        geojson_data,
+                        style_function=lambda x: {
+                            'fillColor': 'transparent',
+                            'color': 'white',
+                            'weight': 2
+                        }
+                    ).add_to(fmap)
 
-            # Ajouter le contrôle des couches à la carte (en haut à droite)
+            # Si un fichier de route est téléchargé, l'ajouter à la carte
+            if route_file:
+                route_data = load_geojson(route_file)
+                if route_data is not None:
+                    folium.GeoJson(
+                        route_data,
+                        style_function=lambda x: {
+                            'fillColor': 'transparent',
+                            'color': 'blue',
+                            'weight': 3
+                        },
+                        name="Route"
+                    ).add_to(fmap)
+
             fmap.add_child(MeasureControl(position='topleft'))
             fmap.add_child(Draw(position='topleft', export=True))
+
+            # Ajouter le contrôle des couches à la carte (en haut à droite)
             fmap.add_child(folium.LayerControl(position='topright'))
 
             # Afficher la carte
             folium_static(fmap)
 
+        # Ajouter un bouton pour exporter toutes les couches en GeoJSON
+        if st.button("Exporter les couches en GeoJSON"):
+            # Export du MNT
+            mnt_geojson = export_layer(mnt, mnt_bounds, "MNT")
+            st.download_button("Télécharger MNT", data=mnt_geojson, file_name="mnt.geojson", mime="application/json")
 
+            # Export du MNS
+            mns_geojson = export_layer(mns, mns_bounds, "MNS")
+            st.download_button("Télécharger MNS", data=mns_geojson, file_name="mns.geojson", mime="application/json")
+
+            # Export des arbres
+            tree_geojson = export_layer(centroids, mnt_bounds, "Arbres")
+            st.download_button("Télécharger Arbres", data=tree_geojson, file_name="arbres.geojson", mime="application/json")
 
 
 
