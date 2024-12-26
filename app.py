@@ -1,6 +1,5 @@
 
 
-
 # Importer les bibliothèques nécessaires
 import streamlit as st
 import pandas as pd
@@ -106,6 +105,7 @@ if tiff_file:
 
 
 
+
 import streamlit as st
 import numpy as np
 import rasterio
@@ -117,8 +117,6 @@ from streamlit_folium import folium_static
 import json
 import geopandas as gpd
 from shapely.geometry import Polygon
-from shapely.geometry import Point
-
 
 # Fonction pour charger un fichier TIFF et reprojeter les bornes
 def load_tiff(file_path, target_crs="EPSG:4326"):
@@ -193,47 +191,6 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
         ).add_to(feature_group)
 
     feature_group.add_to(map_object)
-
-def count_centroids_in_polygon(centroids, polygon_geom):
-    """
-    Compte le nombre de centroïdes qui se trouvent à l'intérieur de la polygonale.
-    Args:
-        centroids (list): Liste des coordonnées des centroïdes [(id, (x, y))].
-        polygon_geom (Polygon): Géométrie de la polygonale (Shapely Polygon).
-    Returns:
-        int: Nombre de centroïdes à l'intérieur de la polygonale.
-    """
-    # Validation des données d'entrée
-    if not isinstance(centroids, list) or not centroids:
-        st.error("Les centroïdes fournis sont vides ou non valides.")
-        return 0
-
-    if not isinstance(polygon_geom, Polygon):
-        st.error("La géométrie fournie n'est pas un Polygon valide.")
-        return 0
-
-    count = 0
-    for centroid in centroids:
-        if len(centroid) != 2:
-            st.error(f"Structure inattendue pour le centroïde : {centroid}")
-            continue
-
-        _, coords = centroid
-        if len(coords) != 2:
-            st.error(f"Coordonnées incorrectes pour le centroïde : {coords}")
-            continue
-
-        try:
-            x, y = coords
-            point = Point(x, y)
-            if polygon_geom.contains(point):
-                count += 1
-        except Exception as e:
-            st.error(f"Erreur lors de la vérification du centroïde : {e}")
-            continue
-
-    return count
-
 
 # Fonction pour exporter une couche en GeoJSON
 def export_layer(data, bounds, layer_name):
@@ -348,29 +305,6 @@ if mnt_file and mns_file:
                         }
                     ).add_to(fmap)
 
-            if geojson_file:
-                geojson_data = load_geojson(geojson_file)
-                if geojson_data is not None:
-                
-                    polygon_geom = geojson_data.geometry.unary_union  # Combine les géométries multiples
-                    if isinstance(polygon_geom, Polygon):
-                        num_centroids_in_polygon = count_centroids_in_polygon(centroids, polygon_geom)
-                        st.write(f"Nombre de centroïdes à l'intérieur de la polygonale : {num_centroids_in_polygon}")
-                    else:
-                        st.error("Le fichier GeoJSON doit contenir une géométrie polygonale.")
-            
-           
-        
-                    
-            
-        
-        
-        
-        
-    
-    
-
-
             # Si un fichier de route est téléchargé, l'ajouter à la carte
             if route_file:
                 route_data = load_geojson(route_file)
@@ -407,14 +341,13 @@ if mnt_file and mns_file:
             # Export des arbres
             tree_geojson = export_layer(centroids, mnt_bounds, "Arbres")
             st.download_button("Télécharger Arbres", data=tree_geojson, file_name="arbres.geojson", mime="application/json")
-                
-                
-        
-        
-            
-        
-        
-        
+
+
+
+
+
+
+
 
 
 
