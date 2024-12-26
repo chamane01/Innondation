@@ -351,8 +351,7 @@ if mnt_file and mns_file:
             if geojson_file:
                 geojson_data = load_geojson(geojson_file)
                 if geojson_data is not None:
-                    st.write(f"Centroïdes détectés : {centroids}")  # Debugging
-                    st.write(f"Géométrie GeoJSON : {geojson_data.geometry}")
+                
                     polygon_geom = geojson_data.geometry.unary_union  # Combine les géométries multiples
                     if isinstance(polygon_geom, Polygon):
                         num_centroids_in_polygon = count_centroids_in_polygon(centroids, polygon_geom)
