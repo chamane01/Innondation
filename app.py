@@ -292,10 +292,28 @@ if mnt_file and mns_file:
         if geojson_file:
             geojson_data = load_geojson(geojson_file)
             if geojson_data is not None:
-                polygon = Polygon(geojson_data.geometry[0].coordinates[0])
-                inside_centroids = check_centroids_within_polygon(geographic_coords, polygon)
-                st.write(f"{len(inside_centroids)} centroïdes sont à l'intérieur du polygone.")
-
+    # S'assurer que le fichier contient bien des géométries de type 'Polygon' ou 'MultiPolygon'
+    for feature in geojson_data['features']:
+        geom_type = feature['geometry']['type']
+        if geom_type in ['Polygon', 'MultiPolygon']:
+            # Créer un polygone avec les coordonnées du GeoJSON
+            coords = feature['geometry']['coordinates']
+            if geom_type == 'Polygon':
+                # Si c'est un seul polygone
+                polygon = Polygon(coords[0])  # Coordonnées du premier polygone
+            elif geom_type == 'MultiPolygon':
+                # Si c'est un ensemble de polygones
+                polygons = [Polygon(c[0]) for c in coords]
+                
+            # Vous pouvez maintenant utiliser ce polygone pour l'ajouter à la carte
+            folium.GeoJson(
+                feature,
+                style_function=lambda x: {
+                    'fillColor': 'transparent',
+                    'color': 'white',
+                    'weight': 2
+                }
+            ).add_to(fmap)
         # Ajouter un bouton pour afficher la carte
         if st.button("Afficher la carte"):
             # Création de la carte
