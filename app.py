@@ -117,6 +117,8 @@ from streamlit_folium import folium_static
 import json
 import geopandas as gpd
 from shapely.geometry import Polygon
+from shapely.geometry import Point
+
 
 # Fonction pour charger un fichier TIFF et reprojeter les bornes
 def load_tiff(file_path, target_crs="EPSG:4326"):
