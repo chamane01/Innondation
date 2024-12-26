@@ -144,6 +144,21 @@ def load_geojson(file_path, target_crs="EPSG:4326"):
         st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
         return None
 
+def count_centroids_in_polygon(centroids, polygon_geom):
+    """
+    Compte le nombre de centroïdes qui se trouvent à l'intérieur de la polygonale.
+    Args:
+        centroids (list): Liste des coordonnées des centroïdes [(id, (x, y))].
+        polygon_geom (Polygon): Géométrie de la polygonale (Shapely Polygon).
+    Returns:
+        int: Nombre de centroïdes à l'intérieur de la polygonale.
+    """
+    count = 0
+    for _, (x, y) in centroids:
+        point = Point(x, y)
+        if polygon_geom.contains(point):
+            count += 1
+    return count
 # Fonction pour calculer la hauteur relative (MNS - MNT)
 def calculate_heights(mns, mnt):
     return np.maximum(0, mns - mnt)  # Évite les valeurs négatives
@@ -265,6 +280,17 @@ if mnt_file and mns_file:
 
         # Calcul des centroïdes
         centroids = calculate_cluster_centroids(coords, tree_clusters)
+
+
+        if geojson_file:
+            geojson_data = load_geojson(geojson_file)
+            if geojson_data is not None:
+                polygon_geom = geojson_data.geometry.unary_union  # Combine les géométries multiples
+                if isinstance(polygon_geom, Polygon):
+                    num_centroids_in_polygon = count_centroids_in_polygon(centroids, polygon_geom)
+                    st.write(f"Nombre de centroïdes à l'intérieur de la polygonale : {num_centroids_in_polygon}")
+                else:
+                    st.error("Le fichier GeoJSON doit contenir une géométrie polygonale.")
 
         # Ajouter un bouton pour afficher la carte
         if st.button("Afficher la carte"):
