@@ -216,10 +216,9 @@ def export_layer(data, bounds, layer_name):
     """Créer un GeoJSON pour une couche donnée."""
     features = []
     if layer_name == "Arbres":
-        for centroid in centroids:
-            _, (row, col) = centroid
-            lat1 = bounds[3] - (bounds[3] - bounds[1]) * (row / mnt.shape[0])
-            lon1 = bounds[0] + (bounds[2] - bounds[0]) * (col / mnt.shape[1])
+        for centroid in data:
+            lat1 = bounds[3] - (bounds[3] - bounds[1]) * (centroid[0] / data.shape[0])
+            lon1 = bounds[0] + (bounds[2] - bounds[0]) * (centroid[1] / data.shape[1])
             features.append({
                 "type": "Feature",
                 "geometry": {
@@ -259,7 +258,7 @@ st.title("Détection d'arbres automatique ")
 mnt_file = st.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
 mns_file = st.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
 geojson_file = st.file_uploader("Téléchargez la polygonale (GeoJSON)", type=["geojson"])
-route_file = st.file_uploader("Téléchargez le fichier de route (GeoJSON)", type=["geojson"])  # Nouveau
+route_file = st.file_uploader("Téléchargez le fichier de route (GeoJSON)", type=["geojson"])
 
 if mnt_file and mns_file:
     mnt, mnt_bounds = load_tiff(mnt_file)
@@ -285,6 +284,17 @@ if mnt_file and mns_file:
         # Calcul des centroïdes
         centroids = calculate_cluster_centroids(coords, tree_clusters)
 
+        # Conversion des coordonnées locales en coordonnées géographiques
+        geographic_coords = transform_to_geographic_coords(centroids, mnt_bounds, mnt.shape)
+
+        # Si un fichier GeoJSON est téléchargé, vérifier la position des centroïdes
+        if geojson_file:
+            geojson_data = load_geojson(geojson_file)
+            if geojson_data is not None:
+                polygon = Polygon(geojson_data.geometry[0].coordinates[0])
+                inside_centroids = check_centroids_within_polygon(geographic_coords, polygon)
+                st.write(f"{len(inside_centroids)} centroïdes sont à l'intérieur du polygone.")
+
         # Ajouter un bouton pour afficher la carte
         if st.button("Afficher la carte"):
             # Création de la carte
@@ -309,39 +319,22 @@ if mnt_file and mns_file:
             ).add_to(fmap)
 
             # Ajouter la couche des arbres à la carte
-            add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
+            add_tree_centroids_layer(fmap, inside_centroids, mnt_bounds, mnt.shape, "Arbres")
 
-            # Si un fichier GeoJSON est téléchargé, l'ajouter à la carte
+            # Ajouter la couche de la polygonale si un fichier est téléchargé
             if geojson_file:
-                geojson_data = load_geojson(geojson_file)
-                if geojson_data is not None:
-                    folium.GeoJson(
-                        geojson_data,
-                        style_function=lambda x: {
-                            'fillColor': 'transparent',
-                            'color': 'white',
-                            'weight': 2
-                        }
-                    ).add_to(fmap)
-
-            # Si un fichier de route est téléchargé, l'ajouter à la carte
-            if route_file:
-                route_data = load_geojson(route_file)
-                if route_data is not None:
-                    folium.GeoJson(
-                        route_data,
-                        style_function=lambda x: {
-                            'fillColor': 'transparent',
-                            'color': 'blue',
-                            'weight': 3
-                        },
-                        name="Route"
-                    ).add_to(fmap)
-
-            fmap.add_child(MeasureControl(position='topleft'))
-            fmap.add_child(Draw(position='topleft', export=True))
+                folium.GeoJson(
+                    geojson_data,
+                    style_function=lambda x: {
+                        'fillColor': 'transparent',
+                        'color': 'white',
+                        'weight': 2
+                    }
+                ).add_to(fmap)
 
             # Ajouter le contrôle des couches à la carte (en haut à droite)
+            fmap.add_child(MeasureControl(position='topleft'))
+            fmap.add_child(Draw(position='topleft', export=True))
             fmap.add_child(folium.LayerControl(position='topright'))
 
             # Afficher la carte
