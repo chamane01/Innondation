@@ -169,6 +169,28 @@ def calculate_cluster_centroids(coords, clusters):
         centroids.append((cluster_id, centroid))
 
     return centroids
+# Fonction pour transformer les coordonnées locales en coordonnées géographiques
+def transform_to_geographic_coords(centroids, bounds, image_shape):
+    height = bounds[3] - bounds[1]
+    width = bounds[2] - bounds[0]
+    img_height, img_width = image_shape[:2]
+    
+    geographic_coords = []
+    for _, centroid in centroids:
+        lat = bounds[3] - height * (centroid[0] / img_height)
+        lon = bounds[0] + width * (centroid[1] / img_width)
+        geographic_coords.append((lat, lon))
+    
+    return geographic_coords
+
+# Fonction pour vérifier si un centroid est à l'intérieur du polygone d'intérêt
+def check_centroids_within_polygon(centroids, polygon):
+    inside_centroids = []
+    for lat, lon in centroids:
+        point = Polygon([(lon, lat)])
+        if polygon.contains(point):
+            inside_centroids.append((lat, lon))
+    return inside_centroids
 
 # Fonction pour ajouter les centroïdes des arbres sous forme de cercles
 def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_name):
@@ -177,10 +199,7 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
     img_height, img_width = image_shape[:2]
 
     feature_group = folium.FeatureGroup(name=layer_name)
-    for _, centroid in centroids:
-        lat = bounds[3] - height * (centroid[0] / img_height)
-        lon = bounds[0] + width * (centroid[1] / img_width)
-
+    for lat, lon in centroids:
         folium.CircleMarker(
             location=[lat, lon],
             radius=3,  # Rayon du cercle en pixels
