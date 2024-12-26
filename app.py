@@ -101,6 +101,80 @@ if tiff_file:
     )
 
 
+import geopandas as gpd
+from shapely.geometry import Point, Polygon
+from shapely.strtree import STRtree
+import matplotlib.pyplot as plt
+import folium
+from folium import plugins
+
+# Étape 1 : Charger les fichiers GeoJSON
+import os
+
+def upload_geojson(file_path):
+    """Charger un fichier GeoJSON."""
+    return gpd.read_file(file_path)
+
+# Remplace les chemins par les fichiers GeoJSON locaux
+centroid_gdf = upload_geojson("centroids_file.geojson")  # Remplace avec ton fichier de centroïdes
+polygon_gdf = upload_geojson("polygon_file.geojson")    # Remplace avec ton fichier de polygones
+
+# Étape 2 : Vérification et Alignement des CRS
+print("CRS des centroïdes :", centroid_gdf.crs)
+print("CRS de la polygonale :", polygon_gdf.crs)
+
+if centroid_gdf.crs != polygon_gdf.crs:
+    centroid_gdf = centroid_gdf.to_crs(polygon_gdf.crs)
+    print("Les CRS ont été alignés.")
+
+# Étape 3 : Correction des Formes Géométriques
+polygon_gdf["geometry"] = polygon_gdf.geometry.buffer(0)
+assert polygon_gdf.is_valid.all(), "Les polygones contiennent des géométries invalides."
+assert centroid_gdf.is_valid.all(), "Les centroïdes contiennent des géométries invalides."
+
+# Étape 4 : Vérification des Coordonnées
+print("Bornes des polygones :", polygon_gdf.total_bounds)
+print("Exemple de centroïdes :", centroid_gdf.geometry.head())
+
+# Étape 5 : Calcul des Points dans les Polygones
+# Option 1 : Méthode within
+points_in_polygon = centroid_gdf[centroid_gdf.geometry.within(polygon_gdf.unary_union)]
+print(f"Nombre de points détectés : {len(points_in_polygon)}")
+
+# Option 2 : Ajouter une Tolérance avec buffer
+buffer_polygon = polygon_gdf.geometry.buffer(0.0001)
+points_in_buffered_polygon = centroid_gdf[centroid_gdf.geometry.within(buffer_polygon.unary_union)]
+print(f"Nombre de points détectés avec tolérance : {len(points_in_buffered_polygon)}")
+
+# Étape 6 : Méthode Alternative (STRtree)
+tree = STRtree(centroid_gdf.geometry)
+matches = [tree.query(geom) for geom in polygon_gdf.geometry]
+count = sum(len(match) for match in matches)
+print(f"Nombre total de points détectés avec STRtree : {count}")
+
+# Étape 7 : Affichage Visuel avec Folium
+# Créer une carte centrée sur le centroid moyen des polygones
+center_lat = polygon_gdf.geometry.centroid.y.mean()
+center_lon = polygon_gdf.geometry.centroid.x.mean()
+
+m = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+
+# Ajouter les polygones à la carte
+for _, row in polygon_gdf.iterrows():
+    folium.Polygon(locations=[(point[1], point[0]) for point in row['geometry'].exterior.coords],
+                   color="black", weight=2, fill=True, fill_color="yellow", fill_opacity=0.3).add_to(m)
+
+# Ajouter les centroïdes à la carte
+for _, row in centroid_gdf.iterrows():
+    folium.Marker([row['geometry'].y, row['geometry'].x], popup="Centroïde", icon=folium.Icon(color="red")).add_to(m)
+
+# Ajouter les points détectés dans les polygones
+for _, row in points_in_polygon.iterrows():
+    folium.Marker([row['geometry'].y, row['geometry'].x], popup="Point détecté", icon=folium.Icon(color="green")).add_to(m)
+
+# Afficher la carte
+m.save("map_output.html")
+print("Carte générée et sauvegardée sous 'map_output.html'")
 
 
 
