@@ -246,6 +246,19 @@ def count_centroids_in_polygon(centroids, polygon_geom, centroid_crs="EPSG:4326"
             continue
 
     return count
+def reproject_points(points, src_crs, target_crs):
+    src_crs = rasterio.crs.CRS.from_string(src_crs)
+    target_crs = rasterio.crs.CRS.from_string(target_crs)
+    transformer = rasterio.warp.Transformer.from_crs(src_crs, target_crs, always_xy=True)
+    reprojected_points = np.array([transformer.transform(pt[1], pt[0]) for pt in points])  # Y, X inversé en XY
+    return reprojected_points
+
+def trees_in_polygon(centroids, polygon_gdf):
+    tree_points = [Polygon([centroid[::-1]]) for _, centroid in centroids]  # Inverser en XY
+    trees_within_polygon = [
+        any(polygon_gdf.contains(tree_point)) for tree_point in tree_points
+    ]
+    return np.sum(trees_within_polygon)
 
 # Fonction pour exporter une couche en GeoJSON
 def export_layer(data, bounds, layer_name):
@@ -359,6 +372,8 @@ if mnt_file and mns_file:
                             'weight': 2
                         }
                     ).add_to(fmap)
+
+     
 
             if geojson_file:
                 geojson_data = load_geojson(geojson_file)
