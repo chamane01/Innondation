@@ -85,7 +85,16 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
         ).add_to(feature_group)
 
     feature_group.add_to(map_object)
-
+# Ajouter le polygone sur la carte
+def add_polygon_layer(map_object, polygon_gdf):
+    feature_group = folium.FeatureGroup(name="Polygonal")
+    for _, row in polygon_gdf.iterrows():
+        # Ajouter chaque polygone de la couche
+        folium.GeoJson(
+            row['geometry'],
+            style_function=lambda x: {'color': 'blue', 'fill': True, 'fillColor': 'blue', 'fillOpacity': 0.1}
+        ).add_to(feature_group)
+    feature_group.add_to(map_object)
 # Fonction pour vérifier si les arbres sont à l'intérieur de la polygonale
 def filter_trees_inside_polygon(centroids, polygon):
     inside_trees = []
