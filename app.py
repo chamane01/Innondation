@@ -158,7 +158,7 @@ if st.session_state.get("show_sidebar", False):
                 # Ajout des routes et polygones
                 if road_file:
                     roads_gdf = load_and_reproject_shapefile(road_file)
-                    folium.GeoJson(roads_gdf, name="Routes", style_function=lambda x: {'color': '', 'weight': 2}).add_to(fmap)
+                    folium.GeoJson(roads_gdf, name="Routes", style_function=lambda x: {'color': 'blue', 'weight': 2}).add_to(fmap)
 
                 if polygon_file:
                     polygons_gdf = load_and_reproject_shapefile(polygon_file)
@@ -169,6 +169,7 @@ if st.session_state.get("show_sidebar", False):
                 fmap.add_child(folium.LayerControl(position='topright'))
 
                 folium_static(fmap)
+
 
 
 
