@@ -1,125 +1,106 @@
 import streamlit as st
-import folium
-from folium.plugins import MeasureControl, Draw
-from streamlit_folium import folium_static
 import rasterio
-from rasterio.warp import transform_bounds
-import numpy as np
-from sklearn.cluster import DBSCAN
-import geopandas as gpd
-from shapely.geometry import Polygon, Point, LineString
+import rasterio.warp
+import folium
 from folium import plugins
-from folium import IFrame
-from streamlit_folium import st_folium
+from folium.plugins import MeasureControl, Draw
+from rasterio.plot import reshape_as_image
+from PIL import Image
+from streamlit_folium import folium_static
 
-# Fonction pour charger un fichier TIFF
-def load_tiff(file_path, target_crs="EPSG:4326"):
-    try:
-        with rasterio.open(file_path) as src:
-            data = src.read(1)  # Lire la première bande
-            src_crs = src.crs  # CRS source
-            bounds = src.bounds  # Bornes source
+def reproject_tiff(input_tiff, target_crs):
+    """Reproject a TIFF file to a target CRS."""
+    with rasterio.open(input_tiff) as src:
+        transform, width, height = rasterio.warp.calculate_default_transform(
+            src.crs, target_crs, src.width, src.height, *src.bounds
+        )
+        kwargs = src.meta.copy()
+        kwargs.update({
+            'crs': target_crs,
+            'transform': transform,
+            'width': width,
+            'height': height
+        })
 
-            # Reprojeter les bornes vers le CRS cible
-            target_bounds = transform_bounds(src_crs, target_crs, *bounds)
+        reprojected_tiff = "reprojected.tiff"
+        with rasterio.open(reprojected_tiff, 'w', **kwargs) as dst:
+            for i in range(1, src.count + 1):
+                rasterio.warp.reproject(
+                    source=rasterio.band(src, i),
+                    destination=rasterio.band(dst, i),
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    dst_transform=transform,
+                    dst_crs=target_crs,
+                    resampling=rasterio.warp.Resampling.nearest
+                )
 
-        return data, target_bounds
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
-        return None, None
+    return reprojected_tiff
 
-# Fonction pour charger un fichier GeoJSON ou Shapefile et le projeter
-def load_and_reproject_shapefile(file_path, target_crs="EPSG:4326"):
-    try:
-        gdf = gpd.read_file(file_path)
-        gdf = gdf.to_crs(target_crs)  # Reprojection au CRS cible
-        return gdf
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier Shapefile/GeoJSON : {e}")
-        return None
+def add_image_overlay(map_object, tiff_path, bounds, name):
+    """Add a TIFF image overlay to a Folium map."""
+    with rasterio.open(tiff_path) as src:
+        # Read the image and reshape it into a format compatible with Folium
+        image = reshape_as_image(src.read())
+        folium.raster_layers.ImageOverlay(
+            image=image,
+            bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
+            name=name,
+            opacity=0.6
+        ).add_to(map_object)
 
-# Calcul de hauteur relative
-def calculate_heights(mns, mnt):
-    return np.maximum(0, mns - mnt)
+# Streamlit app
+def main():
+    st.title("TIFF Viewer and Interactive Map")
 
-# Détection des arbres avec DBSCAN
-def detect_trees(heights, threshold, eps, min_samples):
-    tree_mask = heights > threshold
-    coords = np.column_stack(np.where(tree_mask))
+    # Button to toggle sidebar visibility
+    if st.button("Dessiner"):
+        with st.sidebar:
+            uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
 
-    clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
-    tree_clusters = clustering.labels_
+        if uploaded_file is not None:
+            tiff_path = uploaded_file.name
+            with open(tiff_path, "wb") as f:
+                f.write(uploaded_file.read())
 
-    return coords, tree_clusters
+            st.write("Reprojecting TIFF file...")
 
-# Calcul des centroïdes
-def calculate_cluster_centroids(coords, clusters):
-    unique_clusters = set(clusters) - {-1}
-    centroids = []
+            # Reproject TIFF to target CRS (e.g., EPSG:4326)
+            reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
 
-    for cluster_id in unique_clusters:
-        cluster_coords = coords[clusters == cluster_id]
-        centroid = cluster_coords.mean(axis=0)
-        centroids.append((cluster_id, centroid))
+            # Read bounds from reprojected TIFF file
+            with rasterio.open(reprojected_tiff) as src:
+                bounds = src.bounds
 
-    return centroids
+            # Create Folium map centered on the bounds
+            center_lat = (bounds.top + bounds.bottom) / 2
+            center_lon = (bounds.left + bounds.right) / 2
+            fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-# Ajout des centroïdes des arbres sur la carte
-def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_name):
-    height = bounds[3] - bounds[1]
-    width = bounds[2] - bounds[0]
-    img_height, img_width = image_shape[:2]
+            # Add reprojected TIFF as overlay
+            add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
 
-    feature_group = folium.FeatureGroup(name=layer_name)
-    for _, centroid in centroids:
-        lat = bounds[3] - height * (centroid[0] / img_height)
-        lon = bounds[0] + width * (centroid[1] / img_width)
+            # Add measure control
+            fmap.add_child(MeasureControl(position='topleft'))
 
-        folium.CircleMarker(
-            location=[lat, lon],
-            radius=3,
-            color="green",
-            fill=True,
-            fill_color="green",
-            fill_opacity=0.8,
-        ).add_to(feature_group)
+            # Add draw control
+            draw = Draw(position='topleft', export=True,
+                        draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
+                                      'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
+                                      'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
+                                      'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
+                        edit_options={'edit': True,}
+            )
+            fmap.add_child(draw)
 
-    feature_group.add_to(map_object)
+            # Layer control
+            folium.LayerControl().add_to(fmap)
 
+            # Display map
+            folium_static(fmap)
 
-
-
-# Interface Streamlit
-st.title("AFRIQUE CARTOGRAPHIE")
-
-# Carte initiale
-center_lat, center_lon = 7.0, -5.0
-zoom_start = 6
-fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
-
-# Ajouter l'outil de mesure
-fmap.add_child(MeasureControl(position='topleft', primary_length_unit='meters', secondary_length_unit='kilometers'))
-
-# Créer un objet Draw avec des couleurs personnalisées pour les dessins
-draw = Draw(position='topleft', export=True,
-    draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
-                  'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
-                  'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
-                  'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
-    edit_options={'edit': True,}
-
-)
-
-# Ajouter l'outil Draw à la carte
-fmap.add_child(draw)
-
-# Ajouter un LayerControl (position de contrôle)
-fmap.add_child(folium.LayerControl(position='topright'))
-
-
-# Afficher la carte avec folium_static
-folium_static(fmap)
-
+if __name__ == "__main__":
+    main()
 
 
 
