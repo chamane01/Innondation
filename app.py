@@ -105,6 +105,8 @@ if __name__ == "__main__":
 
 
 
+
+
 # Boutons sous la carte
 col1, col2, col3 = st.columns(3)
 with col1:
