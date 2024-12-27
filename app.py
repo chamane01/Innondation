@@ -11,6 +11,7 @@ from shapely.geometry import Polygon, Point, LineString
 from folium import plugins
 from folium import IFrame
 from streamlit_folium import st_folium
+from rasterio.transform import from_bounds
 
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path, target_crs="EPSG:4326"):
@@ -107,18 +108,28 @@ draw = Draw(position='topleft', export=True,
                   'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
                   'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
     edit_options={'edit': True,}
-
 )
-
-# Ajouter l'outil Draw à la carte
 fmap.add_child(draw)
+fmap.add_child(LayerControl(position='topright'))
 
-# Ajouter un LayerControl (position de contrôle)
-fmap.add_child(folium.LayerControl(position='topright'))
+# Fonction pour téléverser et reprojeter un fichier raster
+def upload_and_add_raster(file, target_crs="EPSG:4326"):
+    try:
+        with rasterio.open(file) as src:
+            # Obtenir les informations de la transformation et des métadonnées
+            bounds = src.bounds
+            array = src.read(1)  # Lire la première bande
+            transform = from_bounds(*bounds, width=src.width, height=src.height)
+            
+            # Générer une URL de l'image (streamlit fichier temporaire)
+            temp_url = st.file_uploader(f"Téléverser le fichier {file.name}", type=["tiff"])
 
-
-# Afficher la carte avec folium_static
-folium_static(fmap)
+            overlay = folium.raster_layers.ImageOverlay(
+                image=temp_url,
+                bounds=[[bounds.bottom, bounds.left], [bounds.top, ]]
+                position="overlay")
+            fmap.add_ Layersontrol")
+``
 
 
 
