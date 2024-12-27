@@ -101,10 +101,13 @@ fmap.add_child(MeasureControl(position='topleft', primary_length_unit='meters', 
 
 # Créer un objet Draw avec des couleurs personnalisées pour les dessins
 draw = Draw(
-    draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
-                  'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
-                  'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
-                  'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
+    draw_options={
+        'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},  # Ligne
+        'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},  # Polygone
+        'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},  # Rectangle
+        'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}},  # Cercle
+        'marker': {'icon': folium.Icon(color='black', icon='info-sign')}  # Point (marqueur)
+    },
     edit_options={'edit': True}
 )
 
