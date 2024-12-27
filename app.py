@@ -6,6 +6,10 @@ import rasterio
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 import numpy as np
 from shapely.geometry import Polygon, Point, LineString
+from PIL import Image
+from folium import plugins
+from rasterio.plot import reshape_as_image
+import rasterio.warp
 
 # Fonction pour reprojeter un fichier TIFF
 def reproject_tiff(uploaded_file, target_crs="EPSG:4326"):
