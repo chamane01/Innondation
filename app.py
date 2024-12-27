@@ -1,105 +1,204 @@
 import streamlit as st
-import rasterio
-import numpy as np
 import folium
-from folium.plugins import Draw, MeasureControl
+from folium.plugins import MeasureControl, Draw
 from streamlit_folium import folium_static
+import rasterio
+from rasterio.warp import transform_bounds
+import numpy as np
+from sklearn.cluster import DBSCAN
+import geopandas as gpd
+from shapely.geometry import Polygon, Point, LineString
+from folium import plugins
+from folium import IFrame
+from streamlit_folium import st_folium
 
-# Charger et reprojeter une image GeoTIFF
-def load_and_reproject_tiff(file_path, target_crs="EPSG:4326"):
+# Fonction pour charger un fichier TIFF
+def load_tiff(file_path, target_crs="EPSG:4326"):
     try:
         with rasterio.open(file_path) as src:
-            # Reprojeter l'image si nécessaire
-            if src.crs.to_string() != target_crs:
-                st.warning("Reprojection en cours...")
-                transform, width, height = rasterio.warp.calculate_default_transform(
-                    src.crs, target_crs, src.width, src.height, *src.bounds
-                )
-                kwargs = src.meta.copy()
-                kwargs.update({
-                    'crs': target_crs,
-                    'transform': transform,
-                    'width': width,
-                    'height': height
-                })
-                with rasterio.open("reprojected.tif", "w", **kwargs) as dst:
-                    for i in range(1, src.count + 1):
-                        rasterio.warp.reproject(
-                            source=rasterio.band(src, i),
-                            destination=rasterio.band(dst, i),
-                            src_transform=src.transform,
-                            src_crs=src.crs,
-                            dst_transform=transform,
-                            dst_crs=target_crs,
-                            resampling=rasterio.enums.Resampling.nearest
-                        )
-                reprojected_path = "reprojected.tif"
-            else:
-                reprojected_path = file_path
-            return reprojected_path
+            data = src.read(1)  # Lire la première bande
+            src_crs = src.crs  # CRS source
+            bounds = src.bounds  # Bornes source
+
+            # Reprojeter les bornes vers le CRS cible
+            target_bounds = transform_bounds(src_crs, target_crs, *bounds)
+
+        return data, target_bounds
     except Exception as e:
-        st.error(f"Erreur lors du chargement ou de la reprojection : {e}")
+        st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
+        return None, None
+
+# Fonction pour charger un fichier GeoJSON ou Shapefile et le projeter
+def load_and_reproject_shapefile(file_path, target_crs="EPSG:4326"):
+    try:
+        gdf = gpd.read_file(file_path)
+        gdf = gdf.to_crs(target_crs)  # Reprojection au CRS cible
+        return gdf
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier Shapefile/GeoJSON : {e}")
         return None
 
-# Interface utilisateur Streamlit pour téléverser un fichier TIFF
-st.title("Affichage d'une orthophoto sur une carte Folium")
-uploaded_file = st.file_uploader("Téléversez un fichier TIFF (orthophoto ou orthomosaïque)", type=["tiff", "tif"])
+# Calcul de hauteur relative
+def calculate_heights(mns, mnt):
+    return np.maximum(0, mns - mnt)
 
-if uploaded_file:
-    # Charger et reprojeter le fichier
-    reprojected_file = load_and_reproject_tiff(uploaded_file, target_crs="EPSG:4326")
+# Détection des arbres avec DBSCAN
+def detect_trees(heights, threshold, eps, min_samples):
+    tree_mask = heights > threshold
+    coords = np.column_stack(np.where(tree_mask))
 
-    if reprojected_file:
-        with rasterio.open(reprojected_file) as src:
-            # Lire la première bande de l'image
-            image_array = src.read(1)
-            bounds = src.bounds  # Obtenir les limites géographiques
-            min_lat, min_lon = bounds.bottom, bounds.left
-            max_lat, max_lon = bounds.top, bounds.right
+    clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
+    tree_clusters = clustering.labels_
 
-            # Vérification des données
-            st.write(f"Type: {type(image_array)}, Shape: {image_array.shape}, Dtype: {image_array.dtype}")
-            st.write(f"Valeurs min/max : {image_array.min()} / {image_array.max()}")
+    return coords, tree_clusters
 
-            # Normaliser les valeurs si nécessaire
-            if image_array.dtype != np.uint8:
-                image_array = (255 * (image_array - image_array.min()) /
-                               (image_array.max() - image_array.min())).astype(np.uint8)
+# Calcul des centroïdes
+def calculate_cluster_centroids(coords, clusters):
+    unique_clusters = set(clusters) - {-1}
+    centroids = []
 
-            # Créer la carte avec Folium
-            center_lat = (min_lat + max_lat) / 2
-            center_lon = (min_lon + max_lon) / 2
-            zoom_start = 6
-            fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
+    for cluster_id in unique_clusters:
+        cluster_coords = coords[clusters == cluster_id]
+        centroid = cluster_coords.mean(axis=0)
+        centroids.append((cluster_id, centroid))
 
-            # Ajouter l'outil de mesure
-            fmap.add_child(MeasureControl(position='topleft', primary_length_unit='meters', secondary_length_unit='kilometers'))
+    return centroids
 
-            # Ajouter l'outil de dessin
-            draw = Draw(position='topleft', export=True,
-                        draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
-                                      'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
-                                      'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
-                                      'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
-                        edit_options={'edit': True, })
-            fmap.add_child(draw)
+# Ajout des centroïdes des arbres sur la carte
+def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_name):
+    height = bounds[3] - bounds[1]
+    width = bounds[2] - bounds[0]
+    img_height, img_width = image_shape[:2]
 
-            # Ajouter l'image en tant qu'overlay
-            try:
+    feature_group = folium.FeatureGroup(name=layer_name)
+    for _, centroid in centroids:
+        lat = bounds[3] - height * (centroid[0] / img_height)
+        lon = bounds[0] + width * (centroid[1] / img_width)
+
+        folium.CircleMarker(
+            location=[lat, lon],
+            radius=3,
+            color="green",
+            fill=True,
+            fill_color="green",
+            fill_opacity=0.8,
+        ).add_to(feature_group)
+
+    feature_group.add_to(map_object)
+
+
+
+
+# Interface Streamlit
+st.title("AFRIQUE CARTOGRAPHIE")
+
+# Carte initiale
+center_lat, center_lon = 7.0, -5.0
+zoom_start = 6
+fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
+
+# Ajouter l'outil de mesure
+fmap.add_child(MeasureControl(position='topleft', primary_length_unit='meters', secondary_length_unit='kilometers'))
+
+# Créer un objet Draw avec des couleurs personnalisées pour les dessins
+draw = Draw(position='topleft', export=True,
+    draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
+                  'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
+                  'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
+                  'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
+    edit_options={'edit': True,}
+
+)
+
+# Ajouter l'outil Draw à la carte
+fmap.add_child(draw)
+
+# Ajouter un LayerControl (position de contrôle)
+fmap.add_child(folium.LayerControl(position='topright'))
+
+
+# Afficher la carte avec folium_static
+folium_static(fmap)
+
+
+
+
+
+# Boutons sous la carte
+col1, col2, col3 = st.columns(3)
+with col1:
+    if st.button("Faire une carte"):
+        st.info("Fonctionnalité 'Faire une carte' en cours de développement.")
+with col2:
+    if st.button("Calculer des volumes"):
+        st.info("Fonctionnalité 'Calculer des volumes' en cours de développement.")
+with col3:
+    if st.button("Détecter les arbres"):
+        st.session_state.show_sidebar = True
+
+# Affichage des paramètres uniquement si le bouton est cliqué
+if st.session_state.get("show_sidebar", False):
+    st.sidebar.title("Paramètres de détection")
+
+    # Téléversement des fichiers
+    mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
+    mns_file = st.sidebar.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
+    road_file = st.sidebar.file_uploader("Téléchargez un fichier de route (optionnel)", type=["geojson", "shp"])
+    polygon_file = st.sidebar.file_uploader("Téléchargez un fichier de polygone (optionnel)", type=["geojson", "shp"])
+
+    if mnt_file and mns_file:
+        mnt, mnt_bounds = load_tiff(mnt_file)
+        mns, mns_bounds = load_tiff(mns_file)
+
+        if mnt is None or mns is None:
+            st.sidebar.error("Erreur lors du chargement des fichiers.")
+        elif mnt_bounds != mns_bounds:
+            st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
+        else:
+            heights = calculate_heights(mns, mnt)
+
+            # Paramètres de détection
+            height_threshold = st.sidebar.slider("Seuil de hauteur", 0.1, 20.0, 2.0, 0.1)
+            eps = st.sidebar.slider("Rayon de voisinage", 0.1, 10.0, 2.0, 0.1)
+            min_samples = st.sidebar.slider("Min. points pour un cluster", 1, 10, 5, 1)
+
+            # Détection et visualisation
+            if st.sidebar.button("Lancer la détection"):
+                coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
+                num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
+                st.sidebar.write(f"Nombre d'arbres détectés : {num_trees}")
+
+                centroids = calculate_cluster_centroids(coords, tree_clusters)
+
+                # Mise à jour de la carte
+                center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
+                center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
+                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+
                 folium.raster_layers.ImageOverlay(
-                    name="Orthophoto",
-                    image=image_array,
-                    bounds=[[min_lat, min_lon], [max_lat, max_lon]],
-                    opacity=0.7
+                    image=mnt,
+                    bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
+                    opacity=0.5,
+                    name="MNT"
                 ).add_to(fmap)
-            except Exception as e:
-                st.error(f"Erreur lors de l'ajout de l'image : {e}")
 
-            # Ajouter un contrôle de couches
-            fmap.add_child(folium.LayerControl())
+                add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
 
-            # Afficher la carte dans Streamlit
-            folium_static(fmap)
+                # Ajout des routes et polygones
+                if road_file:
+                    roads_gdf = load_and_reproject_shapefile(road_file)
+                    folium.GeoJson(roads_gdf, name="Routes", style_function=lambda x: {'color': 'orange', 'weight': 2}).add_to(fmap)
+
+                if polygon_file:
+                    polygons_gdf = load_and_reproject_shapefile(polygon_file)
+                    folium.GeoJson(polygons_gdf, name="Polygones", style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}).add_to(fmap)
+
+                fmap.add_child(MeasureControl(position='topleft'))
+                fmap.add_child(Draw(position='topleft', export=True))
+                fmap.add_child(folium.LayerControl(position='topright'))
+
+                folium_static(fmap)
+
 
 
 
