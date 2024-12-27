@@ -7,6 +7,7 @@ from folium.plugins import MeasureControl, Draw
 from rasterio.plot import reshape_as_image
 from PIL import Image
 from streamlit_folium import folium_static
+import geopandas as gpd
 
 def reproject_tiff(input_tiff, target_crs):
     """Reproject a TIFF file to a target CRS."""
@@ -49,19 +50,31 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
             opacity=0.6
         ).add_to(map_object)
 
+def add_geojson_overlay(map_object, geojson_file):
+    """Add GeoJSON overlay to the Folium map."""
+    geo_data = gpd.read_file(geojson_file)
+    folium.GeoJson(geo_data).add_to(map_object)
+
 # Streamlit app
 def main():
     st.title("TIFF Viewer and Interactive Map")
 
+    # Sidebar for file upload
+    with st.sidebar:
+        st.header("Upload Files")
+
+        # Upload TIFF file
+        uploaded_tiff = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
+
+        # Upload optional GeoJSON files (routes, polygons, etc.)
+        uploaded_geojson = st.file_uploader("Upload GeoJSON file (optional)", type=["geojson"])
+
     # Button to trigger the drawing functionality
     if st.button('Dessin'):
-        # Upload TIFF file
-        uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
-
-        if uploaded_file is not None:
-            tiff_path = uploaded_file.name
+        if uploaded_tiff is not None:
+            tiff_path = uploaded_tiff.name
             with open(tiff_path, "wb") as f:
-                f.write(uploaded_file.read())
+                f.write(uploaded_tiff.read())
 
             st.write("Reprojecting TIFF file...")
 
@@ -93,6 +106,13 @@ def main():
             )
             fmap.add_child(draw)
 
+            # Add GeoJSON overlay if uploaded
+            if uploaded_geojson is not None:
+                geojson_path = uploaded_geojson.name
+                with open(geojson_path, "wb") as f:
+                    f.write(uploaded_geojson.read())
+                add_geojson_overlay(fmap, geojson_path)
+
             # Layer control
             folium.LayerControl().add_to(fmap)
 
@@ -101,6 +121,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
