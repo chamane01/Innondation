@@ -128,7 +128,7 @@ def upload_and_add_raster(file, target_crs="EPSG:4326"):
                 image=temp_url,
                 bounds=[[bounds.bottom, bounds.left], [bounds.top, ]]
                 position="overlay")
-        fmap.add_ Layersontrol")
+            fmap.add_ Layersontrol")
 ``
 
 
