@@ -93,7 +93,7 @@ fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
 fmap.add_child(MeasureControl(position='topleft'))
 fmap.add_child(Draw(position='topleft', export=True))
 fmap.add_child(folium.LayerControl(position='topright'))
-folium_static(fmap)
+folium_static(fmap, key="initial_map")
 
 # Boutons sous la carte
 col1, col2, col3 = st.columns(3)
@@ -170,7 +170,7 @@ if st.session_state.get("show_sidebar", False):
                 fmap.add_child(folium.LayerControl(position='topright'))
 
                 # Affichage de la carte mise à jour
-                folium_static(fmap)
+                folium_static(fmap, key="initial_map")
 
 
 
