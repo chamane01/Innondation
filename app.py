@@ -13,6 +13,7 @@ from folium import IFrame
 from streamlit_folium import st_folium
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from rasterio.plot import show
+from PIL import Image
 
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path, target_crs="EPSG:4326"):
