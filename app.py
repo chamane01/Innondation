@@ -11,8 +11,6 @@ from shapely.geometry import Polygon, Point, LineString
 from folium import plugins
 from folium import IFrame
 from streamlit_folium import st_folium
-from rasterio.transform import from_bounds
-from rasterio.plot import reshape_as_image
 
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path, target_crs="EPSG:4326"):
@@ -94,16 +92,10 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
 # Interface Streamlit
 st.title("AFRIQUE CARTOGRAPHIE")
 
-
 # Carte initiale
 center_lat, center_lon = 7.0, -5.0
 zoom_start = 6
 fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
-
-# Ajouter une couche de base
-TileLayer('OpenStreetMap').add_to(fmap)
-TileLayer('Stamen Terrain').add_to(fmap)
-TileLayer('Stamen Toner').add_to(fmap)
 
 # Ajouter l'outil de mesure
 fmap.add_child(MeasureControl(position='topleft', primary_length_unit='meters', secondary_length_unit='kilometers'))
@@ -115,44 +107,18 @@ draw = Draw(position='topleft', export=True,
                   'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
                   'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
     edit_options={'edit': True,}
+
 )
+
+# Ajouter l'outil Draw à la carte
 fmap.add_child(draw)
 
-# Ajouter un contrôle des couches (maintenant qu'il y a plusieurs couches)
-folium.LayerControl(position='topright').add_to(fmap)
+# Ajouter un LayerControl (position de contrôle)
+fmap.add_child(folium.LayerControl(position='topright'))
 
-# Fonction pour téléverser et ajouter une image raster (TIFF)
-def upload_and_add_raster(file, fmap):
-    try:
-        with rasterio.open(file) as src:
-            # Obtenir les informations de la transformation et des métadonnées
-            bounds = src.bounds
-            image_array = src.read(1)  # Lire la première bande comme une matrice
 
-            # Normaliser les valeurs de l'image pour qu'elles soient dans la plage [0, 1]
-            image_array = np.nan_to_num(image_array)
-            norm_image = (image_array - np.min(image_array)) / (np.max(image_array) - np.min(image_array))
-            
-            # Convertir en image compatible avec Folium
-            image = reshape_as_image(norm_image)
-
-            # Ajouter l'image comme overlay
-            folium.raster_layers.ImageOverlay(
-                image=image,
-                bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
-                opacity=0.7
-            ).add_to(fmap)
-    except Exception as e:
-        st.error(f"Erreur lors du traitement du fichier TIFF : {e}")
-
-# Interface utilisateur pour téléverser un fichier TIFF
-uploaded_file = st.file_uploader("Téléversez un fichier TIFF (orthophoto ou orthomosaïque)", type=["tif", "tiff"])
-if uploaded_file:
-    upload_and_add_raster(uploaded_file, fmap)
-
-# Afficher la carte
+# Afficher la carte avec folium_static
 folium_static(fmap)
-
 
 
 
