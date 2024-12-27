@@ -79,7 +79,7 @@ def main():
         add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
 
         # Add measure control
-        fmap.add_child(MeasureControl())
+        fmap.add_child(MeasureControl(position='topleft'))
 
         #Add draw control
         
