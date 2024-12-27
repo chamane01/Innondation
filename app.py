@@ -86,14 +86,7 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
 # Interface Streamlit
 st.title("Détection Automatique des Arbres")
 
-# Carte initiale
-center_lat, center_lon = 5.0, -3.0
-zoom_start = 10
-fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
-fmap.add_child(MeasureControl(position='topleft'))
-fmap.add_child(Draw(position='topleft', export=True))
-fmap.add_child(folium.LayerControl(position='topright'))
-folium_static(fmap)
+
 
 # Boutons sous la carte
 col1, col2, col3 = st.columns(3)
