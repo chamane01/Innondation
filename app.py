@@ -106,7 +106,7 @@ draw = Draw(
                   'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
                   'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
                   'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
-    edit_options={'edit': True, export=True}
+    edit_options={'edit': True, 'export'=True}
 
 )
 
