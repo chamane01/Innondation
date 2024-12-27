@@ -83,20 +83,27 @@ fmap.add_child(Draw(position='topleft', export=True))
 fmap.add_child(folium.LayerControl(position='topright'))
 folium_static(fmap)
 
-# Bouton pour afficher la barre latérale
-if "show_sidebar" not in st.session_state:
-    st.session_state.show_sidebar = False
-
-if st.button("Détecter les arbres"):
-    st.session_state.show_sidebar = True
+# Boutons sous la carte
+col1, col2, col3 = st.columns(3)
+with col1:
+    if st.button("Faire une carte"):
+        st.info("Fonctionnalité 'Faire une carte' en cours de développement.")
+with col2:
+    if st.button("Calculer des volumes"):
+        st.info("Fonctionnalité 'Calculer des volumes' en cours de développement.")
+with col3:
+    if st.button("Détecter les arbres"):
+        st.session_state.show_sidebar = True
 
 # Affichage des paramètres uniquement si le bouton est cliqué
-if st.session_state.show_sidebar:
+if st.session_state.get("show_sidebar", False):
     st.sidebar.title("Paramètres de détection")
 
     # Téléversement des fichiers
     mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
     mns_file = st.sidebar.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
+    road_file = st.sidebar.file_uploader("Téléchargez un fichier de route (optionnel)", type=["geojson", "shp"])
+    polygon_file = st.sidebar.file_uploader("Téléchargez un fichier de polygone (optionnel)", type=["geojson", "shp"])
 
     if mnt_file and mns_file:
         mnt, mnt_bounds = load_tiff(mnt_file)
@@ -140,6 +147,7 @@ if st.session_state.show_sidebar:
                 fmap.add_child(folium.LayerControl(position='topright'))
 
                 folium_static(fmap)
+
 
 
 
