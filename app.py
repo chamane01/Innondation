@@ -64,29 +64,6 @@ def calculate_cluster_centroids(coords, clusters):
 
     return centroids
 
-# Ajout des centroïdes des arbres sur la carte
-def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_name):
-    height = bounds[3] - bounds[1]
-    width = bounds[2] - bounds[0]
-    img_height, img_width = image_shape[:2]
-
-    feature_group = folium.FeatureGroup(name=layer_name)
-    for _, centroid in centroids:
-        lat = bounds[3] - height * (centroid[0] / img_height)
-        lon = bounds[0] + width * (centroid[1] / img_width)
-
-        folium.CircleMarker(
-            location=[lat, lon],
-            radius=3,
-            color="green",
-            fill=True,
-            fill_color="green",
-            fill_opacity=0.8,
-        ).add_to(feature_group)
-
-    feature_group.add_to(map_object)
-
-
 def reproject_tiff(input_tiff, target_crs):
     """Reproject a TIFF file to a target CRS."""
     with rasterio.open(input_tiff) as src:
@@ -127,6 +104,34 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
         ).add_to(map_object)
 
 
+
+
+
+# Ajout des centroïdes des arbres sur la carte
+def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_name):
+    height = bounds[3] - bounds[1]
+    width = bounds[2] - bounds[0]
+    img_height, img_width = image_shape[:2]
+
+    feature_group = folium.FeatureGroup(name=layer_name)
+    for _, centroid in centroids:
+        lat = bounds[3] - height * (centroid[0] / img_height)
+        lon = bounds[0] + width * (centroid[1] / img_width)
+
+        folium.CircleMarker(
+            location=[lat, lon],
+            radius=3,
+            color="green",
+            fill=True,
+            fill_color="green",
+            fill_opacity=0.8,
+        ).add_to(feature_group)
+
+    feature_group.add_to(map_object)
+
+
+
+
 # Interface Streamlit
 st.title("AFRIQUE CARTOGRAPHIE")
 
@@ -134,45 +139,6 @@ st.title("AFRIQUE CARTOGRAPHIE")
 center_lat, center_lon = 7.0, -5.0
 zoom_start = 6
 fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
-
-
-
-
-
-if uploaded_file:
-    # Charger et reprojeter le fichier
-    reprojected_file = load_and_reproject_tiff(uploaded_file, target_crs="EPSG:4326")
-
-    if reprojected_file:
-        with rasterio.open(reprojected_file) as src:
-            # Lire la première bande de l'image
-            image_array = src.read(1)
-            bounds = src.bounds  # Obtenir les limites géographiques
-            min_lat, min_lon = bounds.bottom, bounds.left
-            max_lat, max_lon = bounds.top, bounds.right
-
-            # Vérification des données
-            st.write(f"Type: {type(image_array)}, Shape: {image_array.shape}, Dtype: {image_array.dtype}")
-            st.write(f"Valeurs min/max : {image_array.min()} / {image_array.max()}")
-
-            # Normaliser les valeurs si nécessaire
-            if image_array.dtype != np.uint8:
-                image_array = (255 * (image_array - image_array.min()) /
-                               (image_array.max() - image_array.min())).astype(np.uint8)
-            
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 # Ajouter l'outil de mesure
 fmap.add_child(MeasureControl(position='topleft', primary_length_unit='meters', secondary_length_unit='kilometers'))
@@ -186,6 +152,33 @@ draw = Draw(position='topleft', export=True,
     edit_options={'edit': True,}
 
 )
+def main():
+    st.title("TIFF Viewer and Interactive Map")
+
+    # Upload TIFF file
+    uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
+
+    if uploaded_file is not None:
+        tiff_path = uploaded_file.name
+        with open(tiff_path, "wb") as f:
+            f.write(uploaded_file.read())
+
+        st.write("Reprojecting TIFF file...")
+
+        # Reproject TIFF to target CRS (e.g., EPSG:4326)
+        reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
+
+        # Read bounds from reprojected TIFF file
+        with rasterio.open(reprojected_tiff) as src:
+            bounds = src.bounds
+
+        # Create Folium map
+        center_lat = (bounds.top + bounds.bottom) / 2
+        center_lon = (bounds.left + bounds.right) / 2
+        fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+
+        # Add reprojected TIFF as overlay
+        add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
 
 # Ajouter l'outil Draw à la carte
 fmap.add_child(draw)
