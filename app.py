@@ -110,18 +110,15 @@ draw = Draw(position='topleft', export=True,
                   'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
     edit_options={'edit': True,}
 )
-
-# Ajouter l'outil Draw à la carte
 fmap.add_child(draw)
 
 # Ajouter un LayerControl (position de contrôle)
 fmap.add_child(folium.LayerControl(position='topright'))
 
-# Fonction pour recharger et reprojeter une image TIFF
+# Fonction pour recharger et reprojeter un fichier TIFF
 def load_and_reproject_raster(file_path, target_crs="EPSG:4326"):
     try:
         with rasterio.open(file_path) as src:
-            # Obtenir les métadonnées et reprojeter l'image
             transform, width, height = calculate_default_transform(
                 src.crs, target_crs, src.width, src.height, *src.bounds
             )
@@ -133,8 +130,9 @@ def load_and_reproject_raster(file_path, target_crs="EPSG:4326"):
                 'height': height
             })
 
-            # Créer un fichier temporaire pour stocker l'image reprojetée
-            with rasterio.open("/tmp/reprojected.tif", 'w', **kwargs) as dst:
+            # Reprojection et sauvegarde dans un fichier temporaire
+            temp_path = "/tmp/reprojected.tif"
+            with rasterio.open(temp_path, 'w', **kwargs) as dst:
                 for i in range(1, src.count + 1):
                     reproject(
                         source=rasterio.band(src, i),
@@ -145,27 +143,35 @@ def load_and_reproject_raster(file_path, target_crs="EPSG:4326"):
                         dst_crs=target_crs,
                         resampling=Resampling.nearest
                     )
-        return "/tmp/reprojected.tif"
+            return temp_path, dst.bounds
     except Exception as e:
-        st.error(f"Erreur lors du chargement ou de la reprojection du fichier TIFF : {e}")
-        return None
+        st.error(f"Erreur lors du chargement ou de la reprojection : {e}")
+        return None, None
 
-# Ajouter une fonctionnalité de téléversement
+# Téléversement d'un fichier TIFF
 uploaded_file = st.file_uploader("Téléverser une image TIFF (orthophoto, orthomosaïque)", type=["tif", "tiff"])
 if uploaded_file:
-    reprojected_file = load_and_reproject_raster(uploaded_file, target_crs="EPSG:4326")
-    if reprojected_file:
-        # Afficher l'image raster sur la carte
+    reprojected_file, bounds = load_and_reproject_raster(uploaded_file, target_crs="EPSG:4326")
+    if reprojected_file and bounds:
+        # Calculer les limites (bounds)
+        min_lat, min_lon = bounds.bottom, bounds.left
+        max_lat, max_lon = bounds.top, bounds.right
+        
+        # Charger l'image comme PIL pour le format compatible
+        with rasterio.open(reprojected_file) as src:
+            image_array = src.read(1)
+            image = Image.fromarray(image_array)
+
+        # Ajouter l'image à la carte
         folium.raster_layers.ImageOverlay(
             name="Orthophoto",
-            image=reprojected_file,
-            bounds=[[center_lat - 1, center_lon - 1], [center_lat + 1, center_lon + 1]],
+            image=image,
+            bounds=[[min_lat, min_lon], [max_lat, max_lon]],
             opacity=0.7
         ).add_to(fmap)
 
-# Afficher la carte avec folium_static
+# Afficher la carte
 folium_static(fmap)
-
 
 
 
