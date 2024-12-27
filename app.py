@@ -4,7 +4,12 @@ from folium.plugins import MeasureControl, Draw
 from streamlit_folium import folium_static
 import rasterio
 from rasterio.warp import calculate_default_transform, reproject, Resampling
+import numpy as np
+from shapely.geometry import Polygon, Point, LineString
+from PIL import Image
+from folium import plugins
 from rasterio.plot import reshape_as_image
+import rasterio.warp
 
 # Fonction pour reprojeter un fichier TIFF
 def reproject_tiff(uploaded_file, target_crs="EPSG:4326"):
@@ -38,34 +43,19 @@ def reproject_tiff(uploaded_file, target_crs="EPSG:4326"):
         st.error(f"Erreur lors de la reprojection du fichier TIFF : {e}")
         return None, None
 
-# Fonction pour ajouter une couche d'image
+# Fonction pour ajouter une couche d'image sur une carte Folium
 def add_image_overlay(map_object, tiff_path, bounds, layer_name="TIFF Layer"):
     try:
         with rasterio.open(tiff_path) as src:
             image = src.read(1)  # Lire la première bande
-            
-            # Assurer la compatibilité de la forme de l'image pour Folium (3D)
-            if len(image.shape) == 2:  # Si l'image est 2D (une seule bande)
-                image = np.expand_dims(image, axis=-1)  # Ajouter une dimension pour les canaux (hauteur, largeur, 1)
-            
-            # Redimensionner l'image à la forme attendue pour Folium
-            image_resized = np.moveaxis(image, 2, 0)  # Convertir de (hauteur, largeur, canaux) à (canaux, hauteur, largeur)
-
-            # Convertir les bounds en format [lat_min, lon_min, lat_max, lon_max]
-            folium_bounds = [
-                [bounds[1], bounds[0]],  # [lat_min, lon_min]
-                [bounds[3], bounds[2]]   # [lat_max, lon_max]
-            ]
-            
-            # Ajouter l'image en tant que couche d'image à la carte Folium
             folium.raster_layers.ImageOverlay(
-                image=image_resized[0],  # Utiliser la première (et seule) bande si c'est une image en niveaux de gris
-                bounds=folium_bounds,
+                image=image,
+                bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
                 name=layer_name,
                 opacity=0.6
             ).add_to(map_object)
     except Exception as e:
-        print(f"Erreur lors de l'ajout de la couche d'image : {e}")
+        st.error(f"Erreur lors de l'ajout de la couche d'image : {e}")
 
 # Interface Streamlit
 st.title("AFRIQUE CARTOGRAPHIE")
@@ -77,10 +67,16 @@ zoom_start = 6
 fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
 
 # Ajouter l'outil de mesure
-fmap.add_child(MeasureControl(position='topleft'))
+fmap.add_child(MeasureControl(position='topleft', primary_length_unit='meters', secondary_length_unit='kilometers'))
 
 # Ajouter l'outil de dessin
-draw = Draw(position='topleft', export=True)
+draw = Draw(position='topleft', export=True,
+            draw_options={
+                'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
+                'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
+                'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
+                'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
+            edit_options={'edit': True})
 fmap.add_child(draw)
 
 # Traitement du fichier téléversé
@@ -88,17 +84,18 @@ if uploaded_file:
     with open("uploaded_file.tif", "wb") as f:
         f.write(uploaded_file.read())
 
+    st.write("Reprojection du fichier TIFF...")
     reprojected_file, bounds = reproject_tiff("uploaded_file.tif", target_crs="EPSG:4326")
+
     if reprojected_file and bounds:
-        st.write(f"Limites calculées : {bounds}")
+        st.write("Ajout de la couche TIFF à la carte...")
         add_image_overlay(fmap, reprojected_file, bounds)
 
 # Ajouter le contrôle des couches
-fmap.add_child(folium.LayerControl(position='topright', collapsed=False))
+fmap.add_child(folium.LayerControl(position='topright'))
 
 # Afficher la carte
 folium_static(fmap)
-
 
 
 
