@@ -141,22 +141,12 @@ if st.session_state.get("show_sidebar", False):
                     name="MNT"
                 ).add_to(fmap)
 
-                # Correction de l'appel de add_tree_centroids_layer avec le bon shape de mnt
-                if mnt is not None and mnt_bounds is not None:
-                    image_shape = mnt.shape  # Utilisation correcte de mnt.shape
-
-                    # Ajouter les centroids des arbres sur la carte
-                    add_tree_centroids_layer(fmap, centroids, mnt_bounds, image_shape, "Arbres")
-                
+                add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
                 fmap.add_child(MeasureControl(position='topleft'))
                 fmap.add_child(Draw(position='topleft', export=True))
                 fmap.add_child(folium.LayerControl(position='topright'))
 
                 folium_static(fmap)
-
-
-
-
 
 
 
