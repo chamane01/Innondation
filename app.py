@@ -12,6 +12,7 @@ from folium import plugins
 from folium import Popup
 
 
+
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path, target_crs="EPSG:4326"):
     try:
@@ -121,12 +122,9 @@ polygon_coordinates = [[7.0, -5.0], [7.1, -5.1], [7.2, -5.0], [7.1, -4.9]]
 polygon = folium.Polygon(locations=polygon_coordinates, color='green', weight=4, opacity=0.7)
 polygon.add_to(fmap)
 
-# Calcul de la surface du polygone
-area = folium.utilities.GeoJsonData([{
-    "type": "Polygon",
-    "coordinates": [polygon_coordinates]
-}]).get_bounds()
-surface_area = area[2] - area[0] * area[3] - area[1]  # Approximatif (à adapter pour des calculs réels)
+# Calcul de la surface du polygone avec Shapely
+polygon_geom = Polygon(polygon_coordinates)  # Créer un objet Shapely Polygon
+surface_area = polygon_geom.area  # Surface en mètres carrés
 
 # Ajouter un Popup pour afficher des informations sur le polygone
 popup = Popup(f"Surface: {surface_area:.2f} m²", parse_html=True)
