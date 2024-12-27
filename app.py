@@ -90,7 +90,7 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
 
 
 # Interface Streamlit
-st.title("AFRIQUE CARTOGRAPHIE")
+st.title("OUTILS DE DESSIN")
 
 # Carte initiale
 center_lat, center_lon = 7.0, -5.0
