@@ -106,7 +106,8 @@ draw = Draw(
                   'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
                   'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
                   'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
-    edit_options={'edit': True}
+    edit_options={'edit': True, export=True}
+
 )
 
 # Ajouter l'outil Draw à la carte
@@ -114,7 +115,7 @@ fmap.add_child(draw)
 
 # Ajouter un LayerControl (position de contrôle)
 fmap.add_child(folium.LayerControl(position='topright'))
-fmap.add_child(Draw(position='topright', export=True))
+
 
 # Afficher la carte avec folium_static
 folium_static(fmap)
