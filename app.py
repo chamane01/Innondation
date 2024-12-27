@@ -84,11 +84,16 @@ st.title("Détection Automatique des Arbres")
 # Carte initiale
 center_lat, center_lon = 5.0, -3.0
 zoom_start = 10
-fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
-fmap.add_child(MeasureControl(position='topleft'))
-fmap.add_child(Draw(position='topleft', export=True))
-fmap.add_child(folium.LayerControl(position='topright'))
-folium_static(fmap)
+
+# Conserver la carte en mémoire
+if "map_object" not in st.session_state:
+    st.session_state.map_object = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
+    st.session_state.map_object.add_child(MeasureControl(position='topleft'))
+    st.session_state.map_object.add_child(Draw(position='topleft', export=True))
+    st.session_state.map_object.add_child(folium.LayerControl(position='topright'))
+
+# Affichage de la carte
+folium_static(st.session_state.map_object)
 
 # Zone dédiée aux paramètres et à la logique
 st.sidebar.title("Paramètres de détection")
@@ -121,24 +126,25 @@ if mnt_file and mns_file:
 
             centroids = calculate_cluster_centroids(coords, tree_clusters)
 
-            # Mise à jour de la carte
-            center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
-            center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
-            fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-
+            # Ajout des résultats à la carte initiale
             folium.raster_layers.ImageOverlay(
                 image=mnt,
                 bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
                 opacity=0.5,
                 name="MNT"
-            ).add_to(fmap)
+            ).add_to(st.session_state.map_object)
 
-            add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
-            fmap.add_child(MeasureControl(position='topleft'))
-            fmap.add_child(Draw(position='topleft', export=True))
-            fmap.add_child(folium.LayerControl(position='topright'))
+            add_tree_centroids_layer(
+                st.session_state.map_object,
+                centroids,
+                mnt_bounds,
+                mnt.shape,
+                "Arbres"
+            )
 
-            folium_static(fmap)
+            # Mise à jour de la carte existante
+            folium_static(st.session_state.map_object)
+
 
 
 
