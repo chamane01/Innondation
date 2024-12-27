@@ -10,7 +10,7 @@ import geopandas as gpd
 from shapely.geometry import Polygon, Point, LineString
 from folium import plugins
 from folium import IFrame
-
+from streamlit_folium import st_folium
 
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path, target_crs="EPSG:4326"):
