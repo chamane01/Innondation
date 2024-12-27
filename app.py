@@ -72,7 +72,7 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
     feature_group.add_to(map_object)
 
 # Interface Streamlit
-st.title("Détection Automatique des Arbres et Analyse d'Inondation")
+st.title("Analyse Géospatiale - Détection Automatique")
 
 # Carte initiale
 center_lat, center_lon = 5.0, -3.0
@@ -83,73 +83,66 @@ fmap.add_child(Draw(position='topleft', export=True))
 fmap.add_child(folium.LayerControl(position='topright'))
 folium_static(fmap)
 
-# Gestion de l'affichage de la barre latérale
-if "show_sidebar" not in st.session_state:
-    st.session_state.show_sidebar = False
+# Barre latérale pour téléversement
+st.sidebar.title("Téléversement des fichiers")
 
-if st.button("Détecter les arbres"):
-    st.session_state.show_sidebar = "trees"
+# Téléversement des fichiers obligatoires
+mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
+mns_file = st.sidebar.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
 
-if st.button("Carte d'inondation"):
-    st.session_state.show_sidebar = "flood"
+# Téléversement des fichiers facultatifs
+polygon_file = st.sidebar.file_uploader("Téléchargez une polygonale (optionnel)", type=["csv", "txt"])
+road_file = st.sidebar.file_uploader("Téléchargez un fichier de route (optionnel)", type=["csv", "txt"])
 
-# Affichage des paramètres uniquement si un bouton est cliqué
-if st.session_state.show_sidebar:
-    st.sidebar.title("Paramètres")
+if mnt_file and mns_file:
+    # Charger les fichiers MNT et MNS
+    mnt, mnt_bounds = load_tiff(mnt_file)
+    mns, mns_bounds = load_tiff(mns_file)
 
-    # Téléversement des fichiers de base
-    mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
-    mns_file = st.sidebar.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
-    polygon_file = st.sidebar.file_uploader("Téléchargez le fichier polygonal (GeoJSON)", type=["geojson"])
-    route_file = st.sidebar.file_uploader("Téléchargez le fichier de routes (GeoJSON)", type=["geojson"])
+    if mnt is None or mns is None:
+        st.sidebar.error("Erreur lors du chargement des fichiers.")
+    elif mnt_bounds != mns_bounds:
+        st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
+    else:
+        st.sidebar.success("Les fichiers MNT et MNS ont été chargés avec succès.")
+        
+        # Bouton pour lancer la détection
+        if st.sidebar.button("Lancer la détection"):
+            heights = calculate_heights(mns, mnt)
 
-    if mnt_file and mns_file:
-        mnt, mnt_bounds = load_tiff(mnt_file)
-        mns, mns_bounds = load_tiff(mns_file)
+            # Paramètres de détection
+            height_threshold = st.sidebar.slider("Seuil de hauteur", 0.1, 20.0, 2.0, 0.1)
+            eps = st.sidebar.slider("Rayon de voisinage", 0.1, 10.0, 2.0, 0.1)
+            min_samples = st.sidebar.slider("Min. points pour un cluster", 1, 10, 5, 1)
 
-        if mnt is None or mns is None:
-            st.sidebar.error("Erreur lors du chargement des fichiers.")
-        elif mnt_bounds != mns_bounds:
-            st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
-        else:
-            if st.session_state.show_sidebar == "trees":
-                heights = calculate_heights(mns, mnt)
+            # Détection et visualisation
+            coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
+            num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
+            st.sidebar.write(f"Nombre d'arbres détectés : {num_trees}")
 
-                # Paramètres de détection
-                height_threshold = st.sidebar.slider("Seuil de hauteur", 0.1, 20.0, 2.0, 0.1)
-                eps = st.sidebar.slider("Rayon de voisinage", 0.1, 10.0, 2.0, 0.1)
-                min_samples = st.sidebar.slider("Min. points pour un cluster", 1, 10, 5, 1)
+            centroids = calculate_cluster_centroids(coords, tree_clusters)
 
-                # Détection et visualisation
-                if st.sidebar.button("Lancer la détection"):
-                    coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
-                    num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
-                    st.sidebar.write(f"Nombre d'arbres détectés : {num_trees}")
+            # Mise à jour de la carte
+            center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
+            center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
+            fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-                    centroids = calculate_cluster_centroids(coords, tree_clusters)
+            folium.raster_layers.ImageOverlay(
+                image=mnt,
+                bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
+                opacity=0.5,
+                name="MNT"
+            ).add_to(fmap)
 
-                    # Mise à jour de la carte
-                    center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
-                    center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
-                    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+            add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
+            fmap.add_child(MeasureControl(position='topleft'))
+            fmap.add_child(Draw(position='topleft', export=True))
+            fmap.add_child(folium.LayerControl(position='topright'))
 
-                    folium.raster_layers.ImageOverlay(
-                        image=mnt,
-                        bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
-                        opacity=0.5,
-                        name="MNT"
-                    ).add_to(fmap)
+            folium_static(fmap)
+else:
+    st.sidebar.info("Veuillez téléverser les fichiers MNT et MNS pour lancer l'analyse.")
 
-                    add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
-                    fmap.add_child(MeasureControl(position='topleft'))
-                    fmap.add_child(Draw(position='topleft', export=True))
-                    fmap.add_child(folium.LayerControl(position='topright'))
-
-                    folium_static(fmap)
-
-            elif st.session_state.show_sidebar == "flood":
-                st.sidebar.write("Analyse d'inondation en cours...")
-                # Vous pouvez ajouter ici vos calculs pour la carte d'inondation.
 
 
 
