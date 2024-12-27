@@ -84,7 +84,7 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
     feature_group.add_to(map_object)
 
 # Interface Streamlit
-st.title("Détection Automatique des Arbres")
+st.title("CARTO-TOPO")
 
 # Carte initiale
 center_lat, center_lon = 5.0, -3.0
