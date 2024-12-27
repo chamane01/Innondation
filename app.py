@@ -4,12 +4,7 @@ from folium.plugins import MeasureControl, Draw
 from streamlit_folium import folium_static
 import rasterio
 from rasterio.warp import calculate_default_transform, reproject, Resampling
-import numpy as np
-from shapely.geometry import Polygon, Point, LineString
-from PIL import Image
-from folium import plugins
 from rasterio.plot import reshape_as_image
-import rasterio.warp
 
 # Fonction pour reprojeter un fichier TIFF
 def reproject_tiff(uploaded_file, target_crs="EPSG:4326"):
@@ -43,14 +38,19 @@ def reproject_tiff(uploaded_file, target_crs="EPSG:4326"):
         st.error(f"Erreur lors de la reprojection du fichier TIFF : {e}")
         return None, None
 
-# Fonction pour ajouter une couche d'image sur une carte Folium
+# Fonction pour ajouter une couche d'image
 def add_image_overlay(map_object, tiff_path, bounds, layer_name="TIFF Layer"):
     try:
         with rasterio.open(tiff_path) as src:
             image = src.read(1)  # Lire la première bande
+            image_resized = reshape_as_image(image)
+            folium_bounds = [
+                [bounds[1], bounds[0]],
+                [bounds[3], bounds[2]]
+            ]
             folium.raster_layers.ImageOverlay(
-                image=image,
-                bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
+                image=image_resized,
+                bounds=folium_bounds,
                 name=layer_name,
                 opacity=0.6
             ).add_to(map_object)
@@ -67,16 +67,10 @@ zoom_start = 6
 fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
 
 # Ajouter l'outil de mesure
-fmap.add_child(MeasureControl(position='topleft', primary_length_unit='meters', secondary_length_unit='kilometers'))
+fmap.add_child(MeasureControl(position='topleft'))
 
 # Ajouter l'outil de dessin
-draw = Draw(position='topleft', export=True,
-            draw_options={
-                'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
-                'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
-                'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
-                'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
-            edit_options={'edit': True})
+draw = Draw(position='topleft', export=True)
 fmap.add_child(draw)
 
 # Traitement du fichier téléversé
@@ -84,18 +78,17 @@ if uploaded_file:
     with open("uploaded_file.tif", "wb") as f:
         f.write(uploaded_file.read())
 
-    st.write("Reprojection du fichier TIFF...")
     reprojected_file, bounds = reproject_tiff("uploaded_file.tif", target_crs="EPSG:4326")
-
     if reprojected_file and bounds:
-        st.write("Ajout de la couche TIFF à la carte...")
+        st.write(f"Limites calculées : {bounds}")
         add_image_overlay(fmap, reprojected_file, bounds)
 
 # Ajouter le contrôle des couches
-fmap.add_child(folium.LayerControl(position='topright'))
+fmap.add_child(folium.LayerControl(position='topright', collapsed=False))
 
 # Afficher la carte
 folium_static(fmap)
+
 
 
 
