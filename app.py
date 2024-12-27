@@ -11,6 +11,7 @@ from shapely.geometry import Polygon, Point, LineString
 from folium import plugins
 from folium import IFrame
 from streamlit_folium import st_folium
+from PIL import Image
 
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path, target_crs="EPSG:4326"):
@@ -110,6 +111,34 @@ fmap.add_child(draw)
 
 # Ajouter un LayerControl (position de contrôle)
 fmap.add_child(folium.LayerControl(position='topright'))
+
+# Interface Streamlit pour téléversement de fichier
+st.title("Carte interactive avec téléversement de TIFF")
+uploaded_file = st.file_uploader("Téléversez un fichier TIFF", type=["tif", "tiff"])
+
+if uploaded_file is not None:
+    # Lire le fichier TIFF avec Rasterio
+    with rasterio.open(uploaded_file) as src:
+        # Récupérer les données en tant qu'image
+        image_data = reshape_as_image(src.read())
+        
+        # Normaliser les valeurs pour Pillow
+        image_data = (255 * (image_data / image_data.max())).astype(np.uint8)
+
+        # Convertir en image PIL
+        img = Image.fromarray(image_data)
+
+        # Sauvegarder temporairement l'image au format PNG
+        img.save("temp_overlay.png")
+
+        # Ajouter une superposition d'image à la carte
+        bounds = [[src.bounds.bottom, src.bounds.left], [src.bounds.top, src.bounds.right]]
+        overlay = folium.raster_layers.ImageOverlay(
+            image="temp_overlay.png",
+            bounds=bounds,
+            opacity=0.6
+        )
+        fmap.add_child(overlay)
 
 # Afficher la carte avec folium_static
 folium_static(fmap)
