@@ -83,17 +83,69 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
 
     feature_group.add_to(map_object)
 
+
+
+
 # Interface Streamlit
 st.title("AFRIQUE CARTOGRAPHIE")
 
 # Carte initiale
+st.title("Carte avec outils de dessin personnalisés")
+
+# Niveau du code : Paramètres par défaut
+default_color = "#3388ff"  # Couleur bleue par défaut
+default_weight = 2  # Épaisseur par défaut du trait
+default_fill_opacity = 0.3  # Opacité de remplissage par défaut
+
+# Configuration initiale de la carte
 center_lat, center_lon = 7.0, -5.0
 zoom_start = 6
 fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
+
+# Contrôles de personnalisation via la barre latérale de Streamlit
+st.sidebar.title("Personnalisation des outils de dessin")
+
+# Sélecteur de couleur pour les dessins
+draw_color = st.sidebar.color_picker("Couleur du dessin", default_color)  # Couleur par défaut
+
+# Sélecteurs pour définir l'épaisseur du trait et la transparence
+line_weight = st.sidebar.slider("Épaisseur du trait", 1, 10, default_weight)  # Épaisseur par défaut
+fill_opacity = st.sidebar.slider("Opacité de remplissage", 0.0, 1.0, default_fill_opacity)  # Opacité par défaut
+
+# Style du dessin basé sur les paramètres du code et les entrées utilisateur
+draw_style = {
+    'color': draw_color,
+    'weight': line_weight,
+    'opacity': 1.0,
+    'fillColor': draw_color,  # Couleur de remplissage similaire à la couleur du contour
+    'fillOpacity': fill_opacity
+}
+
+# Ajouter un contrôle de mesure à la carte
 fmap.add_child(MeasureControl(position='topleft'))
-fmap.add_child(Draw(position='topleft', export=True))
+
+# Ajouter les outils de dessin avec le style personnalisé
+draw = Draw(
+    position='topleft',
+    draw_options={
+        'polyline': {'shapeOptions': draw_style},
+        'polygon': {'shapeOptions': draw_style},
+        'rectangle': {'shapeOptions': draw_style},
+        'circle': {'shapeOptions': draw_style},
+        'marker': {'icon': folium.Icon(color='red')}  # Option de style pour les marqueurs
+    },
+    edit_options={'edit': True}
+)
+fmap.add_child(draw)
+
+# Ajouter un contrôle des couches à la carte
 fmap.add_child(folium.LayerControl(position='topright'))
+
+# Affichage de la carte dans Streamlit
 folium_static(fmap)
+
+
+
 
 # Boutons sous la carte
 col1, col2, col3 = st.columns(3)
