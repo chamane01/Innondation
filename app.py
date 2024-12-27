@@ -49,6 +49,11 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
             opacity=0.6
         ).add_to(map_object)
 
+def add_geojson_layer(map_object, geojson_file, layer_name):
+    """Add GeoJSON layer to the map."""
+    folium.GeoJson(geojson_file).add_to(map_object)
+    folium.LayerControl().add_to(map_object)
+
 # Streamlit app
 def main():
     st.title("Dessiner un plan")
@@ -56,7 +61,7 @@ def main():
     # Button to toggle sidebar visibility
     if st.button("Dessiner"):
         with st.sidebar:
-            uploaded_file = st.file_uploader("telecharger une orthophoto en EPSG 32630", type=["tif", "tiff"])
+            uploaded_file = st.file_uploader("Télécharger une orthophoto en EPSG 32630", type=["tif", "tiff"])
 
         if uploaded_file is not None:
             tiff_path = uploaded_file.name
@@ -93,8 +98,27 @@ def main():
             )
             fmap.add_child(draw)
 
-            # Layer control
+            # Add layers control
             folium.LayerControl().add_to(fmap)
+
+            # Button to add more layers (GeoJSON files)
+            with st.sidebar:
+                if st.button("Ajouter des couches"):
+                    geojson_files = {
+                        "Routes": st.file_uploader("Télécharger un fichier GeoJSON pour les routes", type="geojson"),
+                        "Bâtiments": st.file_uploader("Télécharger un fichier GeoJSON pour les bâtiments", type="geojson"),
+                        "Cours d'eau": st.file_uploader("Télécharger un fichier GeoJSON pour les cours d'eau", type="geojson"),
+                        "Plantations": st.file_uploader("Télécharger un fichier GeoJSON pour les plantations", type="geojson"),
+                        "Réseaux électriques": st.file_uploader("Télécharger un fichier GeoJSON pour les réseaux électriques", type="geojson"),
+                        "Réseaux télécom": st.file_uploader("Télécharger un fichier GeoJSON pour les réseaux télécom", type="geojson"),
+                        "Drains": st.file_uploader("Télécharger un fichier GeoJSON pour les drains", type="geojson"),
+                        "Pistes": st.file_uploader("Télécharger un fichier GeoJSON pour les pistes", type="geojson")
+                    }
+
+                    # Add layers to map
+                    for layer_name, geojson_file in geojson_files.items():
+                        if geojson_file is not None:
+                            add_geojson_layer(fmap, geojson_file, layer_name)
 
             # Display map
             folium_static(fmap)
