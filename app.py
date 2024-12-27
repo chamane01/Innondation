@@ -105,10 +105,7 @@ fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
 fmap.add_child(MeasureControl(position='topleft', primary_length_unit='meters', secondary_length_unit='kilometers'))
 
 # Fonction pour afficher un pop-up avec les informations du dessin
-def on_draw(event):
-    # Obtenir l'objet dessiné en GeoJSON
-    geo_json = event['layer'].to_geojson()
-
+def on_draw(geo_json):
     # Extraire le type de géométrie et les coordonnées
     geometry_type = geo_json['geometry']['type']
     coordinates = geo_json['geometry']['coordinates']
@@ -147,18 +144,13 @@ def on_draw(event):
 
     elif geometry_type == 'Rectangle':
         # Pour les rectangles (surfaces)
-        bounds = event['layer'].get_bounds()
+        bounds = geo_json['geometry']['coordinates'][0]  # Rectangle donné par des coordonnées (min, max)
         width = abs(bounds[0][0] - bounds[1][0])  # Largeur
         height = abs(bounds[0][1] - bounds[1][1])  # Hauteur
         area = width * height  # Surface en m²
         pop_up_content += f"<b>Surface:</b> {area:.2f} m²"
 
-    # Créer le pop-up avec les informations
-    iframe = IFrame(pop_up_content, width=300, height=200)
-    popup = folium.Popup(iframe, max_width=300)
-
-    # Ajouter le pop-up à l'objet dessiné
-    event['layer'].add_child(popup)
+    return pop_up_content
 
 # Créer un objet Draw avec des couleurs personnalisées pour les dessins
 draw = Draw(
@@ -172,8 +164,17 @@ draw = Draw(
 # Ajouter l'outil Draw à la carte
 fmap.add_child(draw)
 
-# Ajouter l'événement pour afficher les pop-ups après le dessin
-fmap.on('draw:created', on_draw)
+# Afficher la carte et capturer les événements de dessin avec st_folium
+map_data = st_folium(fmap, width=700, height=500)
+
+# Si des dessins ont été créés, afficher un pop-up avec les informations
+if map_data and 'features' in map_data:
+    for feature in map_data['features']:
+        geo_json = feature['geometry']
+        pop_up_content = on_draw(geo_json)
+        
+        # Ajouter le pop-up à l'objet correspondant
+        folium.Popup(pop_up_content).add_to(fmap)
 
 # Ajouter un LayerControl (position de contrôle)
 fmap.add_child(folium.LayerControl(position='topright'))
