@@ -84,7 +84,7 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
     feature_group.add_to(map_object)
 
 # Interface Streamlit
-st.title("CARTO-TOPO")
+st.title("Détection Automatique des Arbres")
 
 # Carte initiale
 center_lat, center_lon = 5.0, -3.0
@@ -93,7 +93,7 @@ fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
 fmap.add_child(MeasureControl(position='topleft'))
 fmap.add_child(Draw(position='topleft', export=True))
 fmap.add_child(folium.LayerControl(position='topright'))
-folium_static(fmap, key="initial_map")
+folium_static(fmap)
 
 # Boutons sous la carte
 col1, col2, col3 = st.columns(3)
@@ -141,11 +141,10 @@ if st.session_state.get("show_sidebar", False):
 
                 centroids = calculate_cluster_centroids(coords, tree_clusters)
 
-                # Mise à jour de la carte avec la nouvelle position et les éléments supplémentaires
+                # Mise à jour de la carte
                 center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
                 center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
-                fmap.location = [center_lat, center_lon]
-                fmap.zoom_start = 12
+                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
                 folium.raster_layers.ImageOverlay(
                     image=mnt,
@@ -169,9 +168,7 @@ if st.session_state.get("show_sidebar", False):
                 fmap.add_child(Draw(position='topleft', export=True))
                 fmap.add_child(folium.LayerControl(position='topright'))
 
-                # Affichage de la carte mise à jour
-                folium_static(fmap, key="initial_map")
-
+                folium_static(fmap)
 
 
 
