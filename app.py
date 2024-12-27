@@ -9,8 +9,6 @@ from sklearn.cluster import DBSCAN
 import geopandas as gpd
 from shapely.geometry import Polygon
 from folium import plugins
-from folium import Popup
-
 
 
 # Fonction pour charger un fichier TIFF
@@ -116,33 +114,6 @@ fmap.add_child(draw)
 # Ajouter un LayerControl (position de contrôle)
 fmap.add_child(folium.LayerControl(position='topright'))
 
-# Exemple d'ajout d'un Overlay pour afficher les informations d'un polygone
-# Création d'un polygone exemple
-polygon_coordinates = [[7.0, -5.0], [7.1, -5.1], [7.2, -5.0], [7.1, -4.9]]
-polygon = folium.Polygon(locations=polygon_coordinates, color='green', weight=4, opacity=0.7)
-polygon.add_to(fmap)
-
-# Calcul de la surface du polygone avec Shapely
-polygon_geom = Polygon(polygon_coordinates)  # Créer un objet Shapely Polygon
-surface_area = polygon_geom.area  # Surface en mètres carrés
-
-# Ajouter un Popup pour afficher des informations sur le polygone
-popup = Popup(f"Surface: {surface_area:.2f} m²", parse_html=True)
-polygon.add_child(popup)
-
-# Ajouter un autre overlay (exemple pour une ligne)
-line_coordinates = [[7.0, -5.0], [7.1, -5.1]]
-line = folium.PolyLine(locations=line_coordinates, color='blue', weight=4, opacity=0.7)
-line.add_to(fmap)
-
-# Calcul de la longueur de la ligne
-from geopy.distance import geodesic
-line_length = geodesic(line_coordinates[0], line_coordinates[1]).meters
-
-# Ajouter un Popup pour afficher la longueur de la ligne
-popup_line = Popup(f"Longueur: {line_length:.2f} m", parse_html=True)
-line.add_child(popup_line)
-
 # Afficher la carte avec folium_static
 folium_static(fmap)
 
@@ -225,6 +196,7 @@ if st.session_state.get("show_sidebar", False):
                 fmap.add_child(folium.LayerControl(position='topright'))
 
                 folium_static(fmap)
+
 
 
 
