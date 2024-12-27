@@ -86,8 +86,14 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
 
     feature_group.add_to(map_object)
 
-
-
+# Fonction pour vérifier si les arbres sont à l'intérieur de la polygonale
+def filter_trees_inside_polygon(centroids, polygon):
+    inside_trees = []
+    for _, centroid in centroids:
+        point = Point(centroid[1], centroid[0])
+        if polygon.contains(point):
+            inside_trees.append((centroid[0], centroid[1]))
+    return inside_trees
 
 # Interface Streamlit
 st.title("AFRIQUE CARTOGRAPHIE")
@@ -107,7 +113,6 @@ draw = Draw(position='topleft', export=True,
                   'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
                   'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
     edit_options={'edit': True,}
-
 )
 
 # Ajouter l'outil Draw à la carte
@@ -116,13 +121,8 @@ fmap.add_child(draw)
 # Ajouter un LayerControl (position de contrôle)
 fmap.add_child(folium.LayerControl(position='topright'))
 
-
 # Afficher la carte avec folium_static
 folium_static(fmap)
-
-
-
-
 
 # Boutons sous la carte
 col1, col2, col3 = st.columns(3)
@@ -170,6 +170,20 @@ if st.session_state.get("show_sidebar", False):
 
                 centroids = calculate_cluster_centroids(coords, tree_clusters)
 
+                # Charger et afficher le polygone
+                if polygon_file:
+                    polygon_gdf = load_and_reproject_shapefile(polygon_file)
+                    polygon_geom = polygon_gdf.geometry.unary_union  # Combiner les géométries en un seul polygone
+                    if isinstance(polygon_geom, Polygon):
+                        inside_trees = filter_trees_inside_polygon(centroids, polygon_geom)
+                        st.sidebar.write(f"Nombre d'arbres à l'intérieur du polygone : {len(inside_trees)}")
+
+                        # Filtrer les arbres à l'intérieur du polygone
+                        filtered_centroids = [(tree[0], tree[1]) for tree in inside_trees]
+                        add_tree_centroids_layer(fmap, [(i, centroid) for i, centroid in enumerate(filtered_centroids)], mnt_bounds, mnt.shape, "Arbres à l'intérieur du polygone")
+                    else:
+                        st.sidebar.error("Le fichier de polygone contient plusieurs géométries. Veuillez utiliser un seul polygone.")
+                
                 # Mise à jour de la carte
                 center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
                 center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
@@ -184,20 +198,17 @@ if st.session_state.get("show_sidebar", False):
 
                 add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
 
-                # Ajout des routes et polygones
+                # Ajout des routes
                 if road_file:
                     roads_gdf = load_and_reproject_shapefile(road_file)
                     folium.GeoJson(roads_gdf, name="Routes", style_function=lambda x: {'color': 'orange', 'weight': 2}).add_to(fmap)
-
-                if polygon_file:
-                    polygons_gdf = load_and_reproject_shapefile(polygon_file)
-                    folium.GeoJson(polygons_gdf, name="Polygones", style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}).add_to(fmap)
 
                 fmap.add_child(MeasureControl(position='topleft'))
                 fmap.add_child(Draw(position='topleft', export=True))
                 fmap.add_child(folium.LayerControl(position='topright'))
 
                 folium_static(fmap)
+
 
 
 
