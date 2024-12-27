@@ -7,8 +7,9 @@ from rasterio.warp import transform_bounds
 import numpy as np
 from sklearn.cluster import DBSCAN
 import geopandas as gpd
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, Point, LineString
 from folium import plugins
+from folium import IFrame
 
 
 # Fonction pour charger un fichier TIFF
@@ -91,6 +92,10 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
 # Interface Streamlit
 st.title("AFRIQUE CARTOGRAPHIE")
 
+# Fonction pour obtenir les coordonnées projetées
+def latlon_to_proj(lat, lon, proj):
+    return proj.transform(pyproj.Proj(init="epsg:4326"), proj, lon, lat)
+
 # Carte initiale
 center_lat, center_lon = 7.0, -5.0
 zoom_start = 6
@@ -98,6 +103,62 @@ fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
 
 # Ajouter l'outil de mesure
 fmap.add_child(MeasureControl(position='topleft', primary_length_unit='meters', secondary_length_unit='kilometers'))
+
+# Fonction pour afficher un pop-up avec les informations du dessin
+def on_draw(event):
+    # Obtenir l'objet dessiné en GeoJSON
+    geo_json = event['layer'].to_geojson()
+
+    # Extraire le type de géométrie et les coordonnées
+    geometry_type = geo_json['geometry']['type']
+    coordinates = geo_json['geometry']['coordinates']
+
+    # Coordonnées géographiques (latitude, longitude)
+    lat_lon_coords = coordinates[0] if geometry_type == 'Polygon' else coordinates
+
+    # Convertir en coordonnées projetées (UTM)
+    proj = pyproj.Proj(init="epsg:32630")  # Utiliser EPSG:32630 pour la Côte d'Ivoire (UTM Zone 30N)
+    proj_coords = [latlon_to_proj(lat, lon, proj) for lat, lon in lat_lon_coords]
+
+    # Calcul des informations spécifiques selon le type de géométrie
+    pop_up_content = f"<b>Type de géométrie:</b> {geometry_type}<br>"
+
+    if geometry_type == 'Point':
+        # Pour les points (marqueurs)
+        lat, lon = lat_lon_coords
+        pop_up_content += f"<b>Coordonnées géographiques:</b> ({lat}, {lon})<br>"
+        pop_up_content += f"<b>Coordonnées projetées (UTM):</b> ({proj_coords[0][0]}, {proj_coords[0][1]})<br>"
+
+    elif geometry_type == 'LineString':
+        # Pour les lignes (distance)
+        line = LineString(coordinates)
+        distance = line.length  # Distance en mètres
+        pop_up_content += f"<b>Distance:</b> {distance:.2f} mètres"
+
+    elif geometry_type == 'Polygon':
+        # Pour les polygones
+        polygon = Polygon(coordinates[0])  # Pour un polygone simple
+        area_m2 = polygon.area  # Surface en mètres carrés
+        area_ha = area_m2 / 10000  # Surface en hectares
+        num_vertices = len(coordinates[0])  # Nombre de sommets
+
+        pop_up_content += f"<b>Surface:</b> {area_m2:.2f} m² ({area_ha:.2f} hectares)<br>"
+        pop_up_content += f"<b>Nombre de sommets:</b> {num_vertices}"
+
+    elif geometry_type == 'Rectangle':
+        # Pour les rectangles (surfaces)
+        bounds = event['layer'].get_bounds()
+        width = abs(bounds[0][0] - bounds[1][0])  # Largeur
+        height = abs(bounds[0][1] - bounds[1][1])  # Hauteur
+        area = width * height  # Surface en m²
+        pop_up_content += f"<b>Surface:</b> {area:.2f} m²"
+
+    # Créer le pop-up avec les informations
+    iframe = IFrame(pop_up_content, width=300, height=200)
+    popup = folium.Popup(iframe, max_width=300)
+
+    # Ajouter le pop-up à l'objet dessiné
+    event['layer'].add_child(popup)
 
 # Créer un objet Draw avec des couleurs personnalisées pour les dessins
 draw = Draw(
@@ -111,12 +172,14 @@ draw = Draw(
 # Ajouter l'outil Draw à la carte
 fmap.add_child(draw)
 
+# Ajouter l'événement pour afficher les pop-ups après le dessin
+fmap.on('draw:created', on_draw)
+
 # Ajouter un LayerControl (position de contrôle)
 fmap.add_child(folium.LayerControl(position='topright'))
 
 # Afficher la carte avec folium_static
 folium_static(fmap)
-
 
 
 
