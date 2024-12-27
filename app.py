@@ -101,7 +101,7 @@ fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
 fmap.add_child(MeasureControl(position='topleft', primary_length_unit='meters', secondary_length_unit='kilometers'))
 
 # Créer un objet Draw avec des couleurs personnalisées pour les dessins
-draw = Draw(
+draw = Draw(position='topleft', export=True,
     draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
                   'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
                   'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
