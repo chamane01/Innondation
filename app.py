@@ -104,6 +104,11 @@ def main():
             uploaded_buildings = st.file_uploader("Télécharger les bâtiments (GeoJSON)", type="geojson")
             uploaded_waterways = st.file_uploader("Télécharger les cours d'eau (GeoJSON)", type="geojson")
 
+            # Checkboxes to toggle visibility of GeoJSON layers
+            show_routes = st.checkbox("Afficher les routes", value=True)
+            show_buildings = st.checkbox("Afficher les bâtiments", value=True)
+            show_waterways = st.checkbox("Afficher les cours d'eau", value=True)
+
         if uploaded_file is not None:
             tiff_path = uploaded_file.name
             with open(tiff_path, "wb") as f:
@@ -126,12 +131,12 @@ def main():
             # Add reprojected TIFF as overlay
             add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
 
-            # Add GeoJSON layers if uploaded
-            if uploaded_routes is not None:
+            # Add GeoJSON layers if uploaded and checkbox is checked
+            if uploaded_routes is not None and show_routes:
                 add_geojson_layer(fmap, uploaded_routes, "Routes", route_style)
-            if uploaded_buildings is not None:
+            if uploaded_buildings is not None and show_buildings:
                 add_geojson_layer(fmap, uploaded_buildings, "Bâtiments", building_style)
-            if uploaded_waterways is not None:
+            if uploaded_waterways is not None and show_waterways:
                 add_geojson_layer(fmap, uploaded_waterways, "Cours d'eau", waterway_style)
 
             # Add measure control
@@ -139,11 +144,7 @@ def main():
 
             # Add draw control
             draw = Draw(position='topleft', export=True,
-                        draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
-                                      'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
-                                      'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
-                                      'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
-                        edit_options={'edit': True,}
+                        draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}}}
             )
             fmap.add_child(draw)
 
@@ -155,6 +156,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
