@@ -95,54 +95,46 @@ center_lat, center_lon = 7.0, -5.0
 zoom_start = 6
 fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
 
-# Ajouter l'outil de mesure
-fmap.add_child(MeasureControl(position='topleft', primary_length_unit='meters', secondary_length_unit='kilometers'))
-
-# Créer un objet Draw avec des couleurs personnalisées pour les dessins
-draw = Draw(position='topleft', export=True,
-    draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
-                  'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
-                  'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
-                  'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
-    edit_options={'edit': True})
-
-# Ajouter l'outil Draw à la carte
-fmap.add_child(draw)
-
-# Ajouter un LayerControl (position de contrôle)
-fmap.add_child(folium.LayerControl(position='topright'))
-
 # Interface Streamlit pour téléversement de fichier
-st.title("Carte interactive avec téléversement de TIFF")
+st.title("Carte interactive avec contours vectoriels de TIFF")
 uploaded_file = st.file_uploader("Téléversez un fichier TIFF", type=["tif", "tiff"])
 
 if uploaded_file is not None:
-    # Lire le fichier TIFF avec Rasterio
-    with rasterio.open(uploaded_file) as src:
-        # Récupérer les données en tant qu'image
-        image_data = reshape_as_image(src.read())
-        
-        # Normaliser les valeurs pour Pillow
-        image_data = (255 * (image_data / image_data.max())).astype(np.uint8)
+    try:
+        with rasterio.open(uploaded_file) as src:
+            # Lire les données du raster
+            data = src.read(1)  # Lire la première bande
+            transform = src.transform
 
-        # Convertir en image PIL
-        img = Image.fromarray(image_data)
+            # Extraire les contours sous forme de polygones
+            contours = [
+                {"geometry": shape(geom), "value": value}
+                for geom, value in shapes(data, transform=transform)
+                if value > 0  # Ignorer les valeurs nulles ou 0
+            ]
 
-        # Sauvegarder temporairement l'image au format PNG
-        img.save("temp_overlay.png")
+            # Convertir en GeoDataFrame
+            gdf = gpd.GeoDataFrame.from_records(contours)
 
-        # Ajouter une superposition d'image à la carte
-        bounds = [[src.bounds.bottom, src.bounds.left], [src.bounds.top, src.bounds.right]]
-        overlay = folium.raster_layers.ImageOverlay(
-            image="temp_overlay.png",
-            bounds=bounds,
-            opacity=0.6
-        )
-        fmap.add_child(overlay)
+            # Ajouter chaque polygone à la carte Folium
+            for _, row in gdf.iterrows():
+                geojson = folium.GeoJson(
+                    data=row["geometry"].__geo_interface__,
+                    style_function=lambda x: {
+                        "fillColor": "blue",
+                        "color": "blue",
+                        "weight": 1,
+                        "fillOpacity": 0.5,
+                    },
+                )
+                geojson.add_to(fmap)
+
+        st.success("Contours ajoutés à la carte.")
+    except Exception as e:
+        st.error(f"Erreur lors du traitement du fichier TIFF : {e}")
 
 # Afficher la carte avec folium_static
 folium_static(fmap)
-
 # Boutons sous la carte
 col1, col2, col3 = st.columns(3)
 with col1:
