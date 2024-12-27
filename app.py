@@ -51,12 +51,12 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
 
 # Streamlit app
 def main():
-    st.title("TIFF Viewer and Interactive Map")
+    st.title("Dessiner un plan")
 
-    # Button to trigger the drawing functionality
-    if st.button('Dessin'):
-        # Upload TIFF file
-        uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
+    # Button to toggle sidebar visibility
+    if st.button("Dessiner"):
+        with st.sidebar:
+            uploaded_file = st.file_uploader("telecharger une orthophoto en EPSG 32630", type=["tif", "tiff"])
 
         if uploaded_file is not None:
             tiff_path = uploaded_file.name
@@ -101,7 +101,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 
 
