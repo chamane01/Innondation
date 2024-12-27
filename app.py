@@ -141,10 +141,11 @@ if st.session_state.get("show_sidebar", False):
 
                 centroids = calculate_cluster_centroids(coords, tree_clusters)
 
-                # Mise à jour de la carte
+                # Mise à jour de la carte avec la nouvelle position et les éléments supplémentaires
                 center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
                 center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
-                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+                fmap.location = [center_lat, center_lon]
+                fmap.zoom_start = 12
 
                 folium.raster_layers.ImageOverlay(
                     image=mnt,
@@ -168,7 +169,9 @@ if st.session_state.get("show_sidebar", False):
                 fmap.add_child(Draw(position='topleft', export=True))
                 fmap.add_child(folium.LayerControl(position='topright'))
 
+                # Affichage de la carte mise à jour
                 folium_static(fmap)
+
 
 
 
