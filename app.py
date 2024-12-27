@@ -64,13 +64,6 @@ def calculate_cluster_centroids(coords, clusters):
 
     return centroids
 
-# Fonction pour calculer la surface et le nombre de sommets d'un polygone
-def calculate_polygon_info(polygon):
-    if isinstance(polygon, Polygon):
-        return polygon.area, len(polygon.exterior.coords)
-    else:
-        return 0, 0  # Si ce n'est pas un polygone valide
-
 # Ajout des centroïdes des arbres sur la carte
 def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_name):
     height = bounds[3] - bounds[1]
@@ -106,12 +99,11 @@ fmap.add_child(MeasureControl(position='topleft', primary_length_unit='meters', 
 
 # Créer un objet Draw avec des couleurs personnalisées pour les dessins
 draw = Draw(position='topleft', export=True,
-    draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}} ,
+    draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
                   'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
                   'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
-                  'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}}, 
-    edit_options={'edit': True,}
-)
+                  'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
+    edit_options={'edit': True})
 
 # Ajouter l'outil Draw à la carte
 fmap.add_child(draw)
@@ -166,23 +158,6 @@ if st.session_state.get("show_sidebar", False):
                 num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
                 st.sidebar.write(f"Nombre d'arbres détectés : {num_trees}")
 
-                # Charger et afficher les polygones
-                if polygon_file:
-                    polygons_gdf = load_and_reproject_shapefile(polygon_file)
-                    total_area = 0
-                    total_vertices = 0
-
-                    # Affichage des informations sur les polygones
-                    for _, row in polygons_gdf.iterrows():
-                        polygon = row['geometry']
-                        area, vertices = calculate_polygon_info(polygon)
-                        total_area += area
-                        total_vertices += vertices
-                        st.sidebar.write(f"Polygone {row.name} : Surface = {area:.2f} m², Sommets = {vertices}")
-
-                    st.sidebar.write(f"Surface totale des polygones : {total_area:.2f} m²")
-                    st.sidebar.write(f"Nombre total de sommets : {total_vertices}")
-
                 centroids = calculate_cluster_centroids(coords, tree_clusters)
 
                 # Mise à jour de la carte
@@ -206,7 +181,15 @@ if st.session_state.get("show_sidebar", False):
 
                 if polygon_file:
                     polygons_gdf = load_and_reproject_shapefile(polygon_file)
-                    folium.GeoJson(polygons_gdf, name="Polygones", style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}).add_to(fmap)
+                    
+                    # Vérification de la validité des polygones
+                    if polygons_gdf is not None:
+                        if polygons_gdf.is_valid.all():
+                            folium.GeoJson(polygons_gdf, name="Polygones", style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}).add_to(fmap)
+                        else:
+                            st.sidebar.warning("Certains polygones sont invalides et ne seront pas affichés.")
+                    else:
+                        st.sidebar.error("Erreur lors du chargement du fichier de polygone.")
 
                 fmap.add_child(MeasureControl(position='topleft'))
                 fmap.add_child(Draw(position='topleft', export=True))
