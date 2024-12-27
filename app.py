@@ -1,29 +1,31 @@
-
 import streamlit as st
 import folium
 from folium.plugins import MeasureControl, Draw
 from streamlit_folium import folium_static
-import numpy as np
 import rasterio
 from rasterio.warp import transform_bounds
-from sklearn.cluster import DBSCAN
 import geopandas as gpd
-from shapely.geometry import Polygon
+import numpy as np
+from sklearn.cluster import DBSCAN
 import json
 
-# Fonctions utilitaires
+# Fonction pour charger un fichier TIFF
 def load_tiff(file_path, target_crs="EPSG:4326"):
     try:
         with rasterio.open(file_path) as src:
             data = src.read(1)  # Lire la première bande
             src_crs = src.crs  # CRS source
             bounds = src.bounds  # Bornes source
+
+            # Reprojeter les bornes vers le CRS cible
             target_bounds = transform_bounds(src_crs, target_crs, *bounds)
+
         return data, target_bounds
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None
 
+# Fonction pour charger un fichier GeoJSON
 def load_geojson(file_path, target_crs="EPSG:4326"):
     try:
         gdf = gpd.read_file(file_path)
@@ -33,49 +35,69 @@ def load_geojson(file_path, target_crs="EPSG:4326"):
         st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
         return None
 
+# Calcul de hauteur relative
 def calculate_heights(mns, mnt):
     return np.maximum(0, mns - mnt)
 
+# Détection des arbres avec DBSCAN
 def detect_trees(heights, threshold, eps, min_samples):
     tree_mask = heights > threshold
     coords = np.column_stack(np.where(tree_mask))
-    clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
-    return coords, clustering.labels_
 
+    clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
+    tree_clusters = clustering.labels_
+
+    return coords, tree_clusters
+
+# Calcul des centroïdes
 def calculate_cluster_centroids(coords, clusters):
     unique_clusters = set(clusters) - {-1}
     centroids = []
+
     for cluster_id in unique_clusters:
         cluster_coords = coords[clusters == cluster_id]
         centroid = cluster_coords.mean(axis=0)
         centroids.append((cluster_id, centroid))
+
     return centroids
 
+# Ajout des centroïdes des arbres sur la carte
 def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_name):
     height = bounds[3] - bounds[1]
     width = bounds[2] - bounds[0]
     img_height, img_width = image_shape[:2]
+
     feature_group = folium.FeatureGroup(name=layer_name)
     for _, centroid in centroids:
         lat = bounds[3] - height * (centroid[0] / img_height)
         lon = bounds[0] + width * (centroid[1] / img_width)
-        folium.CircleMarker(location=[lat, lon], radius=3, color="green", fill=True).add_to(feature_group)
+
+        folium.CircleMarker(
+            location=[lat, lon],
+            radius=3,
+            color="green",
+            fill=True,
+            fill_color="green",
+            fill_opacity=0.8,
+        ).add_to(feature_group)
+
     feature_group.add_to(map_object)
 
-# Interface principale
-st.title("Carte Interactive : Détection des arbres")
+# Interface Streamlit
+st.title("Détection Automatique des Arbres")
 
 # Carte initiale
-map_center = [5.348, -4.017]  # Par exemple : Abidjan, Côte d'Ivoire
-fmap = folium.Map(location=map_center, zoom_start=10)
-fmap.add_child(MeasureControl())
-fmap.add_child(Draw(export=True))
-fmap.add_child(folium.LayerControl())
+center_lat, center_lon = 5.0, -3.0
+zoom_start = 10
 
-# Gestion du bouton "Détection des arbres"
-if st.button("Détection des arbres"):
-    st.write("Téléchargez vos fichiers pour lancer la détection.")
+fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
+fmap.add_child(MeasureControl(position='topleft'))
+fmap.add_child(Draw(position='topleft', export=True))
+fmap.add_child(folium.LayerControl(position='topright'))
+folium_static(fmap)
 
+# Bouton pour détecter les arbres
+if st.button("Détecter les arbres"):
     mnt_file = st.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
     mns_file = st.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
 
@@ -83,21 +105,41 @@ if st.button("Détection des arbres"):
         mnt, mnt_bounds = load_tiff(mnt_file)
         mns, mns_bounds = load_tiff(mns_file)
 
-        if mnt is None or mns is None or mnt_bounds != mns_bounds:
-            st.error("Erreur : fichiers incompatibles.")
+        if mnt is None or mns is None:
+            st.error("Erreur lors du chargement des fichiers.")
+        elif mnt_bounds != mns_bounds:
+            st.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
         else:
             heights = calculate_heights(mns, mnt)
+            st.sidebar.title("Paramètres de détection")
             height_threshold = st.sidebar.slider("Seuil de hauteur", 0.1, 20.0, 2.0, 0.1)
             eps = st.sidebar.slider("Rayon de voisinage", 0.1, 10.0, 2.0, 0.1)
             min_samples = st.sidebar.slider("Min. points pour un cluster", 1, 10, 5, 1)
 
             coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
-            centroids = calculate_cluster_centroids(coords, tree_clusters)
-            add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
-            st.success(f"Nombre d'arbres détectés : {len(centroids)}")
+            num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
+            st.write(f"Nombre d'arbres détectés : {num_trees}")
 
-# Affichage de la carte finale
-folium_static(fmap)
+            centroids = calculate_cluster_centroids(coords, tree_clusters)
+
+            center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
+            center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
+            fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+
+            folium.raster_layers.ImageOverlay(
+                image=mnt,
+                bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
+                opacity=0.5,
+                name="MNT"
+            ).add_to(fmap)
+
+            add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
+            fmap.add_child(MeasureControl(position='topleft'))
+            fmap.add_child(Draw(position='topleft', export=True))
+            fmap.add_child(folium.LayerControl(position='topright'))
+
+            folium_static(fmap)
+
 
 
 # Importer les bibliothèques nécessaires
