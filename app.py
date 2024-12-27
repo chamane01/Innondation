@@ -8,6 +8,8 @@ import numpy as np
 from sklearn.cluster import DBSCAN
 import geopandas as gpd
 from shapely.geometry import Polygon
+from folium import plugins
+
 
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path, target_crs="EPSG:4326"):
@@ -94,18 +96,19 @@ center_lat, center_lon = 7.0, -5.0
 zoom_start = 6
 fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
 
-# Ajouter l'outil de mesure (couleur du texte)
+# Ajouter l'outil de mesure
 fmap.add_child(MeasureControl(position='topleft', primary_length_unit='meters', secondary_length_unit='kilometers'))
 
-# Personnaliser l'outil Draw avec des couleurs spécifiques
+# Créer un objet Draw avec des couleurs personnalisées pour les dessins
 draw = Draw(
-    position='topleft', 
-    export=True,
-    polyline={'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},  # Couleur de la ligne
-    polygon={'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},  # Couleur du polygone
-    rectangle={'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},  # Couleur du rectangle
-    circle={'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}   # Couleur du cercle
+    draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
+                  'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
+                  'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
+                  'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
+    edit_options={'edit': True}
 )
+
+# Ajouter l'outil Draw à la carte
 fmap.add_child(draw)
 
 # Ajouter un LayerControl (position de contrôle)
