@@ -134,6 +134,7 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
 
 # Interface Streamlit
 st.title("AFRIQUE CARTOGRAPHIE")
+uploaded_file = st.file_uploader("Téléversez un fichier TIFF (orthophoto ou orthomosaïque)", type=["tiff", "tif"])
 
 # Carte initiale
 center_lat, center_lon = 7.0, -5.0
@@ -152,7 +153,10 @@ draw = Draw(position='topleft', export=True,
     edit_options={'edit': True,}
 
 )
-def main():
+if uploaded_file:
+    # Charger et reprojeter le fichier
+    reprojected_file = load_and_reproject_tiff(uploaded_file, target_crs="EPSG:4326")
+    def main():
     st.title("TIFF Viewer and Interactive Map")
 
     # Upload TIFF file
@@ -179,6 +183,7 @@ def main():
 
         # Add reprojected TIFF as overlay
         add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
+
 
 # Ajouter l'outil Draw à la carte
 fmap.add_child(draw)
