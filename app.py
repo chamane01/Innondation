@@ -99,16 +99,13 @@ fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
 # Ajouter l'outil de mesure
 fmap.add_child(MeasureControl(position='topleft', primary_length_unit='meters', secondary_length_unit='kilometers'))
 
-# Créer un objet Draw avec des couleurs personnalisées pour les dessins et ajouter l'option de points
+# Créer un objet Draw avec des couleurs personnalisées pour les dessins
 draw = Draw(
-    draw_options={
-        'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},  # Ligne
-        'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},  # Polygone
-        'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},  # Rectangle
-        'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}},  # Cercle
-        'marker': {'icon': folium.Icon(color='orange', icon='info-sign')}  # Point (marqueur)
-    },
-    edit_options={'edit': True}  # Options d'édition
+    draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
+                  'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
+                  'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
+                  'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
+    edit_options={'edit': True}
 )
 
 # Ajouter l'outil Draw à la carte
@@ -119,6 +116,7 @@ fmap.add_child(folium.LayerControl(position='topright'))
 
 # Afficher la carte avec folium_static
 folium_static(fmap)
+
 
 
 
@@ -198,7 +196,6 @@ if st.session_state.get("show_sidebar", False):
                 fmap.add_child(folium.LayerControl(position='topright'))
 
                 folium_static(fmap)
-
 
 
 
