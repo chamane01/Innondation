@@ -53,11 +53,12 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
 def main():
     st.title("TIFF Viewer and Interactive Map")
 
-    # Button to trigger the drawing functionality
-    if st.button('Dessin'):
-        # Upload TIFF file
+    # Sidebar for uploading TIFF file
+    with st.sidebar:
         uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
 
+    # Button to trigger the drawing functionality
+    if st.button('Dessin'):
         if uploaded_file is not None:
             tiff_path = uploaded_file.name
             with open(tiff_path, "wb") as f:
