@@ -29,14 +29,20 @@ def load_tiff(file_path, target_crs="EPSG:4326"):
         return None, None
 
 # Fonction pour charger un fichier GeoJSON ou Shapefile et le projeter
-def load_and_reproject_shapefile(file_path, target_crs="EPSG:4326"):
-    try:
-        gdf = gpd.read_file(file_path)
-        gdf = gdf.to_crs(target_crs)  # Reprojection au CRS cible
-        return gdf
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier Shapefile/GeoJSON : {e}")
-        return None
+def load_and_reproject_shapefile(file):
+    # Chargement du fichier shapefile ou geojson
+    if file.name.endswith('.geojson'):
+        gdf = gpd.read_file(file)
+    elif file.name.endswith('.shp'):
+        gdf = gpd.read_file(file)
+    else:
+        raise ValueError("Fichier non pris en charge. Veuillez télécharger un fichier GeoJSON ou Shapefile.")
+    
+    # Vérifier le CRS et le réprojeter si nécessaire
+    if gdf.crs != "EPSG:4326":
+        gdf = gdf.to_crs("EPSG:4326")  # Convertir en WGS84 (Latitude/Longitude)
+
+    return gdf
 
 # Calcul de hauteur relative
 def calculate_heights(mns, mnt):
@@ -63,7 +69,15 @@ def calculate_cluster_centroids(coords, clusters):
         centroids.append((cluster_id, centroid))
 
     return centroids
-
+    
+def add_polygon_layer(map_object, polygon_gdf):
+    # Ajouter une couche de polygone sur la carte
+    for _, row in polygon_gdf.iterrows():
+        folium.GeoJson(
+            row['geometry'],
+            style_function=lambda x: {'color': 'blue', 'fill': True, 'fillColor': 'blue', 'fillOpacity': 0.2}
+        ).add_to(map_object)
+        
 # Ajout des centroïdes des arbres sur la carte
 def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_name):
     height = bounds[3] - bounds[1]
