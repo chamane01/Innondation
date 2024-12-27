@@ -7,6 +7,7 @@ from folium.plugins import MeasureControl, Draw
 from rasterio.plot import reshape_as_image
 from PIL import Image
 from streamlit_folium import folium_static
+import geopandas as gpd
 
 def reproject_tiff(input_tiff, target_crs):
     """Reproject a TIFF file to a target CRS."""
@@ -37,18 +38,6 @@ def reproject_tiff(input_tiff, target_crs):
 
     return reprojected_tiff
 
-
-# Fonction pour charger un fichier GeoJSON et le projeter
-def load_geojson(file_path, target_crs="EPSG:4326"):
-    try:
-        gdf = gpd.read_file(file_path)
-        gdf = gdf.to_crs(target_crs)  # Reprojection vers le CRS cible
-        return gdf
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
-        return None
-
-
 def add_image_overlay(map_object, tiff_path, bounds, name):
     """Add a TIFF image overlay to a Folium map."""
     with rasterio.open(tiff_path) as src:
@@ -61,6 +50,13 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
             opacity=0.6
         ).add_to(map_object)
 
+def add_geojson_layer(map_object, geojson_file, name):
+    """Add a GeoJSON file as a layer to the map."""
+    if geojson_file is not None:
+        gdf = gpd.read_file(geojson_file)
+        folium.GeoJson(gdf).add_to(map_object)
+        st.write(f"Layer '{name}' added successfully.")
+
 # Streamlit app
 def main():
     st.title("TIFF Viewer and Interactive Map")
@@ -69,10 +65,12 @@ def main():
     if st.button("Dessiner"):
         with st.sidebar:
             uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
-            geojson_file = st.file_uploader("Téléchargez la polygonale (GeoJSON)", type=["geojson"])
-            route_file = st.file_uploader("Téléchargez le fichier de route (GeoJSON)", type=["geojson"])  # Nouveau
 
-
+            # Optional GeoJSON uploads
+            st.subheader("Ajouter des couches (facultatif)")
+            uploaded_routes = st.file_uploader("Télécharger les routes (GeoJSON)", type="geojson")
+            uploaded_buildings = st.file_uploader("Télécharger les bâtiments (GeoJSON)", type="geojson")
+            uploaded_waterways = st.file_uploader("Télécharger les cours d'eau (GeoJSON)", type="geojson")
 
         if uploaded_file is not None:
             tiff_path = uploaded_file.name
@@ -96,6 +94,14 @@ def main():
             # Add reprojected TIFF as overlay
             add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
 
+            # Add GeoJSON layers if uploaded
+            if uploaded_routes is not None:
+                add_geojson_layer(fmap, uploaded_routes, "Routes")
+            if uploaded_buildings is not None:
+                add_geojson_layer(fmap, uploaded_buildings, "Bâtiments")
+            if uploaded_waterways is not None:
+                add_geojson_layer(fmap, uploaded_waterways, "Cours d'eau")
+
             # Add measure control
             fmap.add_child(MeasureControl(position='topleft'))
 
@@ -112,39 +118,11 @@ def main():
             # Layer control
             folium.LayerControl().add_to(fmap)
 
-             # Si un fichier GeoJSON est téléchargé, l'ajouter à la carte
-            if geojson_file:
-                geojson_data = load_geojson(geojson_file)
-                if geojson_data is not None:
-                    folium.GeoJson(
-                        geojson_data,
-                        style_function=lambda x: {
-                            'fillColor': 'transparent',
-                            'color': 'white',
-                            'weight': 2
-                        }
-                    ).add_to(fmap)
-
-            # Si un fichier de route est téléchargé, l'ajouter à la carte
-            if route_file:
-                route_data = load_geojson(route_file)
-                if route_data is not None:
-                    folium.GeoJson(
-                        route_data,
-                        style_function=lambda x: {
-                            'fillColor': 'transparent',
-                            'color': 'blue',
-                            'weight': 3
-                        },
-                        name="Route"
-                    ).add_to(fmap)
-
             # Display map
             folium_static(fmap)
 
 if __name__ == "__main__":
     main()
-
 
 
 
