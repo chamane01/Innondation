@@ -6,6 +6,8 @@ import rasterio
 from rasterio.warp import transform_bounds
 import numpy as np
 from sklearn.cluster import DBSCAN
+import geopandas as gpd
+from shapely.geometry import Polygon
 
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path, target_crs="EPSG:4326"):
@@ -22,6 +24,16 @@ def load_tiff(file_path, target_crs="EPSG:4326"):
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None
+
+# Fonction pour charger un fichier GeoJSON ou Shapefile et le projeter
+def load_and_reproject_shapefile(file_path, target_crs="EPSG:4326"):
+    try:
+        gdf = gpd.read_file(file_path)
+        gdf = gdf.to_crs(target_crs)  # Reprojection au CRS cible
+        return gdf
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier Shapefile/GeoJSON : {e}")
+        return None
 
 # Calcul de hauteur relative
 def calculate_heights(mns, mnt):
@@ -142,6 +154,16 @@ if st.session_state.get("show_sidebar", False):
                 ).add_to(fmap)
 
                 add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
+
+                # Ajout des routes et polygones
+                if road_file:
+                    roads_gdf = load_and_reproject_shapefile(road_file)
+                    folium.GeoJson(roads_gdf, name="Routes", style_function=lambda x: {'color': 'blue', 'weight': 2}).add_to(fmap)
+
+                if polygon_file:
+                    polygons_gdf = load_and_reproject_shapefile(polygon_file)
+                    folium.GeoJson(polygons_gdf, name="Polygones", style_function=lambda x: {'fillOpacity': 0, 'color': 'white', 'weight': 2}).add_to(fmap)
+
                 fmap.add_child(MeasureControl(position='topleft'))
                 fmap.add_child(Draw(position='topleft', export=True))
                 fmap.add_child(folium.LayerControl(position='topright'))
