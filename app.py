@@ -84,7 +84,7 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
     feature_group.add_to(map_object)
 
 # Interface Streamlit
-st.title("Détection Automatique des Arbres")
+st.title("AFRIQUE CARTOGRAPHIE")
 
 # Carte initiale
 center_lat, center_lon = 5.0, -3.0
@@ -158,7 +158,7 @@ if st.session_state.get("show_sidebar", False):
                 # Ajout des routes et polygones
                 if road_file:
                     roads_gdf = load_and_reproject_shapefile(road_file)
-                    folium.GeoJson(roads_gdf, name="Routes", style_function=lambda x: {'color': 'blue', 'weight': 2}).add_to(fmap)
+                    folium.GeoJson(roads_gdf, name="Routes", style_function=lambda x: {'color': 'orange', 'weight': 2}).add_to(fmap)
 
                 if polygon_file:
                     polygons_gdf = load_and_reproject_shapefile(polygon_file)
