@@ -35,7 +35,7 @@ def load_and_reproject_shapefile(file_path, target_crs="EPSG:4326"):
         gdf = gdf.to_crs(target_crs)  # Reprojection au CRS cible
         return gdf
     except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier Shapefile/GeoJSON : {e}")
+        st.error(f"Erreur lors du chargement des fichiers Shapefile/GeoJSON : {e}")
         return None
 
 # Calcul de hauteur relative
@@ -64,6 +64,13 @@ def calculate_cluster_centroids(coords, clusters):
 
     return centroids
 
+# Fonction pour calculer la surface et le nombre de sommets d'un polygone
+def calculate_polygon_info(polygon):
+    if isinstance(polygon, Polygon):
+        return polygon.area, len(polygon.exterior.coords)
+    else:
+        return 0, 0  # Si ce n'est pas un polygone valide
+
 # Ajout des centroïdes des arbres sur la carte
 def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_name):
     height = bounds[3] - bounds[1]
@@ -86,9 +93,6 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
 
     feature_group.add_to(map_object)
 
-
-
-
 # Interface Streamlit
 st.title("AFRIQUE CARTOGRAPHIE")
 
@@ -102,12 +106,11 @@ fmap.add_child(MeasureControl(position='topleft', primary_length_unit='meters', 
 
 # Créer un objet Draw avec des couleurs personnalisées pour les dessins
 draw = Draw(position='topleft', export=True,
-    draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
+    draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}} ,
                   'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
                   'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
-                  'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
+                  'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}}, 
     edit_options={'edit': True,}
-
 )
 
 # Ajouter l'outil Draw à la carte
@@ -116,13 +119,8 @@ fmap.add_child(draw)
 # Ajouter un LayerControl (position de contrôle)
 fmap.add_child(folium.LayerControl(position='topright'))
 
-
 # Afficher la carte avec folium_static
 folium_static(fmap)
-
-
-
-
 
 # Boutons sous la carte
 col1, col2, col3 = st.columns(3)
@@ -167,6 +165,23 @@ if st.session_state.get("show_sidebar", False):
                 coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
                 num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
                 st.sidebar.write(f"Nombre d'arbres détectés : {num_trees}")
+
+                # Charger et afficher les polygones
+                if polygon_file:
+                    polygons_gdf = load_and_reproject_shapefile(polygon_file)
+                    total_area = 0
+                    total_vertices = 0
+
+                    # Affichage des informations sur les polygones
+                    for _, row in polygons_gdf.iterrows():
+                        polygon = row['geometry']
+                        area, vertices = calculate_polygon_info(polygon)
+                        total_area += area
+                        total_vertices += vertices
+                        st.sidebar.write(f"Polygone {row.name} : Surface = {area:.2f} m², Sommets = {vertices}")
+
+                    st.sidebar.write(f"Surface totale des polygones : {total_area:.2f} m²")
+                    st.sidebar.write(f"Nombre total de sommets : {total_vertices}")
 
                 centroids = calculate_cluster_centroids(coords, tree_clusters)
 
