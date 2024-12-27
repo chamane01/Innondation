@@ -1,4 +1,41 @@
 
+import streamlit as st
+import folium
+from folium.plugins import MeasureControl, Draw
+from streamlit_folium import folium_static
+
+# Titre de l'application
+st.title("Carte Dynamique avec Outils Intégrés")
+
+# Définir le centre de la carte et le niveau de zoom
+center_lat, center_lon = 5.0, -3.0  # Coordonées par défaut (par exemple, Côte d'Ivoire)
+zoom_start = 10
+
+# Créer la carte avec Folium
+fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
+
+# Ajouter le contrôle de mesure
+fmap.add_child(MeasureControl(position='topleft'))
+
+# Ajouter les outils de dessin
+fmap.add_child(Draw(position='topleft', export=True))
+
+# Ajouter le contrôle des couches
+fmap.add_child(folium.LayerControl(position='topright'))
+
+# Afficher la carte dans Streamlit
+folium_static(fmap)
+
+# Boutons pour des actions futures
+col1, col2 = st.columns(2)
+
+with col1:
+    if st.button("Bouton 1"):
+        st.write("Action pour Bouton 1 en attente.")
+
+with col2:
+    if st.button("Bouton 2"):
+        st.write("Action pour Bouton 2 en attente.")
 
 # Importer les bibliothèques nécessaires
 import streamlit as st
