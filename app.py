@@ -37,6 +37,18 @@ def reproject_tiff(input_tiff, target_crs):
 
     return reprojected_tiff
 
+
+# Fonction pour charger un fichier GeoJSON et le projeter
+def load_geojson(file_path, target_crs="EPSG:4326"):
+    try:
+        gdf = gpd.read_file(file_path)
+        gdf = gdf.to_crs(target_crs)  # Reprojection vers le CRS cible
+        return gdf
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
+        return None
+
+
 def add_image_overlay(map_object, tiff_path, bounds, name):
     """Add a TIFF image overlay to a Folium map."""
     with rasterio.open(tiff_path) as src:
@@ -57,6 +69,10 @@ def main():
     if st.button("Dessiner"):
         with st.sidebar:
             uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
+            geojson_file = st.file_uploader("Téléchargez la polygonale (GeoJSON)", type=["geojson"])
+            route_file = st.file_uploader("Téléchargez le fichier de route (GeoJSON)", type=["geojson"])  # Nouveau
+
+
 
         if uploaded_file is not None:
             tiff_path = uploaded_file.name
@@ -95,6 +111,33 @@ def main():
 
             # Layer control
             folium.LayerControl().add_to(fmap)
+
+             # Si un fichier GeoJSON est téléchargé, l'ajouter à la carte
+            if geojson_file:
+                geojson_data = load_geojson(geojson_file)
+                if geojson_data is not None:
+                    folium.GeoJson(
+                        geojson_data,
+                        style_function=lambda x: {
+                            'fillColor': 'transparent',
+                            'color': 'white',
+                            'weight': 2
+                        }
+                    ).add_to(fmap)
+
+            # Si un fichier de route est téléchargé, l'ajouter à la carte
+            if route_file:
+                route_data = load_geojson(route_file)
+                if route_data is not None:
+                    folium.GeoJson(
+                        route_data,
+                        style_function=lambda x: {
+                            'fillColor': 'transparent',
+                            'color': 'blue',
+                            'weight': 3
+                        },
+                        name="Route"
+                    ).add_to(fmap)
 
             # Display map
             folium_static(fmap)
