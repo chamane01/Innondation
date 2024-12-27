@@ -104,7 +104,6 @@ draw = Draw(
     draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
                   'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
                   'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
-                  'point': {'shapeOptions': {'color': 'black', 'weight': 4, 'opacity': 0.7}},
                   'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
     edit_options={'edit': True}
 )
