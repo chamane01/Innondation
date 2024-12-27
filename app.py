@@ -114,6 +114,7 @@ fmap.add_child(draw)
 
 # Ajouter un LayerControl (position de contrôle)
 fmap.add_child(folium.LayerControl(position='topright'))
+fmap.add_child(Draw(position='topright', export=True))
 
 # Afficher la carte avec folium_static
 folium_static(fmap)
