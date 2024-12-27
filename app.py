@@ -198,4 +198,3 @@ if st.session_state.get("show_sidebar", False):
                 fmap.add_child(folium.LayerControl(position='topright'))
 
                 folium_static(fmap)
-
