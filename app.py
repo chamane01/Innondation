@@ -61,56 +61,39 @@ def calculate_cluster_centroids(coords, clusters):
 
     return centroids
 
-# Fonction pour générer la carte avec les éléments ajoutés dynamiquement
-def generate_map(mnt, mnt_bounds, mns=None, centroids=None, roads_gdf=None, polygons_gdf=None, height=None):
-    center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
-    center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
-    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+# Ajout des centroïdes des arbres sur la carte
+def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_name):
+    height = bounds[3] - bounds[1]
+    width = bounds[2] - bounds[0]
+    img_height, img_width = image_shape[:2]
 
-    folium.raster_layers.ImageOverlay(
-        image=mnt,
-        bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
-        opacity=0.5,
-        name="MNT"
-    ).add_to(fmap)
+    feature_group = folium.FeatureGroup(name=layer_name)
+    for _, centroid in centroids:
+        lat = bounds[3] - height * (centroid[0] / img_height)
+        lon = bounds[0] + width * (centroid[1] / img_width)
 
-    # Ajout des arbres si les centroids sont fournis
-    if centroids:
-        height = mnt_bounds[3] - mnt_bounds[1]
-        width = mnt_bounds[2] - mnt_bounds[0]
-        img_height, img_width = mnt.shape[:2]
+        folium.CircleMarker(
+            location=[lat, lon],
+            radius=3,
+            color="green",
+            fill=True,
+            fill_color="green",
+            fill_opacity=0.8,
+        ).add_to(feature_group)
 
-        feature_group = folium.FeatureGroup(name="Arbres")
-        for _, centroid in centroids:
-            lat = mnt_bounds[3] - height * (centroid[0] / img_height)
-            lon = mnt_bounds[0] + width * (centroid[1] / img_width)
-
-            folium.CircleMarker(
-                location=[lat, lon],
-                radius=3,
-                color="green",
-                fill=True,
-                fill_color="green",
-                fill_opacity=0.8,
-            ).add_to(feature_group)
-
-        feature_group.add_to(fmap)
-
-    # Ajout des routes et polygones si les fichiers sont fournis
-    if roads_gdf is not None:
-        folium.GeoJson(roads_gdf, name="Routes", style_function=lambda x: {'color': '', 'weight': 2}).add_to(fmap)
-
-    if polygons_gdf is not None:
-        folium.GeoJson(polygons_gdf, name="Polygones", style_function=lambda x: {'fillOpacity': 0, 'color': 'white', 'weight': 2}).add_to(fmap)
-
-    fmap.add_child(MeasureControl(position='topleft'))
-    fmap.add_child(Draw(position='topleft', export=True))
-    fmap.add_child(folium.LayerControl(position='topright'))
-
-    return fmap
+    feature_group.add_to(map_object)
 
 # Interface Streamlit
 st.title("Détection Automatique des Arbres")
+
+# Carte initiale
+center_lat, center_lon = 5.0, -3.0
+zoom_start = 10
+fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
+fmap.add_child(MeasureControl(position='topleft'))
+fmap.add_child(Draw(position='topleft', export=True))
+fmap.add_child(folium.LayerControl(position='topright'))
+folium_static(fmap)
 
 # Boutons sous la carte
 col1, col2, col3 = st.columns(3)
@@ -158,19 +141,34 @@ if st.session_state.get("show_sidebar", False):
 
                 centroids = calculate_cluster_centroids(coords, tree_clusters)
 
-                # Mise à jour de la carte avec les centroids d'arbres et autres données
-                fmap = generate_map(mnt, mnt_bounds, centroids=centroids)
+                # Mise à jour de la carte
+                center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
+                center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
+                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-                # Ajout des routes et polygones si fichiers chargés
+                folium.raster_layers.ImageOverlay(
+                    image=mnt,
+                    bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
+                    opacity=0.5,
+                    name="MNT"
+                ).add_to(fmap)
+
+                add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
+
+                # Ajout des routes et polygones
                 if road_file:
                     roads_gdf = load_and_reproject_shapefile(road_file)
+                    folium.GeoJson(roads_gdf, name="Routes", style_function=lambda x: {'color': '', 'weight': 2}).add_to(fmap)
+
                 if polygon_file:
                     polygons_gdf = load_and_reproject_shapefile(polygon_file)
+                    folium.GeoJson(polygons_gdf, name="Polygones", style_function=lambda x: {'fillOpacity': 0, 'color': 'white', 'weight': 2}).add_to(fmap)
 
-                fmap = generate_map(mnt, mnt_bounds, centroids=centroids, roads_gdf=roads_gdf, polygons_gdf=polygons_gdf)
+                fmap.add_child(MeasureControl(position='topleft'))
+                fmap.add_child(Draw(position='topleft', export=True))
+                fmap.add_child(folium.LayerControl(position='topright'))
 
                 folium_static(fmap)
-
 
 
 
