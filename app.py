@@ -86,7 +86,7 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
 # Interface Streamlit
 st.title("AFRIQUE CARTOGRAPHIE")
 # Carte initiale
-center_lat, center_lon = 5.0, -2.5
+center_lat, center_lon = 4.0, -3
 zoom_start = 6
 fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
 fmap.add_child(MeasureControl(position='topleft'))
