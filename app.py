@@ -89,7 +89,12 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
 # Interface Streamlit
 st.title("AFRIQUE CARTOGRAPHIE")
 
-# Carte initiale
+import folium
+from folium.plugins import Draw, MeasureControl
+import streamlit as st
+from streamlit_folium import folium_static
+
+# Interface Streamlit
 st.title("Carte avec outils de dessin personnalisés")
 
 # Niveau du code : Paramètres par défaut
@@ -143,6 +148,7 @@ fmap.add_child(folium.LayerControl(position='topright'))
 
 # Affichage de la carte dans Streamlit
 folium_static(fmap)
+
 
 
 
