@@ -3,8 +3,6 @@ import folium
 from folium.plugins import MeasureControl, Draw
 from streamlit_folium import folium_static
 import rasterio
-from rasterio.features import shapes
-from shapely.geometry import shape
 from rasterio.warp import transform_bounds
 import numpy as np
 from sklearn.cluster import DBSCAN
@@ -13,7 +11,6 @@ from shapely.geometry import Polygon, Point, LineString
 from folium import plugins
 from folium import IFrame
 from streamlit_folium import st_folium
-from PIL import Image
 
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path, target_crs="EPSG:4326"):
@@ -38,7 +35,7 @@ def load_and_reproject_shapefile(file_path, target_crs="EPSG:4326"):
         gdf = gdf.to_crs(target_crs)  # Reprojection au CRS cible
         return gdf
     except Exception as e:
-        st.error(f"Erreur lors du chargement des fichiers Shapefile/GeoJSON : {e}")
+        st.error(f"Erreur lors du chargement du fichier Shapefile/GeoJSON : {e}")
         return None
 
 # Calcul de hauteur relative
@@ -89,6 +86,9 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
 
     feature_group.add_to(map_object)
 
+
+
+
 # Interface Streamlit
 st.title("AFRIQUE CARTOGRAPHIE")
 
@@ -97,46 +97,33 @@ center_lat, center_lon = 7.0, -5.0
 zoom_start = 6
 fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
 
-# Interface Streamlit pour téléversement de fichier
-st.title("Carte interactive avec contours vectoriels de TIFF")
-uploaded_file = st.file_uploader("Téléversez un fichier TIFF", type=["tif", "tiff"])
+# Ajouter l'outil de mesure
+fmap.add_child(MeasureControl(position='topleft', primary_length_unit='meters', secondary_length_unit='kilometers'))
 
-if uploaded_file is not None:
-    try:
-        with rasterio.open(uploaded_file) as src:
-            # Lire les données du raster
-            data = src.read(1)  # Lire la première bande
-            transform = src.transform
+# Créer un objet Draw avec des couleurs personnalisées pour les dessins
+draw = Draw(position='topleft', export=True,
+    draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
+                  'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
+                  'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
+                  'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
+    edit_options={'edit': True,}
 
-            # Extraire les contours sous forme de polygones
-            contours = [
-                {"geometry": shape(geom), "value": value}
-                for geom, value in shapes(data, transform=transform)
-                if value > 0  # Ignorer les valeurs nulles ou 0
-            ]
+)
 
-            # Convertir en GeoDataFrame
-            gdf = gpd.GeoDataFrame.from_records(contours)
+# Ajouter l'outil Draw à la carte
+fmap.add_child(draw)
 
-            # Ajouter chaque polygone à la carte Folium
-            for _, row in gdf.iterrows():
-                geojson = folium.GeoJson(
-                    data=row["geometry"].__geo_interface__,
-                    style_function=lambda x: {
-                        "fillColor": "blue",
-                        "color": "blue",
-                        "weight": 1,
-                        "fillOpacity": 0.5,
-                    },
-                )
-                geojson.add_to(fmap)
+# Ajouter un LayerControl (position de contrôle)
+fmap.add_child(folium.LayerControl(position='topright'))
 
-        st.success("Contours ajoutés à la carte.")
-    except Exception as e:
-        st.error(f"Erreur lors du traitement du fichier TIFF : {e}")
 
 # Afficher la carte avec folium_static
 folium_static(fmap)
+
+
+
+
+
 # Boutons sous la carte
 col1, col2, col3 = st.columns(3)
 with col1:
@@ -204,21 +191,14 @@ if st.session_state.get("show_sidebar", False):
 
                 if polygon_file:
                     polygons_gdf = load_and_reproject_shapefile(polygon_file)
-                    
-                    # Vérification de la validité des polygones
-                    if polygons_gdf is not None:
-                        if polygons_gdf.is_valid.all():
-                            folium.GeoJson(polygons_gdf, name="Polygones", style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}).add_to(fmap)
-                        else:
-                            st.sidebar.warning("Certains polygones sont invalides et ne seront pas affichés.")
-                    else:
-                        st.sidebar.error("Erreur lors du chargement du fichier de polygone.")
+                    folium.GeoJson(polygons_gdf, name="Polygones", style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}).add_to(fmap)
 
                 fmap.add_child(MeasureControl(position='topleft'))
                 fmap.add_child(Draw(position='topleft', export=True))
                 fmap.add_child(folium.LayerControl(position='topright'))
 
                 folium_static(fmap)
+
 
 
 
