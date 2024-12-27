@@ -93,9 +93,25 @@ st.title("AFRIQUE CARTOGRAPHIE")
 center_lat, center_lon = 7.0, -5.0
 zoom_start = 6
 fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
-fmap.add_child(MeasureControl(position='topleft'))
-fmap.add_child(Draw(position='topleft', export=True))
+
+# Ajouter l'outil de mesure (couleur du texte)
+fmap.add_child(MeasureControl(position='topleft', primary_length_unit='meters', secondary_length_unit='kilometers'))
+
+# Personnaliser l'outil Draw avec des couleurs spécifiques
+draw = Draw(
+    position='topleft', 
+    export=True,
+    polyline={'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},  # Couleur de la ligne
+    polygon={'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},  # Couleur du polygone
+    rectangle={'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},  # Couleur du rectangle
+    circle={'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}   # Couleur du cercle
+)
+fmap.add_child(draw)
+
+# Ajouter un LayerControl (position de contrôle)
 fmap.add_child(folium.LayerControl(position='topright'))
+
+# Afficher la carte avec folium_static
 folium_static(fmap)
 
 
