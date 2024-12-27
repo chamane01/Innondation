@@ -43,19 +43,29 @@ def add_image_overlay(map_object, tiff_path, bounds, layer_name="TIFF Layer"):
     try:
         with rasterio.open(tiff_path) as src:
             image = src.read(1)  # Lire la première bande
-            image_resized = reshape_as_image(image)
+            
+            # Assurer la compatibilité de la forme de l'image pour Folium (3D)
+            if len(image.shape) == 2:  # Si l'image est 2D (une seule bande)
+                image = np.expand_dims(image, axis=-1)  # Ajouter une dimension pour les canaux (hauteur, largeur, 1)
+            
+            # Redimensionner l'image à la forme attendue pour Folium
+            image_resized = np.moveaxis(image, 2, 0)  # Convertir de (hauteur, largeur, canaux) à (canaux, hauteur, largeur)
+
+            # Convertir les bounds en format [lat_min, lon_min, lat_max, lon_max]
             folium_bounds = [
-                [bounds[1], bounds[0]],
-                [bounds[3], bounds[2]]
+                [bounds[1], bounds[0]],  # [lat_min, lon_min]
+                [bounds[3], bounds[2]]   # [lat_max, lon_max]
             ]
+            
+            # Ajouter l'image en tant que couche d'image à la carte Folium
             folium.raster_layers.ImageOverlay(
-                image=image_resized,
+                image=image_resized[0],  # Utiliser la première (et seule) bande si c'est une image en niveaux de gris
                 bounds=folium_bounds,
                 name=layer_name,
                 opacity=0.6
             ).add_to(map_object)
     except Exception as e:
-        st.error(f"Erreur lors de l'ajout de la couche d'image : {e}")
+        print(f"Erreur lors de l'ajout de la couche d'image : {e}")
 
 # Interface Streamlit
 st.title("AFRIQUE CARTOGRAPHIE")
