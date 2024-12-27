@@ -71,17 +71,23 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
 
     feature_group.add_to(map_object)
 
+# Initialisation de la carte
+def initialize_map(center_lat=5.0, center_lon=-3.0, zoom_start=10):
+    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
+    fmap.add_child(MeasureControl(position='topleft'))
+    fmap.add_child(Draw(position='topleft', export=True))
+    fmap.add_child(folium.LayerControl(position='topright'))
+    return fmap
+
 # Interface Streamlit
 st.title("Détection Automatique des Arbres")
 
-# Carte initiale
-center_lat, center_lon = 5.0, -3.0
-zoom_start = 10
-fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
-fmap.add_child(MeasureControl(position='topleft'))
-fmap.add_child(Draw(position='topleft', export=True))
-fmap.add_child(folium.LayerControl(position='topright'))
-folium_static(fmap)
+# Initialiser ou récupérer la carte existante
+if "map" not in st.session_state:
+    st.session_state.map = initialize_map()
+
+# Affichage de la carte
+folium_static(st.session_state.map)
 
 # Bouton pour afficher la barre latérale
 if "show_sidebar" not in st.session_state:
@@ -125,21 +131,21 @@ if st.session_state.show_sidebar:
                 # Mise à jour de la carte
                 center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
                 center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
-                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+                st.session_state.map = initialize_map(center_lat, center_lon, zoom_start=12)
 
                 folium.raster_layers.ImageOverlay(
                     image=mnt,
                     bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
                     opacity=0.5,
                     name="MNT"
-                ).add_to(fmap)
+                ).add_to(st.session_state.map)
 
-                add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
-                fmap.add_child(MeasureControl(position='topleft'))
-                fmap.add_child(Draw(position='topleft', export=True))
-                fmap.add_child(folium.LayerControl(position='topright'))
+                add_tree_centroids_layer(
+                    st.session_state.map, centroids, mnt_bounds, mnt.shape, "Arbres"
+                )
 
-                folium_static(fmap)
+                # Afficher la carte actualisée
+                folium_static(st.session_state.map)
 
 
 
