@@ -3,6 +3,8 @@ import folium
 from folium.plugins import MeasureControl, Draw
 from streamlit_folium import folium_static
 import rasterio
+from rasterio.features import shapes
+from shapely.geometry import shape
 from rasterio.warp import transform_bounds
 import numpy as np
 from sklearn.cluster import DBSCAN
