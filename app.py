@@ -94,20 +94,19 @@ mns_file = st.sidebar.file_uploader("Téléchargez le fichier MNS (TIFF)", type=
 polygon_file = st.sidebar.file_uploader("Téléchargez une polygonale (optionnel)", type=["csv", "txt"])
 road_file = st.sidebar.file_uploader("Téléchargez un fichier de route (optionnel)", type=["csv", "txt"])
 
-if mnt_file and mns_file:
-    # Charger les fichiers MNT et MNS
-    mnt, mnt_bounds = load_tiff(mnt_file)
-    mns, mns_bounds = load_tiff(mns_file)
+# Bouton pour détecter les arbres
+if st.sidebar.button("Détecter les arbres"):
+    if mnt_file and mns_file:
+        # Charger les fichiers MNT et MNS
+        mnt, mnt_bounds = load_tiff(mnt_file)
+        mns, mns_bounds = load_tiff(mns_file)
 
-    if mnt is None or mns is None:
-        st.sidebar.error("Erreur lors du chargement des fichiers.")
-    elif mnt_bounds != mns_bounds:
-        st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
-    else:
-        st.sidebar.success("Les fichiers MNT et MNS ont été chargés avec succès.")
-        
-        # Bouton pour lancer la détection
-        if st.sidebar.button("Lancer la détection"):
+        if mnt is None or mns is None:
+            st.sidebar.error("Erreur lors du chargement des fichiers.")
+        elif mnt_bounds != mns_bounds:
+            st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
+        else:
+            # Calcul des hauteurs
             heights = calculate_heights(mns, mnt)
 
             # Paramètres de détection
@@ -140,8 +139,9 @@ if mnt_file and mns_file:
             fmap.add_child(folium.LayerControl(position='topright'))
 
             folium_static(fmap)
-else:
-    st.sidebar.info("Veuillez téléverser les fichiers MNT et MNS pour lancer l'analyse.")
+    else:
+        st.sidebar.error("Veuillez téléverser les fichiers MNT et MNS pour lancer l'analyse.")
+
 
 
 
