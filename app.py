@@ -8,6 +8,7 @@ from rasterio.plot import reshape_as_image
 from PIL import Image
 from streamlit_folium import folium_static
 import geopandas as gpd
+from shapely.geometry import shape
 
 def reproject_tiff(input_tiff, target_crs):
     """Reproject a TIFF file to a target CRS."""
@@ -50,12 +51,43 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
             opacity=0.6
         ).add_to(map_object)
 
-def add_geojson_layer(map_object, geojson_file, name):
+def add_geojson_layer(map_object, geojson_file, name, style=None):
     """Add a GeoJSON file as a layer to the map."""
     if geojson_file is not None:
         gdf = gpd.read_file(geojson_file)
-        folium.GeoJson(gdf).add_to(map_object)
+        
+        # Reproject GeoJSON to match the map's CRS
+        gdf = gdf.to_crs(epsg=4326)
+
+        # Add style if specified
+        folium.GeoJson(
+            gdf,
+            name=name,
+            style_function=style
+        ).add_to(map_object)
         st.write(f"Layer '{name}' added successfully.")
+
+# Define styles for different layers
+def route_style(feature):
+    return {
+        'color': 'blue',
+        'weight': 3,
+        'opacity': 0.7
+    }
+
+def building_style(feature):
+    return {
+        'color': 'green',
+        'weight': 2,
+        'opacity': 0.5
+    }
+
+def waterway_style(feature):
+    return {
+        'color': 'cyan',
+        'weight': 1,
+        'opacity': 0.6
+    }
 
 # Streamlit app
 def main():
@@ -96,11 +128,11 @@ def main():
 
             # Add GeoJSON layers if uploaded
             if uploaded_routes is not None:
-                add_geojson_layer(fmap, uploaded_routes, "Routes")
+                add_geojson_layer(fmap, uploaded_routes, "Routes", route_style)
             if uploaded_buildings is not None:
-                add_geojson_layer(fmap, uploaded_buildings, "Bâtiments")
+                add_geojson_layer(fmap, uploaded_buildings, "Bâtiments", building_style)
             if uploaded_waterways is not None:
-                add_geojson_layer(fmap, uploaded_waterways, "Cours d'eau")
+                add_geojson_layer(fmap, uploaded_waterways, "Cours d'eau", waterway_style)
 
             # Add measure control
             fmap.add_child(MeasureControl(position='topleft'))
@@ -123,7 +155,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 
 
