@@ -82,7 +82,7 @@ def main():
         fmap.add_child(MeasureControl())
 
         #Add draw control
-        draw = Draw(export=True)
+        
         draw = Draw(position='topleft', export=True,
                     draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
                                   'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
