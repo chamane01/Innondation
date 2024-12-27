@@ -12,6 +12,7 @@ from folium import plugins
 from folium import IFrame
 from streamlit_folium import st_folium
 from rasterio.transform import from_bounds
+from rasterio.plot import reshape_as_image
 
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path, target_crs="EPSG:4326"):
@@ -93,14 +94,6 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
 # Interface Streamlit
 st.title("AFRIQUE CARTOGRAPHIE")
 
-import streamlit as st
-import folium
-from folium import MeasureControl, LayerControl
-from folium.plugins import Draw
-from streamlit_folium import folium_static
-import rasterio
-from rasterio.plot import reshape_as_image
-import numpy as np
 
 # Carte initiale
 center_lat, center_lon = 7.0, -5.0
