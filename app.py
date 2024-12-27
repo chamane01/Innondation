@@ -83,16 +83,20 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
 
     feature_group.add_to(map_object)
 
+# Fonction pour créer la carte dynamique
+def create_map(center_lat, center_lon, zoom_start=10):
+    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
+    fmap.add_child(MeasureControl(position='topleft'))
+    fmap.add_child(Draw(position='topleft', export=True))
+    fmap.add_child(folium.LayerControl(position='topright'))
+    return fmap
+
 # Interface Streamlit
 st.title("Détection Automatique des Arbres")
 
 # Carte initiale
 center_lat, center_lon = 5.0, -3.0
-zoom_start = 10
-fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
-fmap.add_child(MeasureControl(position='topleft'))
-fmap.add_child(Draw(position='topleft', export=True))
-fmap.add_child(folium.LayerControl(position='topright'))
+fmap = create_map(center_lat, center_lon)
 folium_static(fmap)
 
 # Boutons sous la carte
@@ -141,10 +145,10 @@ if st.session_state.get("show_sidebar", False):
 
                 centroids = calculate_cluster_centroids(coords, tree_clusters)
 
-                # Mise à jour de la carte
+                # Mise à jour de la carte avec les résultats de la détection
                 center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
                 center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
-                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+                fmap = create_map(center_lat, center_lon, zoom_start=12)
 
                 folium.raster_layers.ImageOverlay(
                     image=mnt,
@@ -155,7 +159,7 @@ if st.session_state.get("show_sidebar", False):
 
                 add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
 
-                # Ajout des routes et polygones
+                # Ajouter des routes et des polygones si présents
                 if road_file:
                     roads_gdf = load_and_reproject_shapefile(road_file)
                     folium.GeoJson(roads_gdf, name="Routes", style_function=lambda x: {'color': '', 'weight': 2}).add_to(fmap)
@@ -169,6 +173,7 @@ if st.session_state.get("show_sidebar", False):
                 fmap.add_child(folium.LayerControl(position='topright'))
 
                 folium_static(fmap)
+
 
 
 
