@@ -81,8 +81,23 @@ def main():
         # Add measure control
         fmap.add_child(MeasureControl())
 
-        # Add draw control
+        #Add draw control
         draw = Draw(export=True)
+        draw = Draw(position='topleft', export=True,
+                    draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
+                                  'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
+                                  'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
+                                  'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
+                    edit_options={'edit': True,}
+        )
+
+
+    
+                  
+                  
+                  
+    
+
         fmap.add_child(draw)
 
         # Layer control
