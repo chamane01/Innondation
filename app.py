@@ -78,36 +78,31 @@ def main():
         # Add reprojected TIFF as overlay
         add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
 
-        # Add measure control
-        fmap.add_child(MeasureControl(position='topleft'))
-
-        #Add draw control
-        
-        draw = Draw(position='topleft', export=True,
-                    draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
-                                  'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
-                                  'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
-                                  'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
-                    edit_options={'edit': True,}
-        )
-
-
-    
-                  
-                  
-                  
-    
-
-        fmap.add_child(draw)
-
         # Layer control
         folium.LayerControl().add_to(fmap)
 
-        # Display map
+        # Create a button for drawing tools
+        if st.button("Activate Drawing Tools"):
+            with st.sidebar:
+                st.header("Drawing Tools")
+                # Add measure control
+                fmap.add_child(MeasureControl(position='topleft'))
+
+                # Add draw control
+                draw = Draw(position='topleft', export=True,
+                            draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
+                                          'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
+                                          'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
+                                          'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
+                            edit_options={'edit': True})
+                fmap.add_child(draw)
+
+        # Display map in the main area
         folium_static(fmap)
 
 if __name__ == "__main__":
     main()
+
 
 
 
