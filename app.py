@@ -100,6 +100,11 @@ center_lat, center_lon = 7.0, -5.0
 zoom_start = 6
 fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
 
+# Ajouter une couche de base
+TileLayer('OpenStreetMap').add_to(fmap)
+TileLayer('Stamen Terrain').add_to(fmap)
+TileLayer('Stamen Toner').add_to(fmap)
+
 # Ajouter l'outil de mesure
 fmap.add_child(MeasureControl(position='topleft', primary_length_unit='meters', secondary_length_unit='kilometers'))
 
@@ -112,7 +117,9 @@ draw = Draw(position='topleft', export=True,
     edit_options={'edit': True,}
 )
 fmap.add_child(draw)
-fmap.add_child(LayerControl(position='topright'))
+
+# Ajouter un contrôle des couches (maintenant qu'il y a plusieurs couches)
+folium.LayerControl(position='topright').add_to(fmap)
 
 # Fonction pour téléverser et ajouter une image raster (TIFF)
 def upload_and_add_raster(file, fmap):
