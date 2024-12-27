@@ -3,8 +3,7 @@ import folium
 from folium.plugins import MeasureControl, Draw
 from streamlit_folium import folium_static
 import rasterio
-from rasterio.warp import transform_bounds, calculate_default_transform
-import geopandas as gpd
+from rasterio.warp import transform_bounds
 import numpy as np
 from sklearn.cluster import DBSCAN
 
@@ -19,10 +18,10 @@ def load_tiff(file_path, target_crs="EPSG:4326"):
             # Reprojeter les bornes vers le CRS cible
             target_bounds = transform_bounds(src_crs, target_crs, *bounds)
 
-        return data, target_bounds, src_crs
+        return data, target_bounds
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
-        return None, None, None
+        return None, None
 
 # Calcul de hauteur relative
 def calculate_heights(mns, mnt):
@@ -50,45 +49,27 @@ def calculate_cluster_centroids(coords, clusters):
 
     return centroids
 
-# Ajout des polygones sur la carte avec bordure blanche et surface transparente
-def add_polygon_layer(map_object, polygon_file, target_crs):
-    if polygon_file is not None:
-        # Charger les polygones avec GeoPandas
-        gdf = gpd.read_file(polygon_file)
+# Ajout des centroïdes des arbres sur la carte
+def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_name):
+    height = bounds[3] - bounds[1]
+    width = bounds[2] - bounds[0]
+    img_height, img_width = image_shape[:2]
 
-        # Reprojection des polygones si nécessaire
-        if gdf.crs != target_crs:
-            gdf = gdf.to_crs(target_crs)
+    feature_group = folium.FeatureGroup(name=layer_name)
+    for _, centroid in centroids:
+        lat = bounds[3] - height * (centroid[0] / img_height)
+        lon = bounds[0] + width * (centroid[1] / img_width)
 
-        # Ajouter les polygones sur la carte avec une bordure blanche et une surface transparente
-        folium.GeoJson(
-            gdf,
-            style_function=lambda x: {
-                'fillColor': 'transparent',
-                'fillOpacity': 0.3,
-                'weight': 2,
-                'color': 'white'
-            }
-        ).add_to(map_object)
+        folium.CircleMarker(
+            location=[lat, lon],
+            radius=3,
+            color="green",
+            fill=True,
+            fill_color="green",
+            fill_opacity=0.8,
+        ).add_to(feature_group)
 
-# Ajout des routes sur la carte
-def add_road_layer(map_object, road_file, target_crs):
-    if road_file is not None:
-        # Charger les routes avec GeoPandas
-        gdf = gpd.read_file(road_file)
-
-        # Reprojection des routes si nécessaire
-        if gdf.crs != target_crs:
-            gdf = gdf.to_crs(target_crs)
-
-        # Ajouter les routes sur la carte en orange
-        folium.GeoJson(
-            gdf,
-            style_function=lambda x: {
-                'color': 'orange',
-                'weight': 3
-            }
-        ).add_to(map_object)
+    feature_group.add_to(map_object)
 
 # Interface Streamlit
 st.title("Détection Automatique des Arbres")
@@ -125,8 +106,8 @@ if st.session_state.get("show_sidebar", False):
     polygon_file = st.sidebar.file_uploader("Téléchargez un fichier de polygone (optionnel)", type=["geojson", "shp"])
 
     if mnt_file and mns_file:
-        mnt, mnt_bounds, mnt_crs = load_tiff(mnt_file)
-        mns, mns_bounds, mns_crs = load_tiff(mns_file)
+        mnt, mnt_bounds = load_tiff(mnt_file)
+        mns, mns_bounds = load_tiff(mns_file)
 
         if mnt is None or mns is None:
             st.sidebar.error("Erreur lors du chargement des fichiers.")
@@ -160,9 +141,13 @@ if st.session_state.get("show_sidebar", False):
                     name="MNT"
                 ).add_to(fmap)
 
-                add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
-                add_polygon_layer(fmap, polygon_file, mnt_crs)
-                add_road_layer(fmap, road_file, mnt_crs)
+                # Correction de l'appel de add_tree_centroids_layer avec le bon shape de mnt
+                if mnt is not None and mnt_bounds is not None:
+                    image_shape = mnt.shape  # Utilisation correcte de mnt.shape
+
+                    # Ajouter les centroids des arbres sur la carte
+                    add_tree_centroids_layer(fmap, centroids, mnt_bounds, image_shape, "Arbres")
+                
                 fmap.add_child(MeasureControl(position='topleft'))
                 fmap.add_child(Draw(position='topleft', export=True))
                 fmap.add_child(folium.LayerControl(position='topright'))
