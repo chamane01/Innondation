@@ -3,7 +3,7 @@ import folium
 from folium.plugins import MeasureControl, Draw
 from streamlit_folium import folium_static
 import rasterio
-from rasterio.warp import transform_bounds
+from rasterio.warp import transform_bounds, calculate_default_transform
 import geopandas as gpd
 import numpy as np
 from sklearn.cluster import DBSCAN
@@ -19,24 +19,76 @@ def load_tiff(file_path, target_crs="EPSG:4326"):
             # Reprojeter les bornes vers le CRS cible
             target_bounds = transform_bounds(src_crs, target_crs, *bounds)
 
-        return data, target_bounds
+        return data, target_bounds, src_crs
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
-        return None, None
+        return None, None, None
 
-# Fonction pour charger et reprojeter un fichier GeoJSON ou SHP
-def load_vector_file(file, target_crs="EPSG:4326"):
-    try:
-        gdf = gpd.read_file(file)
-        if gdf.crs is None:
-            st.error("Le fichier vectoriel n'a pas de système de coordonnées défini.")
-            return None
-        if gdf.crs.to_string() != target_crs:
+# Calcul de hauteur relative
+def calculate_heights(mns, mnt):
+    return np.maximum(0, mns - mnt)
+
+# Détection des arbres avec DBSCAN
+def detect_trees(heights, threshold, eps, min_samples):
+    tree_mask = heights > threshold
+    coords = np.column_stack(np.where(tree_mask))
+
+    clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
+    tree_clusters = clustering.labels_
+
+    return coords, tree_clusters
+
+# Calcul des centroïdes
+def calculate_cluster_centroids(coords, clusters):
+    unique_clusters = set(clusters) - {-1}
+    centroids = []
+
+    for cluster_id in unique_clusters:
+        cluster_coords = coords[clusters == cluster_id]
+        centroid = cluster_coords.mean(axis=0)
+        centroids.append((cluster_id, centroid))
+
+    return centroids
+
+# Ajout des polygones sur la carte avec bordure blanche et surface transparente
+def add_polygon_layer(map_object, polygon_file, target_crs):
+    if polygon_file is not None:
+        # Charger les polygones avec GeoPandas
+        gdf = gpd.read_file(polygon_file)
+
+        # Reprojection des polygones si nécessaire
+        if gdf.crs != target_crs:
             gdf = gdf.to_crs(target_crs)
-        return gdf
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier vectoriel : {e}")
-        return None
+
+        # Ajouter les polygones sur la carte avec une bordure blanche et une surface transparente
+        folium.GeoJson(
+            gdf,
+            style_function=lambda x: {
+                'fillColor': 'transparent',
+                'fillOpacity': 0.3,
+                'weight': 2,
+                'color': 'white'
+            }
+        ).add_to(map_object)
+
+# Ajout des routes sur la carte
+def add_road_layer(map_object, road_file, target_crs):
+    if road_file is not None:
+        # Charger les routes avec GeoPandas
+        gdf = gpd.read_file(road_file)
+
+        # Reprojection des routes si nécessaire
+        if gdf.crs != target_crs:
+            gdf = gdf.to_crs(target_crs)
+
+        # Ajouter les routes sur la carte en orange
+        folium.GeoJson(
+            gdf,
+            style_function=lambda x: {
+                'color': 'orange',
+                'weight': 3
+            }
+        ).add_to(map_object)
 
 # Interface Streamlit
 st.title("Détection Automatique des Arbres")
@@ -73,58 +125,49 @@ if st.session_state.get("show_sidebar", False):
     polygon_file = st.sidebar.file_uploader("Téléchargez un fichier de polygone (optionnel)", type=["geojson", "shp"])
 
     if mnt_file and mns_file:
-        mnt, mnt_bounds = load_tiff(mnt_file)
-        mns, mns_bounds = load_tiff(mns_file)
+        mnt, mnt_bounds, mnt_crs = load_tiff(mnt_file)
+        mns, mns_bounds, mns_crs = load_tiff(mns_file)
 
         if mnt is None or mns is None:
             st.sidebar.error("Erreur lors du chargement des fichiers.")
         elif mnt_bounds != mns_bounds:
             st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
         else:
-            # Mise à jour de la carte
-            center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
-            center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
-            fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+            heights = calculate_heights(mns, mnt)
 
-            folium.raster_layers.ImageOverlay(
-                image=mnt,
-                bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
-                opacity=0.5,
-                name="MNT"
-            ).add_to(fmap)
+            # Paramètres de détection
+            height_threshold = st.sidebar.slider("Seuil de hauteur", 0.1, 20.0, 2.0, 0.1)
+            eps = st.sidebar.slider("Rayon de voisinage", 0.1, 10.0, 2.0, 0.1)
+            min_samples = st.sidebar.slider("Min. points pour un cluster", 1, 10, 5, 1)
 
-            # Charger et ajouter les routes
-            if road_file:
-                roads = load_vector_file(road_file)
-                if roads is not None:
-                    folium.GeoJson(
-                        roads,
-                        style_function=lambda x: {
-                            'color': 'orange',
-                            'weight': 2,
-                        },
-                        name="Routes"
-                    ).add_to(fmap)
+            # Détection et visualisation
+            if st.sidebar.button("Lancer la détection"):
+                coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
+                num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
+                st.sidebar.write(f"Nombre d'arbres détectés : {num_trees}")
 
-            # Charger et ajouter le polygone
-            if polygon_file:
-                polygon = load_vector_file(polygon_file)
-                if polygon is not None:
-                    folium.GeoJson(
-                        polygon,
-                        style_function=lambda x: {
-                            'color': 'white',
-                            'fillColor': 'transparent',
-                            'weight': 2,
-                        },
-                        name="Polygone"
-                    ).add_to(fmap)
+                centroids = calculate_cluster_centroids(coords, tree_clusters)
 
-            fmap.add_child(MeasureControl(position='topleft'))
-            fmap.add_child(Draw(position='topleft', export=True))
-            fmap.add_child(folium.LayerControl(position='topright'))
+                # Mise à jour de la carte
+                center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
+                center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
+                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-            folium_static(fmap)
+                folium.raster_layers.ImageOverlay(
+                    image=mnt,
+                    bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
+                    opacity=0.5,
+                    name="MNT"
+                ).add_to(fmap)
+
+                add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
+                add_polygon_layer(fmap, polygon_file, mnt_crs)
+                add_road_layer(fmap, road_file, mnt_crs)
+                fmap.add_child(MeasureControl(position='topleft'))
+                fmap.add_child(Draw(position='topleft', export=True))
+                fmap.add_child(folium.LayerControl(position='topright'))
+
+                folium_static(fmap)
 
 
 
