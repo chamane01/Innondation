@@ -84,27 +84,18 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
         ).add_to(map_object)
 
 # Function to count trees based on MNT and MNS
-def count_trees(mnt_data, mns_data):
-    """Count trees using DBSCAN on MNT - MNS difference."""
-    # Subtract MNT from MNS to get tree height
-    tree_heights = mns_data - mnt_data
-    
-    # Reshape the data for DBSCAN
-    tree_heights = tree_heights.flatten()
-    
-    # Remove no-data or irrelevant values (e.g., values close to 0 or negative heights)
-    tree_heights = tree_heights[tree_heights > 0]
-    
-    # Prepare DBSCAN clustering
-    coords = np.column_stack(np.where(tree_heights > 0))  # Extract the coordinates of positive heights
-    
-    # Perform DBSCAN clustering
-    db = DBSCAN(eps=3, min_samples=10).fit(coords)
-    
-    # Count the number of clusters (trees)
-    n_trees = len(set(db.labels_)) - (1 if -1 in db.labels_ else 0)
-    
-    return n_trees
+def analyse_arbre(mns_data, mnt_data):
+    """Fonction exemple pour l'analyse DBSCAN et le comptage des arbres"""
+    # Calcul de la différence MNS - MNT pour obtenir les hauteurs relatives
+    difference = mns_data - mnt_data
+
+    # Appliquer DBSCAN pour identifier les clusters (arbres)
+    dbscan = DBSCAN(eps=0.5, min_samples=10)
+    clusters = dbscan.fit_predict(difference.reshape(-1, 1))  # A adapter selon les données
+
+    # Compter les arbres (clusters distincts)
+    unique_clusters = len(set(clusters)) - (1 if -1 in clusters else 0)  # exclure le bruit (-1)
+    return unique_clusters
 # Main application
 def main():
     st.title("DESSINER une CARTE ")
