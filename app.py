@@ -48,6 +48,7 @@ def reproject_tiff(input_tiff, target_crs):
                 )
     return reprojected_tiff
 
+
 # Overlay function for TIFF images
 def add_image_overlay(map_object, tiff_path, bounds, name):
     """Add a TIFF image overlay to a Folium map."""
@@ -59,6 +60,7 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
             name=name,
             opacity=0.6,
         ).add_to(map_object)
+
 
 # Main application
 def main():
@@ -78,7 +80,7 @@ def main():
         position="topleft",
         export=True,
         draw_options={
-            "polyline": {"shapeOptions": {"color": "blue", "weight": 4, "opacity": 0.7}},
+            "polyline": {"shapeOptions": {"color": "orange", "weight": 4, "opacity": 0.7}},  # Change color to orange
             "polygon": {"shapeOptions": {"color": "green", "weight": 4, "opacity": 0.7}},
             "rectangle": {"shapeOptions": {"color": "red", "weight": 4, "opacity": 0.7}},
             "circle": {"shapeOptions": {"color": "purple", "weight": 4, "opacity": 0.7}},
@@ -86,8 +88,6 @@ def main():
         edit_options={"edit": True},
     )
     fmap.add_child(draw)
-
-    
 
     # Téléversement d'une orthophoto (TIFF)
     uploaded_tiff = st.file_uploader("Téléverser une orthophoto (TIFF)", type=["tif", "tiff"])
@@ -110,43 +110,53 @@ def main():
                     position="topleft",
                     export=True,
                     draw_options={
-                        "polyline": {"shapeOptions": {"color": "blue", "weight": 4, "opacity": 0.7}},
+                        "polyline": {"shapeOptions": {"color": "orange", "weight": 4, "opacity": 0.7}},
                         "polygon": {"shapeOptions": {"color": "green", "weight": 4, "opacity": 0.7}},
                         "rectangle": {"shapeOptions": {"color": "red", "weight": 4, "opacity": 0.7}},
                         "circle": {"shapeOptions": {"color": "purple", "weight": 4, "opacity": 0.7}},
-                        },
+                    },
                     edit_options={"edit": True},
-                    )
+                )
                 fmap.add_child(draw)
-    
-    
-        
-        
-            
-            
-            
-            
-        
-        
-       
-    
-
-
-
-                
                 add_image_overlay(fmap, reprojected_tiff, bounds, "Orthophoto")
         except Exception as e:
             st.error(f"Erreur lors de la reprojection : {e}")
 
-    # Televersement d'un fichier GeoJSON
+    # Téléversement d'un fichier GeoJSON pour les routes
     geojson_file = st.file_uploader("Téléverser un fichier GeoJSON de routes", type=["geojson"])
     if geojson_file:
         try:
             geojson_data = json.load(geojson_file)
-            folium.GeoJson(geojson_data, name="Routes").add_to(fmap)
+            folium.GeoJson(
+                geojson_data,
+                name="Routes",
+                style_function=lambda x: {
+                    "color": "orange",  # Change color to orange
+                    "weight": 4,
+                    "opacity": 0.7
+                }
+            ).add_to(fmap)
         except Exception as e:
             st.error(f"Erreur lors du chargement du GeoJSON : {e}")
 
+    # Téléversement d'un fichier GeoJSON pour la polygonale
+    geojson_polygon = st.file_uploader("Téléverser un fichier GeoJSON de polygonale", type=["geojson"])
+    if geojson_polygon:
+        try:
+            polygon_data = json.load(geojson_polygon)
+            folium.GeoJson(
+                polygon_data,
+                name="Polygonale",
+                style_function=lambda x: {
+                    "color": "red",  # Border color red
+                    "weight": 2,
+                    "opacity": 1,
+                    "fillColor": "transparent",  # Transparent fill color
+                    "fillOpacity": 0.1
+                }
+            ).add_to(fmap)
+        except Exception as e:
+            st.error(f"Erreur lors du chargement du fichier polygonal : {e}")
 
     # Ajout des contrôles de calques
     folium.LayerControl().add_to(fmap)
@@ -157,7 +167,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
     
 
 
