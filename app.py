@@ -87,14 +87,7 @@ def main():
     )
     fmap.add_child(draw)
 
-    # Televersement d'un fichier GeoJSON
-    geojson_file = st.file_uploader("Téléverser un fichier GeoJSON de routes", type=["geojson"])
-    if geojson_file:
-        try:
-            geojson_data = json.load(geojson_file)
-            folium.GeoJson(geojson_data, name="Routes").add_to(fmap)
-        except Exception as e:
-            st.error(f"Erreur lors du chargement du GeoJSON : {e}")
+    
 
     # Téléversement d'une orthophoto (TIFF)
     uploaded_tiff = st.file_uploader("Téléverser une orthophoto (TIFF)", type=["tif", "tiff"])
@@ -115,20 +108,15 @@ def main():
         except Exception as e:
             st.error(f"Erreur lors de la reprojection : {e}")
 
-    # Sauvegarde des dessins
-    if st.button("Enregistrer les dessins"):
+    # Televersement d'un fichier GeoJSON
+    geojson_file = st.file_uploader("Téléverser un fichier GeoJSON de routes", type=["geojson"])
+    if geojson_file:
         try:
-            st.session_state["drawings"] = st.session_state.get("draw_data", st.session_state["drawings"])
-            st.success("Dessins enregistrés avec succès.")
+            geojson_data = json.load(geojson_file)
+            folium.GeoJson(geojson_data, name="Routes").add_to(fmap)
         except Exception as e:
-            st.error(f"Erreur lors de la sauvegarde des dessins : {e}")
+            st.error(f"Erreur lors du chargement du GeoJSON : {e}")
 
-    # Ajouter les dessins existants à la carte
-    if st.session_state["drawings"]:
-        try:
-            folium.GeoJson(st.session_state["drawings"], name="Dessins sauvegardés").add_to(fmap)
-        except Exception as e:
-            st.error(f"Erreur lors du chargement des dessins : {e}")
 
     # Ajout des contrôles de calques
     folium.LayerControl().add_to(fmap)
