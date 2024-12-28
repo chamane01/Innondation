@@ -15,39 +15,40 @@ from shapely.geometry import Polygon, Point, LineString
 from folium import IFrame
 from streamlit_folium import st_folium
 import json
-
+from rasterio.warp import calculate_default_transform, reproject, Resampling
+import geojson
 
 
 # Reprojection function
 def reproject_tiff(input_tiff, target_crs):
     """Reproject a TIFF file to a target CRS."""
     with rasterio.open(input_tiff) as src:
-        transform, width, height = rasterio.warp.calculate_default_transform(
+        transform, width, height = calculate_default_transform(
             src.crs, target_crs, src.width, src.height, *src.bounds
         )
         kwargs = src.meta.copy()
         kwargs.update({
-            "crs": target_crs,
-            "transform": transform,
-            "width": width,
-            "height": height,
+            'crs': target_crs,
+            'transform': transform,
+            'width': width,
+            'height': height
         })
 
         reprojected_tiff = "reprojected.tiff"
-        with rasterio.open(reprojected_tiff, "w", **kwargs) as dst:
+        with rasterio.open(reprojected_tiff, 'w', **kwargs) as dst:
             for i in range(1, src.count + 1):
-                rasterio.warp.reproject(
+                reproject(
                     source=rasterio.band(src, i),
                     destination=rasterio.band(dst, i),
                     src_transform=src.transform,
                     src_crs=src.crs,
                     dst_transform=transform,
                     dst_crs=target_crs,
-                    resampling=rasterio.warp.Resampling.nearest,
+                    resampling=Resampling.nearest
                 )
+
     return reprojected_tiff
 
-# Overlay function for TIFF images
 def add_image_overlay(map_object, tiff_path, bounds, name):
     """Add a TIFF image overlay to a Folium map."""
     with rasterio.open(tiff_path) as src:
@@ -56,85 +57,96 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
             image=image,
             bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
             name=name,
-            opacity=0.6,
+            opacity=0.6
         ).add_to(map_object)
 
-# Main application
+# Streamlit app
 def main():
-    st.title("Carte interactive avec orthophoto et routes")
+    st.title("DESSINER UNE CARTE")
 
-    # Initialize session state for drawings
+    # Initialize session state for drawings and GeoJSON routes
     if "drawings" not in st.session_state:
-        st.session_state["drawings"] = {
-            "type": "FeatureCollection",
-            "features": [],
-        }
+        st.session_state["drawings"] = None
+    if "geojson_route" not in st.session_state:
+        st.session_state["geojson_route"] = None
 
-    # Initialize map
+    # Default map
     fmap = folium.Map(location=[0, 0], zoom_start=2)
-    fmap.add_child(MeasureControl(position="topleft"))
+    fmap.add_child(MeasureControl(position='topleft'))
+    
     draw = Draw(
-        position="topleft",
+        position='topleft',
         export=True,
         draw_options={
-            "polyline": {"shapeOptions": {"color": "blue", "weight": 4, "opacity": 0.7}},
-            "polygon": {"shapeOptions": {"color": "green", "weight": 4, "opacity": 0.7}},
-            "rectangle": {"shapeOptions": {"color": "red", "weight": 4, "opacity": 0.7}},
-            "circle": {"shapeOptions": {"color": "purple", "weight": 4, "opacity": 0.7}},
+            'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
+            'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
+            'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
+            'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}
         },
-        edit_options={"edit": True},
+        edit_options={'edit': True}
     )
     fmap.add_child(draw)
 
-    # Televersement d'un fichier GeoJSON
-    geojson_file = st.file_uploader("Téléverser un fichier GeoJSON de routes", type=["geojson"])
-    if geojson_file:
-        try:
-            geojson_data = json.load(geojson_file)
-            folium.GeoJson(geojson_data, name="Routes").add_to(fmap)
-        except Exception as e:
-            st.error(f"Erreur lors du chargement du GeoJSON : {e}")
+    # Reapply previous drawings
+    if st.session_state["drawings"]:
+        for feature in st.session_state["drawings"]["features"]:
+            folium.GeoJson(feature).add_to(fmap)
 
-    # Téléversement d'une orthophoto (TIFF)
-    uploaded_tiff = st.file_uploader("Téléverser une orthophoto (TIFF)", type=["tif", "tiff"])
-    if uploaded_tiff:
-        tiff_path = uploaded_tiff.name
+    # Allow user to upload GeoJSON file
+    geojson_file = st.file_uploader("Télécharger un fichier GeoJSON de route", type=["geojson"])
+    if geojson_file:
+        st.session_state["geojson_route"] = geojson_file.read().decode("utf-8")
+        geojson_data = geojson.loads(st.session_state["geojson_route"])
+        folium.GeoJson(geojson_data, name="Routes").add_to(fmap)
+
+    # Allow user to upload TIFF file
+    tiff_file = st.file_uploader("Télécharger une orthophoto (TIFF)", type=["tif", "tiff"])
+    if tiff_file:
+        tiff_path = tiff_file.name
         with open(tiff_path, "wb") as f:
-            f.write(uploaded_tiff.read())
+            f.write(tiff_file.read())
 
         st.write("Reprojection du fichier TIFF...")
-        try:
-            reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
-            with rasterio.open(reprojected_tiff) as src:
-                bounds = src.bounds
-                center_lat = (bounds.top + bounds.bottom) / 2
-                center_lon = (bounds.left + bounds.right) / 2
-                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-                add_image_overlay(fmap, reprojected_tiff, bounds, "Orthophoto")
-        except Exception as e:
-            st.error(f"Erreur lors de la reprojection : {e}")
 
-    # Sauvegarde des dessins
-    if st.button("Enregistrer les dessins"):
-        try:
-            st.session_state["drawings"] = st.session_state.get("draw_data", st.session_state["drawings"])
-            st.success("Dessins enregistrés avec succès.")
-        except Exception as e:
-            st.error(f"Erreur lors de la sauvegarde des dessins : {e}")
+        # Reproject TIFF to target CRS (e.g., EPSG:4326)
+        reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
 
-    # Ajouter les dessins existants à la carte
+        # Read bounds from reprojected TIFF file
+        with rasterio.open(reprojected_tiff) as src:
+            bounds = src.bounds
+
+        # Update map with TIFF data
+        center_lat = (bounds.top + bounds.bottom) / 2
+        center_lon = (bounds.left + bounds.right) / 2
+        fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+
+        # Add TIFF overlay
+        add_image_overlay(fmap, reprojected_tiff, bounds, "Orthophoto")
+
+    # Reapply GeoJSON route if it exists
+    if st.session_state["geojson_route"]:
+        geojson_data = geojson.loads(st.session_state["geojson_route"])
+        folium.GeoJson(geojson_data, name="Routes").add_to(fmap)
+
+    # Reapply previous drawings
     if st.session_state["drawings"]:
-        try:
-            folium.GeoJson(st.session_state["drawings"], name="Dessins sauvegardés").add_to(fmap)
-        except Exception as e:
-            st.error(f"Erreur lors du chargement des dessins : {e}")
+        for feature in st.session_state["drawings"]["features"]:
+            folium.GeoJson(feature).add_to(fmap)
 
-    # Ajout des contrôles de calques
+    # Add controls
+    fmap.add_child(MeasureControl(position='topleft'))
     folium.LayerControl().add_to(fmap)
 
-    # Affichage de la carte
-    folium_static(fmap, width=700, height=500)
+    # Display map
+    fmap_rendered = folium_static(fmap)
 
+    # Capture GeoJSON data from Draw
+    if fmap_rendered:
+        if "last_draw" not in st.session_state:
+            st.session_state["last_draw"] = None
+        if st.session_state["last_draw"] != st.session_state.get("draw_data"):
+            st.session_state["drawings"] = st.session_state.get("draw_data")
+            st.session_state["last_draw"] = st.session_state.get("draw_data")
 
 if __name__ == "__main__":
     main()
