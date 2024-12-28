@@ -83,7 +83,28 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
             opacity=0.6,
         ).add_to(map_object)
 
-
+# Function to count trees based on MNT and MNS
+def count_trees(mnt_data, mns_data):
+    """Count trees using DBSCAN on MNT - MNS difference."""
+    # Subtract MNT from MNS to get tree height
+    tree_heights = mns_data - mnt_data
+    
+    # Reshape the data for DBSCAN
+    tree_heights = tree_heights.flatten()
+    
+    # Remove no-data or irrelevant values (e.g., values close to 0 or negative heights)
+    tree_heights = tree_heights[tree_heights > 0]
+    
+    # Prepare DBSCAN clustering
+    coords = np.column_stack(np.where(tree_heights > 0))  # Extract the coordinates of positive heights
+    
+    # Perform DBSCAN clustering
+    db = DBSCAN(eps=3, min_samples=10).fit(coords)
+    
+    # Count the number of clusters (trees)
+    n_trees = len(set(db.labels_)) - (1 if -1 in db.labels_ else 0)
+    
+    return n_trees
 # Main application
 def main():
     st.title("DESSINER une CARTE ")
@@ -234,6 +255,14 @@ def main():
             ).add_to(fmap)
         except Exception as e:
             st.error(f"Erreur lors du chargement du fichier polygonal : {e}")
+
+    # Compter les arbres
+    if st.button("Compter arbres"):
+        if mnt_data is not None and mns_data is not None:
+            n_trees = count_trees(mnt_data, mns_data)
+            st.write(f"Nombre d'arbres détectés : {n_trees}")
+        else:
+            st.error("Les fichiers MNT et MNS doivent être chargés avant de procéder au comptage des arbres.")
 
     # Ajout des contrôles de calques
     folium.LayerControl().add_to(fmap)
