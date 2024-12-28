@@ -129,12 +129,11 @@ def main():
 
         st.write("Reprojection du fichier MNT...")
         try:
-            reprojected_mnt = reproject_tiff(mnt_path, "EPSG:4326")
-            mnt_data = reprojected_mnt  # Assignation des données MNT
+            mnt_data = load_tiff_data(mnt_path)
             # Traitement de l'image colorée du MNT
             temp_png_path = "mnt_colored.png"
-            apply_color_gradient(reprojected_mnt, temp_png_path)
-            with rasterio.open(reprojected_mnt) as src:
+            apply_color_gradient(mnt_data, temp_png_path)
+            with rasterio.open(mnt_path) as src:
                 bounds = src.bounds
                 center_lat = (bounds.top + bounds.bottom) / 2
                 center_lon = (bounds.left + bounds.right) / 2
@@ -152,12 +151,11 @@ def main():
 
         st.write("Reprojection du fichier MNS...")
         try:
-            reprojected_mns = reproject_tiff(mns_path, "EPSG:4326")
-            mns_data = reprojected_mns  # Assignation des données MNS
+            mns_data = load_tiff_data(mns_path)
             # Traitement de l'image colorée du MNS
             temp_png_path = "mns_colored.png"
-            apply_color_gradient(reprojected_mns, temp_png_path)
-            with rasterio.open(reprojected_mns) as src:
+            apply_color_gradient(mns_data, temp_png_path)
+            with rasterio.open(mns_path) as src:
                 bounds = src.bounds
                 center_lat = (bounds.top + bounds.bottom) / 2
                 center_lon = (bounds.left + bounds.right) / 2
@@ -174,8 +172,6 @@ def main():
             # Effectuer ici votre analyse DBSCAN pour compter les arbres
             # Exemple d'usage (à adapter à votre code spécifique pour DBSCAN et analyse MNS - MNT)
             try:
-                # Analyses de la différence MNS - MNT, puis DBSCAN
-                # Supposons que vous avez une fonction analyse_arbre
                 arbres_count = analyse_arbre(mns_data, mnt_data)
                 st.write(f"Le nombre d'arbres détectés est : {arbres_count}")
             except Exception as e:
