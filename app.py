@@ -54,7 +54,14 @@ def reproject_tiff(input_tiff, target_crs):
                     resampling=rasterio.warp.Resampling.nearest,
                 )
     return reprojected_tiff
-    
+def load_and_reproject_shapefile(file_path, target_crs="EPSG:4326"):
+    try:
+        gdf = gpd.read_file(file_path)
+        gdf = gdf.to_crs(target_crs)  # Reprojection au CRS cible
+        return gdf
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier Shapefile/GeoJSON : {e}")
+        return None    
 
 def reproject_geojson(geojson_data, target_crs):
     """
