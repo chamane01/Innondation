@@ -20,10 +20,8 @@ from rasterio.enums import Resampling
 from rasterio.warp import calculate_default_transform, reproject
 import matplotlib.pyplot as plt
 import os
-import pyproj
-from shapely.geometry import shape
-from shapely.ops import transform
-import geojson
+
+
 
 
 # Reprojection function
@@ -54,36 +52,6 @@ def reproject_tiff(input_tiff, target_crs):
                     resampling=rasterio.warp.Resampling.nearest,
                 )
     return reprojected_tiff
-def load_and_reproject_shapefile(file_path, target_crs="EPSG:4326"):
-    try:
-        gdf = gpd.read_file(file_path)
-        gdf = gdf.to_crs(target_crs)  # Reprojection au CRS cible
-        return gdf
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier Shapefile/GeoJSON : {e}")
-        return None    
-
-def reproject_geojson(geojson_data, target_crs):
-    """
-    Reprojects GeoJSON data to a target CRS (Coordinate Reference System).
-    """
-    # Initial projection (WGS84 - EPSG:4326) for GeoJSON input
-    source_crs = pyproj.CRS("EPSG:4326")
-    
-    # Target CRS (the one you want to reproject to)
-    target_crs = pyproj.CRS(target_crs)
-
-    # Create transformer
-    transformer = pyproj.Transformer.from_crs(source_crs, target_crs, always_xy=True)
-    
-    # Reproject each feature geometry
-    for feature in geojson_data["features"]:
-        geom = shape(feature["geometry"])  # Convert geometry to shapely object
-        transformed_geom = transform(transformer.transform, geom)  # Reproject geometry
-        feature["geometry"] = geojson.loads(geojson.dumps(transformed_geom))  # Update feature geometry
-
-    return geojson.dumps(geojson_data)  # Return the reprojected GeoJSON as string
-
 # Function to apply color gradient to a DEM TIFF
 def apply_color_gradient(tiff_path, output_path):
     """Apply a color gradient to the DEM TIFF and save it as a PNG."""
@@ -209,12 +177,8 @@ def main():
     if geojson_file:
         try:
             geojson_data = json.load(geojson_file)
-            # Reprojection du GeoJSON
-            reprojected_geojson = reproject_geojson(geojson_data, "EPSG:4326")
-            reprojected_geojson_data = json.loads(reprojected_geojson)
-            
             folium.GeoJson(
-                reprojected_geojson_data,
+                geojson_data,
                 name="Routes",
                 style_function=lambda x: {
                     "color": "orange",  # Change color to orange
@@ -223,19 +187,15 @@ def main():
                 }
             ).add_to(fmap)
         except Exception as e:
-            st.error(f"Erreur lors du chargement du GeoJSON des routes : {e}")
+            st.error(f"Erreur lors du chargement du GeoJSON : {e}")
 
     # Téléversement d'un fichier GeoJSON pour la polygonale
     geojson_polygon = st.file_uploader("Téléverser un fichier GeoJSON de polygonale", type=["geojson"])
     if geojson_polygon:
         try:
             polygon_data = json.load(geojson_polygon)
-            # Reprojection du GeoJSON
-            reprojected_polygon = reproject_geojson(polygon_data, "EPSG:4326")
-            reprojected_polygon_data = json.loads(reprojected_polygon)
-            
             folium.GeoJson(
-                reprojected_polygon_data,
+                polygon_data,
                 name="Polygonale",
                 style_function=lambda x: {
                     "color": "red",  # Border color red
@@ -257,7 +217,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
     
 
 
