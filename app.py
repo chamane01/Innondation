@@ -53,24 +53,6 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
 def main():
     st.title("TIFF Viewer and Interactive Map")
 
-    # Create a base Folium map (this will always be present)
-    center_lat, center_lon = 7.0, -5.0
-    zoom_start = 6
-    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=zoom_start)
-
-    # Add measure control
-    fmap.add_child(MeasureControl())
-
-    # Add draw control
-    draw = Draw(export=True)
-    fmap.add_child(draw)
-
-    # Layer control
-    folium.LayerControl().add_to(fmap)
-
-    # Display the base map initially
-    folium_static(fmap)
-
     # Upload TIFF file
     uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
 
@@ -88,10 +70,25 @@ def main():
         with rasterio.open(reprojected_tiff) as src:
             bounds = src.bounds
 
+        # Create Folium map centered on the bounds
+        center_lat = (bounds.top + bounds.bottom) / 2
+        center_lon = (bounds.left + bounds.right) / 2
+        fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+
         # Add reprojected TIFF as overlay
         add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
 
-        # Redisplay the map with overlay
+        # Add measure control
+        fmap.add_child(MeasureControl())
+
+        # Add draw control
+        draw = Draw(export=True)
+        fmap.add_child(draw)
+
+        # Layer control
+        folium.LayerControl().add_to(fmap)
+
+        # Display map
         folium_static(fmap)
 
 if __name__ == "__main__":
