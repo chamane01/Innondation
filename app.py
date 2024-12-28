@@ -180,6 +180,13 @@ def main():
     # Affichage de la carte
     folium_static(fmap, width=700, height=500)
 
+# Fonction pour charger les données TIFF et les convertir en numpy array
+def load_tiff_data(tiff_path):
+    with rasterio.open(tiff_path) as src:
+        data = src.read(1)  # Lire la première bande
+        data = data.astype(np.float32)  # Assurer que les données sont de type float32
+        return data
+
 # Ajouter la fonction pour l'analyse des arbres
 def analyse_arbre(mns_data, mnt_data):
     """Fonction exemple pour l'analyse DBSCAN et le comptage des arbres"""
