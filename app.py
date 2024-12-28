@@ -15,11 +15,6 @@ from shapely.geometry import Polygon, Point, LineString
 from folium import IFrame
 from streamlit_folium import st_folium
 import json
-from io import BytesIO
-from rasterio.enums import Resampling
-from rasterio.warp import calculate_default_transform, reproject
-import matplotlib.pyplot as plt
-import os
 
 
 
@@ -52,23 +47,6 @@ def reproject_tiff(input_tiff, target_crs):
                     resampling=rasterio.warp.Resampling.nearest,
                 )
     return reprojected_tiff
-# Function to apply color gradient to a DEM TIFF
-def apply_color_gradient(tiff_path, output_path):
-    """Apply a color gradient to the DEM TIFF and save it as a PNG."""
-    with rasterio.open(tiff_path) as src:
-        # Read the DEM data
-        dem_data = src.read(1)
-        
-        # Create a color map using matplotlib
-        cmap = plt.get_cmap("terrain")
-        norm = plt.Normalize(vmin=dem_data.min(), vmax=dem_data.max())
-        
-        # Apply the colormap
-        colored_image = cmap(norm(dem_data))
-        
-        # Save the colored image as PNG
-        plt.imsave(output_path, colored_image)
-        plt.close()
 
 
 # Overlay function for TIFF images
@@ -143,34 +121,6 @@ def main():
                 add_image_overlay(fmap, reprojected_tiff, bounds, "Orthophoto")
         except Exception as e:
             st.error(f"Erreur lors de la reprojection : {e}")
-
-    # Téléversement du fichier MNT (Modèle Numérique de Terrain)
-    uploaded_mnt = st.file_uploader("Téléverser un fichier MNT (TIFF)", type=["tif", "tiff"])
-    if uploaded_mnt:
-        mnt_path = uploaded_mnt.name
-        with open(mnt_path, "wb") as f:
-            f.write(uploaded_mnt.read())
-
-        st.write("Reprojection du fichier MNT...")
-        try:
-            reprojected_mnt = reproject_tiff(mnt_path, "EPSG:4326")
-            
-            # Create a temporary PNG file for the colorized DEM
-            temp_png_path = "mnt_colored.png"
-            apply_color_gradient(reprojected_mnt, temp_png_path)
-            
-            with rasterio.open(reprojected_mnt) as src:
-                bounds = src.bounds
-                center_lat = (bounds.top + bounds.bottom) / 2
-                center_lon = (bounds.left + bounds.right) / 2
-                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-                add_image_overlay(fmap, temp_png_path, bounds, "MNT")
-                
-            # Remove the temporary PNG file
-            os.remove(temp_png_path)
-        except Exception as e:
-            st.error(f"Erreur lors de la reprojection du MNT : {e}")
-
 
     # Téléversement d'un fichier GeoJSON pour les routes
     geojson_file = st.file_uploader("Téléverser un fichier GeoJSON de routes", type=["geojson"])
