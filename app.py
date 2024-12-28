@@ -19,61 +19,27 @@ import json
 
 
 
-# Reprojection function
-def reproject_tiff(input_tiff, target_crs):
-    """Reproject a TIFF file to a target CRS."""
-    with rasterio.open(input_tiff) as src:
-        transform, width, height = rasterio.warp.calculate_default_transform(
-            src.crs, target_crs, src.width, src.height, *src.bounds
-        )
-        kwargs = src.meta.copy()
-        kwargs.update({
-            "crs": target_crs,
-            "transform": transform,
-            "width": width,
-            "height": height,
-        })
+import streamlit as st
+import folium
+from folium.plugins import MeasureControl, Draw
+from streamlit_folium import folium_static
+import json
 
-        reprojected_tiff = "reprojected.tiff"
-        with rasterio.open(reprojected_tiff, "w", **kwargs) as dst:
-            for i in range(1, src.count + 1):
-                rasterio.warp.reproject(
-                    source=rasterio.band(src, i),
-                    destination=rasterio.band(dst, i),
-                    src_transform=src.transform,
-                    src_crs=src.crs,
-                    dst_transform=transform,
-                    dst_crs=target_crs,
-                    resampling=rasterio.warp.Resampling.nearest,
-                )
-    return reprojected_tiff
 
-# Overlay function for TIFF images
-def add_image_overlay(map_object, tiff_path, bounds, name):
-    """Add a TIFF image overlay to a Folium map."""
-    with rasterio.open(tiff_path) as src:
-        image = reshape_as_image(src.read())
-        folium.raster_layers.ImageOverlay(
-            image=image,
-            bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
-            name=name,
-            opacity=0.6,
-        ).add_to(map_object)
-
-# Main application
 def main():
-    st.title("DESSINER une CARTE")
+    st.title("TIFF Viewer and Interactive Map")
 
-    # Initialize session state for drawings
+    # Initialize session state for drawings with a valid GeoJSON structure
     if "drawings" not in st.session_state:
         st.session_state["drawings"] = {
             "type": "FeatureCollection",
             "features": [],
         }
 
-    # Initialize map
+    # Default map centered at a specific location
     fmap = folium.Map(location=[0, 0], zoom_start=2)
     fmap.add_child(MeasureControl(position="topleft"))
+
     draw = Draw(
         position="topleft",
         export=True,
@@ -87,46 +53,50 @@ def main():
     )
     fmap.add_child(draw)
 
-    
-
-    # Téléversement d'une orthophoto (TIFF)
-    uploaded_tiff = st.file_uploader("Téléverser une orthophoto (TIFF)", type=["tif", "tiff"])
-    if uploaded_tiff:
-        tiff_path = uploaded_tiff.name
-        with open(tiff_path, "wb") as f:
-            f.write(uploaded_tiff.read())
-
-        st.write("Reprojection du fichier TIFF...")
+    # Reload saved drawings if valid
+    if st.session_state["drawings"]:
         try:
-            reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
-            with rasterio.open(reprojected_tiff) as src:
-                bounds = src.bounds
-                center_lat = (bounds.top + bounds.bottom) / 2
-                center_lon = (bounds.left + bounds.right) / 2
-                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-                add_image_overlay(fmap, reprojected_tiff, bounds, "Orthophoto")
+            folium.GeoJson(
+                st.session_state["drawings"], name="Saved Drawings"
+            ).add_to(fmap)
         except Exception as e:
-            st.error(f"Erreur lors de la reprojection : {e}")
+            st.error(f"Error loading drawings: {e}")
 
-    # Televersement d'un fichier GeoJSON
-    geojson_file = st.file_uploader("Téléverser un fichier GeoJSON de routes", type=["geojson"])
-    if geojson_file:
-        try:
-            geojson_data = json.load(geojson_file)
-            folium.GeoJson(geojson_data, name="Routes").add_to(fmap)
-        except Exception as e:
-            st.error(f"Erreur lors du chargement du GeoJSON : {e}")
+    # Allow user to upload TIFF file (placeholder functionality)
+    uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
+    if uploaded_file:
+        st.write("Uploaded file received but TIFF processing is not yet implemented.")
 
-
-    # Ajout des contrôles de calques
+    # Display map
     folium.LayerControl().add_to(fmap)
-
-    # Affichage de la carte
     folium_static(fmap, width=700, height=500)
+
+    # Capture user drawings and save them in session state
+    drawings_input = st.text_area(
+        "Edit your drawing's GeoJSON here:",
+        value=json.dumps(st.session_state["drawings"], indent=2),
+        help="Edit or save your drawings as GeoJSON.",
+    )
+
+    # Update session state only if input is valid GeoJSON
+    if st.button("Save Drawings"):
+        try:
+            parsed_drawings = json.loads(drawings_input)  # Parse input to validate JSON
+            if (
+                isinstance(parsed_drawings, dict)
+                and parsed_drawings.get("type") == "FeatureCollection"
+            ):
+                st.session_state["drawings"] = parsed_drawings
+                st.success("Drawings saved successfully!")
+            else:
+                raise ValueError("Input is not a valid GeoJSON FeatureCollection.")
+        except Exception as e:
+            st.error(f"Invalid GeoJSON format: {e}")
 
 
 if __name__ == "__main__":
     main()
+
 
     
 
