@@ -62,7 +62,7 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
 
 # Main application
 def main():
-    st.title("Carte interactive avec orthophoto et routes")
+    st.title("DESSINER une CARTE")
 
     # Initialize session state for drawings
     if "drawings" not in st.session_state:
