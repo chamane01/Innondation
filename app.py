@@ -21,7 +21,6 @@ from rasterio.warp import calculate_default_transform, reproject
 import matplotlib.pyplot as plt
 
 
-
 # Reprojection function 
 def reproject_tiff(input_tiff, target_crs):
     """Reproject a TIFF file to a target CRS."""
@@ -53,8 +52,8 @@ def reproject_tiff(input_tiff, target_crs):
 
 
 # Function to apply color gradient to a DEM TIFF
-def apply_color_gradient(tiff_path):
-    """Apply a color gradient to the DEM TIFF and return the image."""
+def apply_color_gradient(tiff_path, output_path):
+    """Apply a color gradient to the DEM TIFF and save it as a PNG."""
     with rasterio.open(tiff_path) as src:
         # Read the DEM data
         dem_data = src.read(1)
@@ -66,23 +65,16 @@ def apply_color_gradient(tiff_path):
         # Apply the colormap
         colored_image = cmap(norm(dem_data))
         
-        return colored_image
+        # Save the colored image as PNG
+        plt.imsave(output_path, colored_image)
+        plt.close()
 
 
 # Overlay function for TIFF images
-def add_image_overlay(map_object, tiff_path, bounds, name):
-    """Add a TIFF image overlay to a Folium map."""
-    # Apply color gradient to the DEM image
-    image = apply_color_gradient(tiff_path)
-    
-    # Convert the image to a format folium can use
-    image_io = BytesIO()
-    plt.imsave(image_io, image, format="PNG")
-    image_io.seek(0)
-    
-    # Add the overlay to the map
+def add_image_overlay(map_object, image_path, bounds, name):
+    """Add a PNG image overlay to a Folium map."""
     folium.raster_layers.ImageOverlay(
-        image=image_io,
+        image=image_path,
         bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
         name=name,
         opacity=0.6,
@@ -145,12 +137,20 @@ def main():
         st.write("Reprojection du fichier MNT...")
         try:
             reprojected_mnt = reproject_tiff(mnt_path, "EPSG:4326")
+            
+            # Create a temporary PNG file for the colorized DEM
+            temp_png_path = "mnt_colored.png"
+            apply_color_gradient(reprojected_mnt, temp_png_path)
+            
             with rasterio.open(reprojected_mnt) as src:
                 bounds = src.bounds
                 center_lat = (bounds.top + bounds.bottom) / 2
                 center_lon = (bounds.left + bounds.right) / 2
                 fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-                add_image_overlay(fmap, reprojected_mnt, bounds, "MNT")
+                add_image_overlay(fmap, temp_png_path, bounds, "MNT")
+                
+            # Remove the temporary PNG file
+            os.remove(temp_png_path)
         except Exception as e:
             st.error(f"Erreur lors de la reprojection du MNT : {e}")
 
