@@ -258,13 +258,13 @@ def main():
         except Exception as e:
             st.error(f"Erreur lors du chargement du fichier polygonal : {e}")
 
-     # Téléversement des fichiers MNS et MNT
-    uploaded_mns = st.file_uploader("Téléverser un fichier MNS (TIFF)", type=["tif", "tiff"])
-    uploaded_mnt = st.file_uploader("Téléverser un fichier MNT (TIFF)", type=["tif", "tiff"])
+     # Téléversement des fichiers MNS et MNT avec clés uniques
+    uploaded_mns = st.file_uploader("Téléverser un fichier MNS (TIFF)", type=["tif", "tiff"], key="mns_file")
+    uploaded_mnt = st.file_uploader("Téléverser un fichier MNT (TIFF)", type=["tif", "tiff"], key="mnt_file")
 
     if uploaded_mns and uploaded_mnt:
-        mns_path = uploaded_mns.name
-        mnt_path = uploaded_mnt.name
+        mns_path = "uploaded_mns.tif"
+        mnt_path = "uploaded_mnt.tif"
         with open(mns_path, "wb") as f:
             f.write(uploaded_mns.read())
         with open(mnt_path, "wb") as f:
@@ -272,12 +272,12 @@ def main():
 
         # Paramètres pour DBSCAN
         st.sidebar.header("Paramètres DBSCAN")
-        threshold = st.sidebar.slider("Seuil de hauteur (mètres)", min_value=0, max_value=50, value=5)
-        eps = st.sidebar.slider("Epsilon (distance)", min_value=1, max_value=20, value=5)
-        min_samples = st.sidebar.slider("Nombre minimum d'échantillons", min_value=1, max_value=10, value=3)
+        threshold = st.sidebar.slider("Seuil de hauteur (mètres)", min_value=0, max_value=50, value=5, key="threshold_slider")
+        eps = st.sidebar.slider("Epsilon (distance)", min_value=1, max_value=20, value=5, key="eps_slider")
+        min_samples = st.sidebar.slider("Nombre minimum d'échantillons", min_value=1, max_value=10, value=3, key="min_samples_slider")
 
         # Bouton pour compter les arbres
-        if st.button("Compter les arbres"):
+        if st.button("Compter les arbres", key="count_trees_button"):
             st.write("Détection des arbres en cours...")
             tree_count, coords, tree_clusters = detect_and_count_trees(mns_path, mnt_path, threshold, eps, min_samples)
 
@@ -292,6 +292,8 @@ def main():
                     plt.xlabel("X")
                     plt.ylabel("Y")
                     st.pyplot(plt)
+    else:
+        st.warning("Veuillez téléverser les deux fichiers MNS et MNT pour continuer.")
 
     # Ajout des contrôles de calques
     folium.LayerControl().add_to(fmap)
