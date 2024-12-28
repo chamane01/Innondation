@@ -8,6 +8,7 @@ from shapely.geometry import Point
 import matplotlib.pyplot as plt
 from rasterio.warp import calculate_default_transform, reproject
 from rasterio.enums import Resampling
+from streamlit_folium import folium_static
 
 # Fonction pour téléverser un fichier
 def upload_file(file, key):
@@ -30,8 +31,14 @@ def calculate_heights(mns, mnt):
 
 # Fonction pour détecter les arbres avec DBSCAN
 def detect_trees(heights, height_threshold, eps, min_samples):
-    # Appliquer DBSCAN
-    coords = np.column_stack(np.where(heights > height_threshold))  # Coordonnées où la hauteur est supérieure au seuil
+    # Extraire les coordonnées où la hauteur est supérieure au seuil
+    coords = np.column_stack(np.where(heights > height_threshold))
+    
+    # Vérifier si coords est vide
+    if coords.size == 0:
+        return coords, np.array([])  # Pas de données à clusteriser
+    
+    # Appliquer DBSCAN si les coordonnées existent
     db = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
     return coords, db.labels_
 
@@ -63,10 +70,12 @@ def main():
     # Téléversement des fichiers
     st.write("**Téléversement des fichiers**")
     uploaded_mnt = st.file_uploader("Téléverser un fichier MNT (TIFF)", type=["tif", "tiff"])
-    upload_file(uploaded_mnt, "mnt")  # Sauvegarde dans session_state
+    if uploaded_mnt:
+        upload_file(uploaded_mnt, "mnt")  # Sauvegarde dans session_state
 
     uploaded_mns = st.file_uploader("Téléverser un fichier MNS (TIFF)", type=["tif", "tiff"])
-    upload_file(uploaded_mns, "mns")  # Sauvegarde dans session_state
+    if uploaded_mns:
+        upload_file(uploaded_mns, "mns")  # Sauvegarde dans session_state
 
     # Lorsque les deux fichiers sont téléversés
     if "mnt" in st.session_state and "mns" in st.session_state:
@@ -92,29 +101,33 @@ def main():
             # Détection et visualisation
             if st.sidebar.button("Lancer la détection"):
                 coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
-                num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
-                st.sidebar.write(f"Nombre d'arbres détectés : {num_trees}")
+                
+                if coords.size == 0:
+                    st.sidebar.write("Aucun arbre détecté : aucune hauteur ne dépasse le seuil spécifié.")
+                else:
+                    num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
+                    st.sidebar.write(f"Nombre d'arbres détectés : {num_trees}")
 
-                # Calcul des centroïdes des clusters
-                centroids = calculate_cluster_centroids(coords, tree_clusters)
+                    # Calcul des centroïdes des clusters
+                    centroids = calculate_cluster_centroids(coords, tree_clusters)
 
-                # Mise à jour de la carte
-                center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
-                center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
-                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+                    # Mise à jour de la carte
+                    center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
+                    center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
+                    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-                # Ajouter l'overlay du MNT à la carte
-                folium.raster_layers.ImageOverlay(
-                    image=mnt,
-                    bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
-                    opacity=0.5,
-                    name="MNT"
-                ).add_to(fmap)
+                    # Ajouter l'overlay du MNT à la carte
+                    folium.raster_layers.ImageOverlay(
+                        image=mnt,
+                        bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
+                        opacity=0.5,
+                        name="MNT"
+                    ).add_to(fmap)
 
-                # Ajouter les centroids des arbres
-                add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
+                    # Ajouter les centroids des arbres
+                    add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
 
-                folium_static(fmap, width=700, height=500)
+                    folium_static(fmap, width=700, height=500)
 
     # Boutons d'actions
     st.write("### Actions disponibles")
