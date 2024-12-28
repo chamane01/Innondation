@@ -26,7 +26,6 @@ from shapely.ops import transform
 import geojson
 
 
-
 # Reprojection function
 def reproject_tiff(input_tiff, target_crs):
     """Reproject a TIFF file to a target CRS."""
