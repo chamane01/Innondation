@@ -61,7 +61,7 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
 
 # Streamlit app
 def main():
-    st.title("DESSINER")
+    st.title("DESSINER une CARTE")
 
     # Initialize session state for drawings
     if "drawings" not in st.session_state:
