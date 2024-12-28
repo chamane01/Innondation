@@ -52,6 +52,29 @@ def reproject_tiff(input_tiff, target_crs):
                     resampling=rasterio.warp.Resampling.nearest,
                 )
     return reprojected_tiff
+    
+
+def reproject_geojson(geojson_data, target_crs):
+    """
+    Reprojects GeoJSON data to a target CRS (Coordinate Reference System).
+    """
+    # Initial projection (WGS84 - EPSG:4326) for GeoJSON input
+    source_crs = pyproj.CRS("EPSG:4326")
+    
+    # Target CRS (the one you want to reproject to)
+    target_crs = pyproj.CRS(target_crs)
+
+    # Create transformer
+    transformer = pyproj.Transformer.from_crs(source_crs, target_crs, always_xy=True)
+    
+    # Reproject each feature geometry
+    for feature in geojson_data["features"]:
+        geom = shape(feature["geometry"])  # Convert geometry to shapely object
+        transformed_geom = transform(transformer.transform, geom)  # Reproject geometry
+        feature["geometry"] = geojson.loads(geojson.dumps(transformed_geom))  # Update feature geometry
+
+    return geojson.dumps(geojson_data)  # Return the reprojected GeoJSON as string
+
 # Function to apply color gradient to a DEM TIFF
 def apply_color_gradient(tiff_path, output_path):
     """Apply a color gradient to the DEM TIFF and save it as a PNG."""
