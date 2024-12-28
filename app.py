@@ -108,6 +108,117 @@ def count_trees(mnt_data, mns_data):
 # Main application
 def main():
     st.title("DESSINER une CARTE ")
+    def main():
+    st.title("DESSINER une CARTE ")
+
+    # Initialiser les variables de données
+    mnt_data = None
+    mns_data = None
+
+    # Initialiser la carte
+    fmap = folium.Map(location=[0, 0], zoom_start=2)
+    fmap.add_child(MeasureControl(position="topleft"))
+    draw = Draw(
+        position="topleft",
+        export=True,
+        draw_options={
+            "polyline": {"shapeOptions": {"color": "orange", "weight": 4, "opacity": 0.7}},
+            "polygon": {"shapeOptions": {"color": "green", "weight": 4, "opacity": 0.7}},
+            "rectangle": {"shapeOptions": {"color": "red", "weight": 4, "opacity": 0.7}},
+            "circle": {"shapeOptions": {"color": "purple", "weight": 4, "opacity": 0.7}},
+        },
+        edit_options={"edit": True},
+    )
+    fmap.add_child(draw)
+
+    # Téléversement du fichier MNT (Modèle Numérique de Terrain)
+    uploaded_mnt = st.file_uploader("Téléverser un fichier MNT (TIFF)", type=["tif", "tiff"])
+    if uploaded_mnt:
+        mnt_path = uploaded_mnt.name
+        with open(mnt_path, "wb") as f:
+            f.write(uploaded_mnt.read())
+
+        st.write("Reprojection du fichier MNT...")
+        try:
+            reprojected_mnt = reproject_tiff(mnt_path, "EPSG:4326")
+            mnt_data = reprojected_mnt  # Assignation des données MNT
+            # Traitement de l'image colorée du MNT
+            temp_png_path = "mnt_colored.png"
+            apply_color_gradient(reprojected_mnt, temp_png_path)
+            with rasterio.open(reprojected_mnt) as src:
+                bounds = src.bounds
+                center_lat = (bounds.top + bounds.bottom) / 2
+                center_lon = (bounds.left + bounds.right) / 2
+                add_image_overlay(fmap, temp_png_path, bounds, "MNT")
+            os.remove(temp_png_path)
+        except Exception as e:
+            st.error(f"Erreur lors de la reprojection du MNT : {e}")
+
+    # Téléversement du fichier MNS (Modèle Numérique de Surface)
+    uploaded_mns = st.file_uploader("Téléverser un fichier MNS (TIFF)", type=["tif", "tiff"])
+    if uploaded_mns:
+        mns_path = uploaded_mns.name
+        with open(mns_path, "wb") as f:
+            f.write(uploaded_mns.read())
+
+        st.write("Reprojection du fichier MNS...")
+        try:
+            reprojected_mns = reproject_tiff(mns_path, "EPSG:4326")
+            mns_data = reprojected_mns  # Assignation des données MNS
+            # Traitement de l'image colorée du MNS
+            temp_png_path = "mns_colored.png"
+            apply_color_gradient(reprojected_mns, temp_png_path)
+            with rasterio.open(reprojected_mns) as src:
+                bounds = src.bounds
+                center_lat = (bounds.top + bounds.bottom) / 2
+                center_lon = (bounds.left + bounds.right) / 2
+                add_image_overlay(fmap, temp_png_path, bounds, "MNS")
+            os.remove(temp_png_path)
+        except Exception as e:
+            st.error(f"Erreur lors de la reprojection du MNS : {e}")
+
+    # Ajout d'un bouton pour compter les arbres
+    if mnt_data is not None and mns_data is not None:
+        if st.button("Compter arbres"):
+            # Effectuer l'analyse MNS - MNT
+            st.write("Analyse des données MNS - MNT en cours...")
+            # Effectuer ici votre analyse DBSCAN pour compter les arbres
+            # Exemple d'usage (à adapter à votre code spécifique pour DBSCAN et analyse MNS - MNT)
+            try:
+                # Analyses de la différence MNS - MNT, puis DBSCAN
+                # Supposons que vous avez une fonction analyse_arbre
+                arbres_count = analyse_arbre(mns_data, mnt_data)
+                st.write(f"Le nombre d'arbres détectés est : {arbres_count}")
+            except Exception as e:
+                st.error(f"Erreur lors du comptage des arbres : {e}")
+
+    # Affichage de la carte
+    folium_static(fmap, width=700, height=500)
+
+# Ajouter la fonction pour l'analyse des arbres
+def analyse_arbre(mns_data, mnt_data):
+    """Fonction exemple pour l'analyse DBSCAN et le comptage des arbres"""
+    # Ici vous appliquez la logique DBSCAN à la différence entre MNS et MNT
+    # Exemple simplifié pour illustration
+    from sklearn.cluster import DBSCAN
+    import numpy as np
+
+    # Exemple : MNS - MNT pour obtenir les hauteurs relatives
+    difference = np.array(mns_data) - np.array(mnt_data)
+
+    # Appliquer DBSCAN pour identifier les clusters (arbres)
+    dbscan = DBSCAN(eps=0.5, min_samples=10)
+    clusters = dbscan.fit_predict(difference.reshape(-1, 1))  # A adapter selon les données
+
+    # Compter les arbres (clusters distincts)
+    unique_clusters = len(set(clusters)) - (1 if -1 in clusters else 0)  # exclure le bruit (-1)
+    return unique_clusters
+
+if __name__ == "__main__":
+    main()
+
+
+    
 
     # Initialize session state for drawings
     if "drawings" not in st.session_state:
