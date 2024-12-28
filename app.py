@@ -61,7 +61,7 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
 
 # Streamlit app
 def main():
-    st.title("TIFF Viewer and Interactive Map")
+    st.title("DESSINER")
 
     # Initialize session state for drawings
     if "drawings" not in st.session_state:
@@ -90,7 +90,7 @@ def main():
             folium.GeoJson(feature).add_to(fmap)
 
     # Allow user to upload TIFF file
-    uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
+    uploaded_file = st.file_uploader("telecharger une Orthophoto", type=["tif", "tiff"])
 
     if uploaded_file is not None:
         tiff_path = uploaded_file.name
