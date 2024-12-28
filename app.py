@@ -248,90 +248,29 @@ st.title("AFRIQUE CARTOGRAPHIE")
 def main():
     st.title("TIFF Viewer and Interactive Map")
 
-    # Upload TIFF file
-    uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
+    # Création d'une carte centrée
+    fmap = folium.Map(location=[0, 0], zoom_start=2)
 
-    if uploaded_file is not None:
-        tiff_path = uploaded_file.name
-        with open(tiff_path, "wb") as f:
-            f.write(uploaded_file.read())
+    # Ajout de l'outil Mesure
+    fmap.add_child(MeasureControl(position='topleft'))
 
-        st.write("Reprojecting TIFF file...")
-
-        # Reproject TIFF to target CRS (e.g., EPSG:4326)
-        reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
-
-        # Read bounds from reprojected TIFF file
-        with rasterio.open(reprojected_tiff) as src:
-            bounds = src.bounds
-
-        # Create Folium map
-        center_lat = (bounds.top + bounds.bottom) / 2
-        center_lon = (bounds.left + bounds.right) / 2
-        fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-
-        # Add reprojected TIFF as overlay
-        add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
-
-# Ajouter l'outil Draw à la carte
-draw = Draw(
-    position='topleft',
-    draw_options={
-        'polyline': {
-            'shapeOptions': {
-                'color': 'blue',
-                'weight': 2,
-                'opacity': 0.7
-            }
+    # Configuration et ajout de l'outil Draw
+    draw = Draw(
+        position='topleft',
+        draw_options={
+            'polyline': {'shapeOptions': {'color': 'blue', 'weight': 2, 'opacity': 0.7}},
+            'polygon': {'shapeOptions': {'color': 'green', 'weight': 2, 'opacity': 0.5}},
+            'rectangle': {'shapeOptions': {'color': 'red', 'weight': 2, 'opacity': 0.5}}
         },
-        'polygon': {
-            'shapeOptions': {
-                'color': 'green',
-                'weight': 2,
-                'opacity': 0.5
-            },
-            'allowIntersection': False
-        },
-        'rectangle': {
-            'shapeOptions': {
-                'color': 'red',
-                'weight': 3,
-                'opacity': 0.8
-            }
-        },
-        'circle': {
-            'shapeOptions': {
-                'color': 'purple',
-                'weight': 2,
-                'opacity': 0.7
-            },
-            'showRadius': True
-        },
-        'marker': True,  # Enable markers
-        'circlemarker': {
-            'shapeOptions': {
-                'radius': 10,
-                'color': 'yellow'
-            }
-        }
-    },
-    edit_options={
-        'edit': True,  # Enable editing of shapes
-        'remove': True  # Enable removal of shapes
-    }
-)
+        edit_options={'edit': True, 'remove': True}
+    )
+    fmap.add_child(draw)
 
-# Add the customized draw control to the map
-fmap.add_child(draw)
+    # Affichage de la carte dans Streamlit
+    folium_static(fmap)
 
-
-# Ajouter un LayerControl (position de contrôle)
-fmap.add_child(folium.LayerControl(position='topright'))
-
-
-# Afficher la carte avec folium_static
-folium_static(fmap)
-
+if __name__ == "__main__":
+    main()
 
 
 
