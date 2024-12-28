@@ -18,59 +18,26 @@ import json
 
 
 
-def reproject_tiff(input_tiff, target_crs):
-    """Reproject a TIFF file to a target CRS."""
-    with rasterio.open(input_tiff) as src:
-        transform, width, height = rasterio.warp.calculate_default_transform(
-            src.crs, target_crs, src.width, src.height, *src.bounds
-        )
-        kwargs = src.meta.copy()
-        kwargs.update({
-            'crs': target_crs,
-            'transform': transform,
-            'width': width,
-            'height': height
-        })
+def reproject_geojson(geojson_data, target_crs="EPSG:4326"):
+    """Reproject GeoJSON data to a target CRS."""
+    gdf = gpd.GeoDataFrame.from_features(geojson_data["features"])
+    gdf = gdf.set_crs(gdf.crs if gdf.crs else "EPSG:4326")  # Default CRS if not defined
+    gdf = gdf.to_crs(target_crs)
+    return gdf
 
-        reprojected_tiff = "reprojected.tiff"
-        with rasterio.open(reprojected_tiff, 'w', **kwargs) as dst:
-            for i in range(1, src.count + 1):
-                rasterio.warp.reproject(
-                    source=rasterio.band(src, i),
-                    destination=rasterio.band(dst, i),
-                    src_transform=src.transform,
-                    src_crs=src.crs,
-                    dst_transform=transform,
-                    dst_crs=target_crs,
-                    resampling=rasterio.warp.Resampling.nearest
-                )
 
-    return reprojected_tiff
-
-def add_image_overlay(map_object, tiff_path, bounds, name):
-    """Add a TIFF image overlay to a Folium map."""
-    with rasterio.open(tiff_path) as src:
-        # Read the image and reshape it into a format compatible with Folium
-        image = reshape_as_image(src.read())
-        folium.raster_layers.ImageOverlay(
-            image=image,
-            bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
-            name=name,
-            opacity=0.6
-        ).add_to(map_object)
-
-# Streamlit app
 def main():
     st.title("DESSINER une CARTE")
-
+    
     # Initialize session state for drawings
     if "drawings" not in st.session_state:
         st.session_state["drawings"] = None
 
-    # Default map centered at a specific location (e.g., [0, 0] for equator)
+    # Create the initial map
     fmap = folium.Map(location=[0, 0], zoom_start=2)
     fmap.add_child(MeasureControl(position='topleft'))
-    
+
+    # Add Draw plugin for user annotations
     draw = Draw(
         position='topleft',
         export=True,
@@ -89,51 +56,58 @@ def main():
         for feature in st.session_state["drawings"]["features"]:
             folium.GeoJson(feature).add_to(fmap)
 
-    # Allow user to upload TIFF file
-    uploaded_file = st.file_uploader("telecharger une Orthophoto", type=["tif", "tiff"])
+    # File upload: GeoJSON for roads
+    geojson_file = st.file_uploader("Téléverser un fichier GeoJSON pour les routes", type=["geojson"])
+    if geojson_file is not None:
+        geojson_data = json.load(geojson_file)
+        try:
+            gdf = reproject_geojson(geojson_data)
+            for _, row in gdf.iterrows():
+                geojson_feature = json.loads(row.geometry.to_json())
+                folium.GeoJson(
+                    geojson_feature,
+                    name="Route",
+                    style_function=lambda x: {'color': 'blue', 'weight': 3}
+                ).add_to(fmap)
+            st.success("Fichier GeoJSON téléversé et ajouté à la carte.")
+        except Exception as e:
+            st.error(f"Erreur lors du traitement du fichier GeoJSON : {e}")
 
-    if uploaded_file is not None:
-        tiff_path = uploaded_file.name
+    # TIFF file upload
+    tiff_file = st.file_uploader("Télécharger une Orthophoto (TIFF)", type=["tif", "tiff"])
+    if tiff_file is not None:
+        tiff_path = tiff_file.name
         with open(tiff_path, "wb") as f:
-            f.write(uploaded_file.read())
+            f.write(tiff_file.read())
+        st.write("Reprojection du fichier TIFF en cours...")
 
-        st.write("Reprojecting TIFF file...")
-
-        # Reproject TIFF to target CRS (e.g., EPSG:4326)
+        # Reproject TIFF to target CRS
         reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
-
-        # Read bounds from reprojected TIFF file
         with rasterio.open(reprojected_tiff) as src:
             bounds = src.bounds
 
-        # Update map with TIFF data
+        # Update map to focus on the TIFF bounds
         center_lat = (bounds.top + bounds.bottom) / 2
         center_lon = (bounds.left + bounds.right) / 2
         fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
         # Add TIFF overlay
-        add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
+        add_image_overlay(fmap, reprojected_tiff, bounds, "Orthophoto")
+        st.success("Orthophoto ajoutée à la carte.")
 
-        # Add controls
-        fmap.add_child(MeasureControl(position='topleft'))
-        fmap.add_child(draw)
-        folium.LayerControl().add_to(fmap)
+    # Add layer control
+    folium.LayerControl().add_to(fmap)
 
-        # Reapply previous drawings
-        if st.session_state["drawings"]:
-            for feature in st.session_state["drawings"]["features"]:
-                folium.GeoJson(feature).add_to(fmap)
+    # Render the map
+    folium_static(fmap)
 
-    # Display map
-    fmap_rendered = folium_static(fmap)
+    # Save drawn GeoJSON data to session state
+    if "last_draw" not in st.session_state:
+        st.session_state["last_draw"] = None
+    if st.session_state["last_draw"] != st.session_state.get("draw_data"):
+        st.session_state["drawings"] = st.session_state.get("draw_data")
+        st.session_state["last_draw"] = st.session_state.get("draw_data")
 
-    # Capture GeoJSON data from Draw
-    if fmap_rendered:
-        if "last_draw" not in st.session_state:
-            st.session_state["last_draw"] = None
-        if st.session_state["last_draw"] != st.session_state.get("draw_data"):
-            st.session_state["drawings"] = st.session_state.get("draw_data")
-            st.session_state["last_draw"] = st.session_state.get("draw_data")
 
 if __name__ == "__main__":
     main()
