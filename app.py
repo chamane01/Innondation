@@ -132,33 +132,20 @@ def main():
         st.subheader("Carte initiale avec MNT et MNS")
         display_map(mnt, mns, mnt_bounds)
 
-        # Ajouter trois boutons sous la carte
-        st.subheader("Actions")
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            if st.button("Afficher MNT uniquement"):
-                st.subheader("Carte avec MNT uniquement")
-                display_map(mnt, np.zeros_like(mnt), mnt_bounds)
-        
-        with col2:
-            if st.button("Afficher MNS uniquement"):
-                st.subheader("Carte avec MNS uniquement")
-                display_map(np.zeros_like(mns), mns, mnt_bounds)
-        
-        with col3:
-            if st.button("Détection des arbres"):
-                st.sidebar.subheader("Paramètres de détection")
-                st.session_state["height_threshold"] = st.sidebar.slider(
-                    "Seuil de hauteur (m)", 0.1, 20.0, st.session_state["height_threshold"]
-                )
-                st.session_state["eps"] = st.sidebar.slider(
-                    "Rayon de voisinage (m)", 1, 10, st.session_state["eps"]
-                )
-                st.session_state["min_samples"] = st.sidebar.slider(
-                    "Nombre minimum de points par cluster", 1, 10, st.session_state["min_samples"]
-                )
-
+        # Ajouter le bouton pour lancer la détection dans la sidebar
+        with st.sidebar:
+            st.subheader("Paramètres de détection")
+            st.session_state["height_threshold"] = st.slider(
+                "Seuil de hauteur (m)", 0.1, 20.0, st.session_state["height_threshold"], step=0.1
+            )
+            st.session_state["eps"] = st.slider(
+                "Rayon de voisinage (m)", 1, 10, st.session_state["eps"]
+            )
+            st.session_state["min_samples"] = st.slider(
+                "Nombre minimum de points par cluster", 1, 10, st.session_state["min_samples"]
+            )
+            
+            if st.button("Lancer la détection"):
                 coords, labels = detect_trees(
                     heights, 
                     st.session_state["height_threshold"], 
