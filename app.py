@@ -61,7 +61,18 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
 def main():
     st.title("TIFF Viewer and Interactive Map")
 
-    # Upload TIFF file
+    # Default map centered at a specific location (e.g., [0, 0] for equator)
+    fmap = folium.Map(location=[0, 0], zoom_start=2)
+    fmap.add_child(MeasureControl(position='topleft'))
+    draw = Draw(position='topleft', export=True,
+                draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
+                              'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
+                              'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
+                              'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
+                edit_options={'edit': True})
+    fmap.add_child(draw)
+
+    # Allow user to upload TIFF file
     uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
 
     if uploaded_file is not None:
@@ -78,41 +89,21 @@ def main():
         with rasterio.open(reprojected_tiff) as src:
             bounds = src.bounds
 
-        # Create Folium map centered on the bounds
+        # Update map with TIFF data
         center_lat = (bounds.top + bounds.bottom) / 2
         center_lon = (bounds.left + bounds.right) / 2
         fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-        # Add reprojected TIFF as overlay
+        # Add TIFF overlay
         add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
 
-        # Add measure control
+        # Add controls
         fmap.add_child(MeasureControl(position='topleft'))
-
-        #Add draw control
-        
-        draw = Draw(position='topleft', export=True,
-                    draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
-                                  'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
-                                  'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
-                                  'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
-                    edit_options={'edit': True,}
-        )
-
-
-    
-                  
-                  
-                  
-    
-
         fmap.add_child(draw)
-
-        # Layer control
         folium.LayerControl().add_to(fmap)
 
-        # Display map
-        folium_static(fmap)
+    # Display map
+    folium_static(fmap)
 
 if __name__ == "__main__":
     main()
