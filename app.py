@@ -215,26 +215,7 @@ def main():
             ).add_to(fmap)
         except Exception as e:
             st.error(f"Erreur lors du chargement du fichier polygonal : {e}")geojson_polygon = st.file_uploader("Téléverser un fichier GeoJSON de polygonale", type=["geojson"])
-    if geojson_polygon:
-        try:
-            polygon_data = json.load(geojson_polygon)
-            # Reprojection du GeoJSON
-            reprojected_polygon = reproject_geojson(polygon_data, "EPSG:4326")
-            reprojected_polygon_data = json.loads(reprojected_polygon)
-            
-            folium.GeoJson(
-                reprojected_polygon_data,
-                name="Polygonale",
-                style_function=lambda x: {
-                    "color": "red",  # Border color red
-                    "weight": 2,
-                    "opacity": 1,
-                    "fillColor": "transparent",  # Transparent fill color
-                    "fillOpacity": 0.1
-                }
-            ).add_to(fmap)
-        except Exception as e:
-            st.error(f"Erreur lors du chargement du fichier polygonal : {e}")
+    
 
     # Ajout des contrôles de calques
     folium.LayerControl().add_to(fmap)
