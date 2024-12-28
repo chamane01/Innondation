@@ -63,11 +63,7 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
 def main():
     st.title("TIFF Viewer and Interactive Map")
 
-    # Initialize session state for drawings
-    if "drawings" not in st.session_state:
-        st.session_state["drawings"] = None
-
-    # Default map centered at a specific location
+    # Default map centered at a specific location (e.g., [0, 0] for equator)
     fmap = folium.Map(location=[0, 0], zoom_start=2)
     fmap.add_child(MeasureControl(position='topleft'))
     draw = Draw(position='topleft', export=True,
@@ -77,10 +73,6 @@ def main():
                               'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
                 edit_options={'edit': True})
     fmap.add_child(draw)
-
-    # Reload saved drawings
-    if st.session_state["drawings"] is not None:
-        folium.GeoJson(st.session_state["drawings"], name="Saved Drawings").add_to(fmap)
 
     # Allow user to upload TIFF file
     uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
@@ -107,26 +99,16 @@ def main():
         # Add TIFF overlay
         add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
 
-        # Reload saved drawings on the updated map
-        if st.session_state["drawings"] is not None:
-            folium.GeoJson(st.session_state["drawings"], name="Saved Drawings").add_to(fmap)
-
-    # Add controls
-    folium.LayerControl().add_to(fmap)
+        # Add controls
+        fmap.add_child(MeasureControl(position='topleft'))
+        fmap.add_child(draw)
+        folium.LayerControl().add_to(fmap)
 
     # Display map
-    map_html = folium_static(fmap, width=700, height=500)
-
-    # Capture GeoJSON from user drawings
-    st.session_state["drawings"] = st.text_area(
-        "Save your drawing's GeoJSON",
-        value=st.session_state["drawings"] or "",
-        help="Paste exported GeoJSON here to save your drawings.",
-    )
+    folium_static(fmap)
 
 if __name__ == "__main__":
     main()
-
     
 
 
