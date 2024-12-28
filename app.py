@@ -177,8 +177,12 @@ def main():
     if geojson_file:
         try:
             geojson_data = json.load(geojson_file)
+            # Reprojection du GeoJSON
+            reprojected_geojson = reproject_geojson(geojson_data, "EPSG:4326")
+            reprojected_geojson_data = json.loads(reprojected_geojson)
+            
             folium.GeoJson(
-                geojson_data,
+                reprojected_geojson_data,
                 name="Routes",
                 style_function=lambda x: {
                     "color": "orange",  # Change color to orange
@@ -187,15 +191,39 @@ def main():
                 }
             ).add_to(fmap)
         except Exception as e:
-            st.error(f"Erreur lors du chargement du GeoJSON : {e}")
+            st.error(f"Erreur lors du chargement du GeoJSON des routes : {e}")
 
     # Téléversement d'un fichier GeoJSON pour la polygonale
     geojson_polygon = st.file_uploader("Téléverser un fichier GeoJSON de polygonale", type=["geojson"])
     if geojson_polygon:
         try:
             polygon_data = json.load(geojson_polygon)
+            # Reprojection du GeoJSON
+            reprojected_polygon = reproject_geojson(polygon_data, "EPSG:4326")
+            reprojected_polygon_data = json.loads(reprojected_polygon)
+            
             folium.GeoJson(
-                polygon_data,
+                reprojected_polygon_data,
+                name="Polygonale",
+                style_function=lambda x: {
+                    "color": "red",  # Border color red
+                    "weight": 2,
+                    "opacity": 1,
+                    "fillColor": "transparent",  # Transparent fill color
+                    "fillOpacity": 0.1
+                }
+            ).add_to(fmap)
+        except Exception as e:
+            st.error(f"Erreur lors du chargement du fichier polygonal : {e}")geojson_polygon = st.file_uploader("Téléverser un fichier GeoJSON de polygonale", type=["geojson"])
+    if geojson_polygon:
+        try:
+            polygon_data = json.load(geojson_polygon)
+            # Reprojection du GeoJSON
+            reprojected_polygon = reproject_geojson(polygon_data, "EPSG:4326")
+            reprojected_polygon_data = json.loads(reprojected_polygon)
+            
+            folium.GeoJson(
+                reprojected_polygon_data,
                 name="Polygonale",
                 style_function=lambda x: {
                     "color": "red",  # Border color red
