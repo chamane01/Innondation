@@ -14,20 +14,18 @@ import geopandas as gpd
 from shapely.geometry import Polygon, Point, LineString
 from folium import IFrame
 from streamlit_folium import st_folium
-
-
-import streamlit as st
-import folium
-from folium.plugins import MeasureControl, Draw
-from streamlit_folium import folium_static
+import json
 
 
 def main():
     st.title("TIFF Viewer and Interactive Map")
 
-    # Initialize session state for drawings
+    # Initialize session state for drawings with a valid GeoJSON structure
     if "drawings" not in st.session_state:
-        st.session_state["drawings"] = None
+        st.session_state["drawings"] = {
+            "type": "FeatureCollection",
+            "features": [],
+        }
 
     # Default map centered at a specific location
     fmap = folium.Map(location=[0, 0], zoom_start=2)
@@ -66,17 +64,23 @@ def main():
 
     # Capture user drawings and save them in session state
     drawings_input = st.text_area(
-        "Paste or modify your drawing's GeoJSON here:",
-        value=st.session_state["drawings"] or "",
-        help="Save or edit your drawings as GeoJSON.",
+        "Edit your drawing's GeoJSON here:",
+        value=json.dumps(st.session_state["drawings"], indent=2),
+        help="Edit or save your drawings as GeoJSON.",
     )
 
     # Update session state only if input is valid GeoJSON
     if st.button("Save Drawings"):
         try:
-            folium.GeoJson(drawings_input)  # Validate input
-            st.session_state["drawings"] = drawings_input
-            st.success("Drawings saved successfully!")
+            parsed_drawings = json.loads(drawings_input)  # Parse input to validate JSON
+            if (
+                isinstance(parsed_drawings, dict)
+                and parsed_drawings.get("type") == "FeatureCollection"
+            ):
+                st.session_state["drawings"] = parsed_drawings
+                st.success("Drawings saved successfully!")
+            else:
+                raise ValueError("Input is not a valid GeoJSON FeatureCollection.")
         except Exception as e:
             st.error(f"Invalid GeoJSON format: {e}")
 
