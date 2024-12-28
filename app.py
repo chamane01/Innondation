@@ -4,139 +4,145 @@ import numpy as np
 import folium
 from folium import plugins
 from sklearn.cluster import DBSCAN
-from shapely.geometry import Point
-import matplotlib.pyplot as plt
-from rasterio.warp import calculate_default_transform, reproject
-from rasterio.enums import Resampling
+from rasterio.warp import calculate_default_transform, reproject, Resampling
 from streamlit_folium import folium_static
 
-# Fonction pour téléverser un fichier
-def upload_file(file, key):
-    if file:
-        st.session_state[key] = file.name
-        with open(file.name, "wb") as f:
-            f.write(file.read())
-        st.success(f"Fichier {key} téléversé avec succès !")
+# Fonction pour reprojeter les fichiers TIFF en WGS84
+def reproject_to_wgs84(src_path, dst_path):
+    with rasterio.open(src_path) as src:
+        transform, width, height = calculate_default_transform(
+            src.crs, "EPSG:4326", src.width, src.height, *src.bounds
+        )
+        kwargs = src.meta.copy()
+        kwargs.update({
+            "crs": "EPSG:4326",
+            "transform": transform,
+            "width": width,
+            "height": height,
+        })
+
+        with rasterio.open(dst_path, "w", **kwargs) as dst:
+            for i in range(1, src.count + 1):
+                reproject(
+                    source=rasterio.band(src, i),
+                    destination=rasterio.band(dst, i),
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    dst_transform=transform,
+                    dst_crs="EPSG:4326",
+                    resampling=Resampling.nearest,
+                )
+    return dst_path
 
 # Charger un fichier TIFF et ses métadonnées
 def load_tiff(file):
     with rasterio.open(file) as src:
         data = src.read(1)
-        bounds = src.bounds  # Récupérer les bornes géographiques du fichier
-    return data, bounds
+        bounds = src.bounds
+        transform = src.transform
+    return data, bounds, transform
 
-# Calcul des hauteurs à partir des données MNS et MNT
-def calculate_heights(mns, mnt):
-    return mnt - mns  # Différence de hauteur
+# Calcul des hauteurs à partir des données MNT et MNS
+def calculate_heights(mnt, mns):
+    return mns - mnt
 
-# Fonction pour détecter les arbres avec DBSCAN
+# Détection d'arbres avec DBSCAN
 def detect_trees(heights, height_threshold, eps, min_samples):
-    # Extraire les coordonnées où la hauteur est supérieure au seuil
     coords = np.column_stack(np.where(heights > height_threshold))
-    
-    # Vérifier si coords est vide
     if coords.size == 0:
-        return coords, np.array([])  # Pas de données à clusteriser
-    
-    # Appliquer DBSCAN si les coordonnées existent
+        return coords, np.array([])
     db = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
     return coords, db.labels_
 
-# Fonction pour calculer les centroïdes des clusters
-def calculate_cluster_centroids(coords, labels):
-    unique_labels = set(labels)
-    centroids = []
-    for label in unique_labels:
-        if label != -1:  # Exclure le bruit
-            cluster_coords = coords[labels == label]
-            centroid = np.mean(cluster_coords, axis=0)
-            centroids.append(centroid)
-    return centroids
+# Afficher la carte interactive
+def display_map(mnt_data, bounds, coords=None, labels=None):
+    center_lat = (bounds[1] + bounds[3]) / 2
+    center_lon = (bounds[0] + bounds[2]) / 2
+    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-# Ajouter des centroids des arbres sur la carte
-def add_tree_centroids_layer(map_object, centroids, bounds, shape, name):
-    for centroid in centroids:
-        lat, lon = centroid[0], centroid[1]
-        folium.CircleMarker(location=[lat, lon], radius=5, color='red', fill=True).add_to(map_object)
+    # Overlay pour MNT
+    folium.raster_layers.ImageOverlay(
+        image=mnt_data,
+        bounds=[[bounds[1], bounds[0]], [bounds[3], bounds[2]]],
+        opacity=0.5,
+        name="MNT"
+    ).add_to(fmap)
 
-# Fonction principale de l'application
+    # Ajouter les points détectés
+    if coords is not None and labels is not None:
+        for (x, y), label in zip(coords, labels):
+            if label != -1:
+                folium.CircleMarker(
+                    location=[x, y],
+                    radius=2,
+                    color="red",
+                    fill=True
+                ).add_to(fmap)
+
+    folium.LayerControl().add_to(fmap)
+    folium_static(fmap, width=800, height=600)
+
+# Application principale
 def main():
-    st.title("Application Cartographique")
-
-    # Initialisation de la session
-    if "files" not in st.session_state:
-        st.session_state["files"] = {}
-
+    st.title("Analyse de données MNT et MNS")
+    
     # Téléversement des fichiers
-    st.write("**Téléversement des fichiers**")
-    uploaded_mnt = st.file_uploader("Téléverser un fichier MNT (TIFF)", type=["tif", "tiff"])
-    if uploaded_mnt:
-        upload_file(uploaded_mnt, "mnt")  # Sauvegarde dans session_state
+    uploaded_mnt = st.file_uploader("Téléversez un fichier MNT (TIFF)", type=["tif", "tiff"])
+    uploaded_mns = st.file_uploader("Téléversez un fichier MNS (TIFF)", type=["tif", "tiff"])
+    
+    # Stocker les fichiers dans session_state
+    if uploaded_mnt and uploaded_mns:
+        st.session_state["mnt_file"] = uploaded_mnt
+        st.session_state["mns_file"] = uploaded_mns
+        st.success("Fichiers téléchargés et stockés dans la session.")
 
-    uploaded_mns = st.file_uploader("Téléverser un fichier MNS (TIFF)", type=["tif", "tiff"])
-    if uploaded_mns:
-        upload_file(uploaded_mns, "mns")  # Sauvegarde dans session_state
+    # Vérification des fichiers dans la session
+    if "mnt_file" in st.session_state and "mns_file" in st.session_state:
+        mnt_file = st.session_state["mnt_file"]
+        mns_file = st.session_state["mns_file"]
 
-    # Lorsque les deux fichiers sont téléversés
-    if "mnt" in st.session_state and "mns" in st.session_state:
-        mnt_file = st.session_state["mnt"]
-        mns_file = st.session_state["mns"]
+        # Reprojection vers WGS84
+        mnt_reprojected = reproject_to_wgs84(mnt_file.name, "mnt_wgs84.tif")
+        mns_reprojected = reproject_to_wgs84(mns_file.name, "mns_wgs84.tif")
 
-        mnt, mnt_bounds = load_tiff(mnt_file)
-        mns, mns_bounds = load_tiff(mns_file)
+        # Chargement des fichiers reprojectés
+        mnt, mnt_bounds, _ = load_tiff(mnt_reprojected)
+        mns, mns_bounds, _ = load_tiff(mns_reprojected)
 
-        if mnt is None or mns is None:
-            st.sidebar.error("Erreur lors du chargement des fichiers.")
-        elif mnt_bounds != mns_bounds:
-            st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
-        else:
-            # Calcul des hauteurs
-            heights = calculate_heights(mns, mnt)
+        # Calcul des hauteurs
+        heights = calculate_heights(mnt, mns)
 
-            # Paramètres de détection
-            height_threshold = st.sidebar.slider("Seuil de hauteur", 0.1, 20.0, 2.0, 0.1)
-            eps = st.sidebar.slider("Rayon de voisinage", 0.1, 10.0, 2.0, 0.1)
-            min_samples = st.sidebar.slider("Min. points pour un cluster", 1, 10, 5, 1)
+        # Affichage de la carte initiale
+        st.subheader("Carte initiale avec MNT")
+        display_map(mnt, mnt_bounds)
 
-            # Détection et visualisation
-            if st.sidebar.button("Lancer la détection"):
-                coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
-                
+        # Ajouter trois boutons sous la carte
+        st.subheader("Actions")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            if st.button("Afficher MNT uniquement"):
+                st.subheader("Carte avec MNT uniquement")
+                display_map(mnt, mnt_bounds)
+        
+        with col2:
+            if st.button("Afficher MNS uniquement"):
+                st.subheader("Carte avec MNS uniquement")
+                display_map(mns, mns_bounds)
+        
+        with col3:
+            if st.button("Détection des arbres"):
+                st.sidebar.subheader("Paramètres de détection")
+                height_threshold = st.sidebar.slider("Seuil de hauteur", 1, 20, 5)
+                eps = st.sidebar.slider("Rayon de voisinage (mètres)", 1, 10, 3)
+                min_samples = st.sidebar.slider("Nombre minimum de points par cluster", 1, 10, 3)
+
+                coords, labels = detect_trees(heights, height_threshold, eps, min_samples)
                 if coords.size == 0:
-                    st.sidebar.write("Aucun arbre détecté : aucune hauteur ne dépasse le seuil spécifié.")
+                    st.warning("Aucun arbre détecté.")
                 else:
-                    num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
-                    st.sidebar.write(f"Nombre d'arbres détectés : {num_trees}")
-
-                    # Calcul des centroïdes des clusters
-                    centroids = calculate_cluster_centroids(coords, tree_clusters)
-
-                    # Mise à jour de la carte
-                    center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
-                    center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
-                    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-
-                    # Ajouter l'overlay du MNT à la carte
-                    folium.raster_layers.ImageOverlay(
-                        image=mnt,
-                        bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
-                        opacity=0.5,
-                        name="MNT"
-                    ).add_to(fmap)
-
-                    # Ajouter les centroids des arbres
-                    add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
-
-                    folium_static(fmap, width=700, height=500)
-
-    # Boutons d'actions
-    st.write("### Actions disponibles")
-    if st.button("Réinitialiser les fichiers"):
-        st.session_state["files"] = {}
-        st.success("Tous les fichiers ont été réinitialisés.")
+                    st.success(f"{len(set(labels)) - (1 if -1 in labels else 0)} arbres détectés.")
+                    display_map(mnt, mnt_bounds, coords, labels)
 
 if __name__ == "__main__":
     main()
-
-
-
