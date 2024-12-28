@@ -171,6 +171,33 @@ def main():
         except Exception as e:
             st.error(f"Erreur lors de la reprojection du MNT : {e}")
 
+    # Téléversement du fichier MNS (Modèle Numérique de Surface)
+    uploaded_mns = st.file_uploader("Téléverser un fichier MNS (TIFF)", type=["tif", "tiff"])
+    if uploaded_mns:
+        mns_path = uploaded_mns.name
+        with open(mns_path, "wb") as f:
+            f.write(uploaded_mns.read())
+
+        st.write("Reprojection du fichier MNS...")
+        try:
+            reprojected_mns = reproject_tiff(mns_path, "EPSG:4326")
+            
+            # Create a temporary PNG file for the colorized MNS
+            temp_png_path = "mns_colored.png"
+            apply_color_gradient(reprojected_mns, temp_png_path)
+            
+            with rasterio.open(reprojected_mns) as src:
+                bounds = src.bounds
+                center_lat = (bounds.top + bounds.bottom) / 2
+                center_lon = (bounds.left + bounds.right) / 2
+                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+                add_image_overlay(fmap, temp_png_path, bounds, "MNS")
+                
+            # Remove the temporary PNG file
+            os.remove(temp_png_path)
+        except Exception as e:
+            st.error(f"Erreur lors de la reprojection du MNS : {e}")
+
 
     # Téléversement d'un fichier GeoJSON pour les routes
     geojson_file = st.file_uploader("Téléverser un fichier GeoJSON de routes", type=["geojson"])
@@ -207,45 +234,6 @@ def main():
             ).add_to(fmap)
         except Exception as e:
             st.error(f"Erreur lors du chargement du fichier polygonal : {e}")
-
-    # Téléversement du fichier MNS et MNT
-    uploaded_mns = st.file_uploader("Téléverser un fichier MNS (TIFF)", type=["tif", "tiff"])
-    uploaded_mnt = st.file_uploader("Téléverser un fichier MNT (TIFF)", type=["tif", "tiff"])
-    
-    if uploaded_mns and uploaded_mnt:
-        try:
-            mns_path = uploaded_mns.name
-            mnt_path = uploaded_mnt.name
-            with open(mns_path, "wb") as f:
-                f.write(uploaded_mns.read())
-            with open(mnt_path, "wb") as f:
-                f.write(uploaded_mnt.read())
-            
-            # Reprojection des fichiers
-            reprojected_mns = reproject_tiff(mns_path, "EPSG:4326")
-            reprojected_mnt = reproject_tiff(mnt_path, "EPSG:4326")
-
-            # Ajouter un bouton pour compter les arbres
-            if st.button("Compter les arbres"):
-                st.write("Calcul en cours...")
-                with rasterio.open(reprojected_mns) as src_mns, rasterio.open(reprojected_mnt) as src_mnt:
-                    mns_data = src_mns.read(1)
-                    mnt_data = src_mnt.read(1)
-
-                    # Calcul des hauteurs
-                    heights = calculate_heights(mns_data, mnt_data)
-
-                    # Détection des arbres
-                    threshold = st.slider("Seuil de hauteur (m)", min_value=1, max_value=30, value=5)
-                    eps = st.slider("Tolérance spatiale (eps)", min_value=1, max_value=10, value=5)
-                    min_samples = st.slider("Nombre minimum de points par arbre", min_value=1, max_value=10, value=3)
-
-                    coords, tree_clusters = detect_trees(heights, threshold, eps, min_samples)
-                    num_trees = len(set(tree_clusters) - {-1})  # Exclure les points bruités (-1)
-                    
-                    st.success(f"Nombre d'arbres détectés : {num_trees}")
-        except Exception as e:
-            st.error(f"Erreur lors du traitement des fichiers : {e}")
 
     # Ajout des contrôles de calques
     folium.LayerControl().add_to(fmap)
