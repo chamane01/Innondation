@@ -69,7 +69,30 @@ def apply_color_gradient(tiff_path, output_path):
         # Save the colored image as PNG
         plt.imsave(output_path, colored_image)
         plt.close()
+# Fonction pour détecter les arbres
+def detect_and_count_trees(mns_path, mnt_path, threshold, eps, min_samples):
+    """Détecter et compter les arbres à partir des données MNS et MNT."""
+    try:
+        # Charger les données MNS et MNT
+        with rasterio.open(mns_path) as mns_src, rasterio.open(mnt_path) as mnt_src:
+            mns_data = mns_src.read(1)
+            mnt_data = mnt_src.read(1)
 
+            # Calculer les hauteurs relatives
+            heights = np.maximum(0, mns_data - mnt_data)
+
+            # Appliquer DBSCAN
+            tree_mask = heights > threshold
+            coords = np.column_stack(np.where(tree_mask))
+            clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
+            tree_clusters = clustering.labels_
+
+            # Compter les arbres (clusters uniques)
+            unique_trees = len(set(tree_clusters) - {-1})
+            return unique_trees, coords, tree_clusters
+    except Exception as e:
+        st.error(f"Erreur lors de la détection des arbres : {e}")
+        return None, None, None
 
 # Overlay function for TIFF images
 def add_image_overlay(map_object, tiff_path, bounds, name):
@@ -234,6 +257,41 @@ def main():
             ).add_to(fmap)
         except Exception as e:
             st.error(f"Erreur lors du chargement du fichier polygonal : {e}")
+
+     # Téléversement des fichiers MNS et MNT
+    uploaded_mns = st.file_uploader("Téléverser un fichier MNS (TIFF)", type=["tif", "tiff"])
+    uploaded_mnt = st.file_uploader("Téléverser un fichier MNT (TIFF)", type=["tif", "tiff"])
+
+    if uploaded_mns and uploaded_mnt:
+        mns_path = uploaded_mns.name
+        mnt_path = uploaded_mnt.name
+        with open(mns_path, "wb") as f:
+            f.write(uploaded_mns.read())
+        with open(mnt_path, "wb") as f:
+            f.write(uploaded_mnt.read())
+
+        # Paramètres pour DBSCAN
+        st.sidebar.header("Paramètres DBSCAN")
+        threshold = st.sidebar.slider("Seuil de hauteur (mètres)", min_value=0, max_value=50, value=5)
+        eps = st.sidebar.slider("Epsilon (distance)", min_value=1, max_value=20, value=5)
+        min_samples = st.sidebar.slider("Nombre minimum d'échantillons", min_value=1, max_value=10, value=3)
+
+        # Bouton pour compter les arbres
+        if st.button("Compter les arbres"):
+            st.write("Détection des arbres en cours...")
+            tree_count, coords, tree_clusters = detect_and_count_trees(mns_path, mnt_path, threshold, eps, min_samples)
+
+            if tree_count is not None:
+                st.success(f"Nombre d'arbres détectés : {tree_count}")
+
+                # Visualisation des clusters
+                if coords is not None and tree_clusters is not None:
+                    plt.figure(figsize=(10, 10))
+                    plt.scatter(coords[:, 1], coords[:, 0], c=tree_clusters, cmap="tab10", s=2)
+                    plt.title("Clusters d'arbres détectés")
+                    plt.xlabel("X")
+                    plt.ylabel("Y")
+                    st.pyplot(plt)
 
     # Ajout des contrôles de calques
     folium.LayerControl().add_to(fmap)
