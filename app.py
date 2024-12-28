@@ -21,6 +21,145 @@ from rasterio.warp import calculate_default_transform, reproject
 import matplotlib.pyplot as plt
 import os
 
+import streamlit as st
+import rasterio
+import numpy as np
+import folium
+from folium.plugins import MeasureControl, Draw
+from streamlit_folium import folium_static
+from sklearn.cluster import DBSCAN
+
+# Fonctions Utilitaires
+def load_tiff(file):
+    """Charger un fichier TIFF et retourner ses données et bornes géographiques."""
+    try:
+        with rasterio.open(file) as src:
+            data = src.read(1)
+            bounds = src.bounds
+        return data, bounds
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier : {e}")
+        return None, None
+
+def calculate_heights(mns, mnt):
+    """Calculer les hauteurs relatives entre MNS et MNT."""
+    return np.maximum(0, mns - mnt)
+
+def detect_trees(heights, height_threshold, eps, min_samples):
+    """Détecter les arbres en utilisant l'algorithme DBSCAN."""
+    mask = heights > height_threshold
+    coords = np.column_stack(np.where(mask))
+    clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
+    return coords, clustering.labels_
+
+def calculate_cluster_centroids(coords, labels):
+    """Calculer les centroïdes des clusters détectés."""
+    centroids = []
+    unique_labels = set(labels) - {-1}  # Exclure le bruit
+    for label in unique_labels:
+        cluster_coords = coords[labels == label]
+        centroid = cluster_coords.mean(axis=0)
+        centroids.append(centroid)
+    return centroids
+
+def add_tree_centroids_layer(fmap, centroids, bounds, shape, layer_name="Arbres"):
+    """Ajouter une couche de centroïdes d'arbres sur la carte."""
+    for centroid in centroids:
+        y, x = centroid
+        lat = bounds[1] + (y / shape[0]) * (bounds[3] - bounds[1])
+        lon = bounds[0] + (x / shape[1]) * (bounds[2] - bounds[0])
+        folium.Marker([lat, lon], popup="Arbre").add_to(fmap)
+
+def load_and_reproject_shapefile(file):
+    """Charger et reprojeter un fichier GeoJSON ou SHP."""
+    import geopandas as gpd
+    try:
+        gdf = gpd.read_file(file)
+        gdf = gdf.to_crs(epsg=4326)  # Reprojeter en WGS 84
+        return gdf
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier vectoriel : {e}")
+        return None
+
+# Interface Streamlit
+def main():
+    st.title("Détection et Cartographie des Arbres")
+
+    # Initialisation de l'état
+    if "show_sidebar" not in st.session_state:
+        st.session_state.show_sidebar = False
+
+    # Bouton principal
+    col1, col2, col3 = st.columns([1, 1, 1])
+    with col3:
+        if st.button("Détecter les arbres"):
+            st.session_state.show_sidebar = True
+
+    # Affichage des paramètres si bouton cliqué
+    if st.session_state.show_sidebar:
+        st.sidebar.title("Paramètres de détection")
+
+        # Téléversement des fichiers
+        mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
+        mns_file = st.sidebar.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
+        road_file = st.sidebar.file_uploader("Téléchargez un fichier de route (optionnel)", type=["geojson", "shp"])
+        polygon_file = st.sidebar.file_uploader("Téléchargez un fichier de polygone (optionnel)", type=["geojson", "shp"])
+
+        if mnt_file and mns_file:
+            mnt, mnt_bounds = load_tiff(mnt_file)
+            mns, mns_bounds = load_tiff(mns_file)
+
+            if mnt is None or mns is None:
+                st.sidebar.error("Erreur lors du chargement des fichiers.")
+            elif mnt_bounds != mns_bounds:
+                st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
+            else:
+                heights = calculate_heights(mns, mnt)
+
+                # Paramètres de détection
+                height_threshold = st.sidebar.slider("Seuil de hauteur", 0.1, 20.0, 2.0, 0.1)
+                eps = st.sidebar.slider("Rayon de voisinage", 0.1, 10.0, 2.0, 0.1)
+                min_samples = st.sidebar.slider("Min. points pour un cluster", 1, 10, 5, 1)
+
+                # Détection et visualisation
+                if st.sidebar.button("Lancer la détection"):
+                    coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
+                    num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
+                    st.sidebar.write(f"Nombre d'arbres détectés : {num_trees}")
+
+                    centroids = calculate_cluster_centroids(coords, tree_clusters)
+
+                    # Mise à jour de la carte
+                    center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
+                    center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
+                    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+
+                    folium.raster_layers.ImageOverlay(
+                        image=mnt,
+                        bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
+                        opacity=0.5,
+                        name="MNT"
+                    ).add_to(fmap)
+
+                    add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
+
+                    # Ajout des routes et polygones
+                    if road_file:
+                        roads_gdf = load_and_reproject_shapefile(road_file)
+                        folium.GeoJson(roads_gdf, name="Routes", style_function=lambda x: {'color': 'orange', 'weight': 2}).add_to(fmap)
+
+                    if polygon_file:
+                        polygons_gdf = load_and_reproject_shapefile(polygon_file)
+                        folium.GeoJson(polygons_gdf, name="Polygones", style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}).add_to(fmap)
+
+                    fmap.add_child(MeasureControl(position='topleft'))
+                    fmap.add_child(Draw(position='topleft', export=True))
+                    fmap.add_child(folium.LayerControl(position='topright'))
+
+                    folium_static(fmap)
+
+if __name__ == "__main__":
+    main()
 
 
 
@@ -69,30 +208,7 @@ def apply_color_gradient(tiff_path, output_path):
         # Save the colored image as PNG
         plt.imsave(output_path, colored_image)
         plt.close()
-# Fonction pour détecter les arbres
-def detect_and_count_trees(mns_path, mnt_path, threshold, eps, min_samples):
-    """Détecter et compter les arbres à partir des données MNS et MNT."""
-    try:
-        # Charger les données MNS et MNT
-        with rasterio.open(mns_path) as mns_src, rasterio.open(mnt_path) as mnt_src:
-            mns_data = mns_src.read(1)
-            mnt_data = mnt_src.read(1)
 
-            # Calculer les hauteurs relatives
-            heights = np.maximum(0, mns_data - mnt_data)
-
-            # Appliquer DBSCAN
-            tree_mask = heights > threshold
-            coords = np.column_stack(np.where(tree_mask))
-            clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
-            tree_clusters = clustering.labels_
-
-            # Compter les arbres (clusters uniques)
-            unique_trees = len(set(tree_clusters) - {-1})
-            return unique_trees, coords, tree_clusters
-    except Exception as e:
-        st.error(f"Erreur lors de la détection des arbres : {e}")
-        return None, None, None
 
 # Overlay function for TIFF images
 def add_image_overlay(map_object, tiff_path, bounds, name):
@@ -257,43 +373,6 @@ def main():
             ).add_to(fmap)
         except Exception as e:
             st.error(f"Erreur lors du chargement du fichier polygonal : {e}")
-
-     # Téléversement des fichiers MNS et MNT avec clés uniques
-    uploaded_mns = st.file_uploader("Téléverser un fichier MNS (TIFF)", type=["tif", "tiff"], key="mns_file")
-    uploaded_mnt = st.file_uploader("Téléverser un fichier MNT (TIFF)", type=["tif", "tiff"], key="mnt_file")
-
-    if uploaded_mns and uploaded_mnt:
-        mns_path = "uploaded_mns.tif"
-        mnt_path = "uploaded_mnt.tif"
-        with open(mns_path, "wb") as f:
-            f.write(uploaded_mns.read())
-        with open(mnt_path, "wb") as f:
-            f.write(uploaded_mnt.read())
-
-        # Paramètres pour DBSCAN
-        st.sidebar.header("Paramètres DBSCAN")
-        threshold = st.sidebar.slider("Seuil de hauteur (mètres)", min_value=0, max_value=50, value=5, key="threshold_slider")
-        eps = st.sidebar.slider("Epsilon (distance)", min_value=1, max_value=20, value=5, key="eps_slider")
-        min_samples = st.sidebar.slider("Nombre minimum d'échantillons", min_value=1, max_value=10, value=3, key="min_samples_slider")
-
-        # Bouton pour compter les arbres
-        if st.button("Compter les arbres", key="count_trees_button"):
-            st.write("Détection des arbres en cours...")
-            tree_count, coords, tree_clusters = detect_and_count_trees(mns_path, mnt_path, threshold, eps, min_samples)
-
-            if tree_count is not None:
-                st.success(f"Nombre d'arbres détectés : {tree_count}")
-
-                # Visualisation des clusters
-                if coords is not None and tree_clusters is not None:
-                    plt.figure(figsize=(10, 10))
-                    plt.scatter(coords[:, 1], coords[:, 0], c=tree_clusters, cmap="tab10", s=2)
-                    plt.title("Clusters d'arbres détectés")
-                    plt.xlabel("X")
-                    plt.ylabel("Y")
-                    st.pyplot(plt)
-    else:
-        st.warning("Veuillez téléverser les deux fichiers MNS et MNT pour continuer.")
 
     # Ajout des contrôles de calques
     folium.LayerControl().add_to(fmap)
