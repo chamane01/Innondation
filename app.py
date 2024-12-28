@@ -79,7 +79,7 @@ def main():
         add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
 
         # Add measure control
-        fmap.add_child(MeasureControl(position='topleft'))
+        fmap.add_child(MeasureControl(position='topright'))
 
         #Add draw control
         
@@ -90,7 +90,12 @@ def main():
                                   'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
                     edit_options={'edit': True,}
         )
-          
+
+
+    
+                  
+                  
+                  
     
 
         fmap.add_child(draw)
