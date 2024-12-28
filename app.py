@@ -274,7 +274,56 @@ def main():
         add_image_overlay(fmap, reprojected_tiff, bounds, "TIFF Layer")
 
 # Ajouter l'outil Draw à la carte
+draw = Draw(
+    position='topleft',
+    draw_options={
+        'polyline': {
+            'shapeOptions': {
+                'color': 'blue',
+                'weight': 2,
+                'opacity': 0.7
+            }
+        },
+        'polygon': {
+            'shapeOptions': {
+                'color': 'green',
+                'weight': 2,
+                'opacity': 0.5
+            },
+            'allowIntersection': False
+        },
+        'rectangle': {
+            'shapeOptions': {
+                'color': 'red',
+                'weight': 3,
+                'opacity': 0.8
+            }
+        },
+        'circle': {
+            'shapeOptions': {
+                'color': 'purple',
+                'weight': 2,
+                'opacity': 0.7
+            },
+            'showRadius': True
+        },
+        'marker': True,  # Enable markers
+        'circlemarker': {
+            'shapeOptions': {
+                'radius': 10,
+                'color': 'yellow'
+            }
+        }
+    },
+    edit_options={
+        'edit': True,  # Enable editing of shapes
+        'remove': True  # Enable removal of shapes
+    }
+)
+
+# Add the customized draw control to the map
 fmap.add_child(draw)
+
 
 # Ajouter un LayerControl (position de contrôle)
 fmap.add_child(folium.LayerControl(position='topright'))
