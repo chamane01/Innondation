@@ -242,35 +242,6 @@ def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_n
 
 
 
-# Interface Streamlit
-st.title("AFRIQUE CARTOGRAPHIE")
-
-def main():
-    st.title("TIFF Viewer and Interactive Map")
-
-    # Création d'une carte centrée
-    fmap = folium.Map(location=[0, 0], zoom_start=2)
-
-    # Ajout de l'outil Mesure
-    fmap.add_child(MeasureControl(position='topleft'))
-
-    # Configuration et ajout de l'outil Draw
-    draw = Draw(
-        position='topleft',
-        draw_options={
-            'polyline': {'shapeOptions': {'color': 'blue', 'weight': 2, 'opacity': 0.7}},
-            'polygon': {'shapeOptions': {'color': 'green', 'weight': 2, 'opacity': 0.5}},
-            'rectangle': {'shapeOptions': {'color': 'red', 'weight': 2, 'opacity': 0.5}}
-        },
-        edit_options={'edit': True, 'remove': True}
-    )
-    fmap.add_child(draw)
-
-    # Affichage de la carte dans Streamlit
-    folium_static(fmap)
-
-if __name__ == "__main__":
-    main()
 
 
 
