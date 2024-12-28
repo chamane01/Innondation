@@ -20,7 +20,6 @@ from rasterio.enums import Resampling
 from rasterio.warp import calculate_default_transform, reproject
 import matplotlib.pyplot as plt
 import os
-
 import streamlit as st
 import rasterio
 import numpy as np
