@@ -17,9 +17,10 @@ from streamlit_folium import st_folium
 import json
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 import geojson
+from pyproj import CRS
+from shapely.geometry import shape
 
 
-# Reprojection function
 def reproject_tiff(input_tiff, target_crs):
     """Reproject a TIFF file to a target CRS."""
     with rasterio.open(input_tiff) as src:
@@ -48,6 +49,20 @@ def reproject_tiff(input_tiff, target_crs):
                 )
 
     return reprojected_tiff
+
+def reproject_geojson(geojson_data, target_crs="EPSG:4326"):
+    """Reproject GeoJSON data to the target CRS."""
+    reprojected_geojson = geojson_data.copy()
+
+    # Check and reproject geometry if needed
+    for feature in reprojected_geojson['features']:
+        geom = shape(feature['geometry'])
+        if geom.is_valid:
+            # Reproject geometry
+            geom = geom.to_crs(CRS.from_epsg(4326))
+            feature['geometry'] = geojson.loads(geom.to_geojson())
+    
+    return reprojected_geojson
 
 def add_image_overlay(map_object, tiff_path, bounds, name):
     """Add a TIFF image overlay to a Folium map."""
@@ -97,6 +112,10 @@ def main():
     if geojson_file:
         st.session_state["geojson_route"] = geojson_file.read().decode("utf-8")
         geojson_data = geojson.loads(st.session_state["geojson_route"])
+
+        # Reproject GeoJSON data if needed
+        geojson_data = reproject_geojson(geojson_data, target_crs="EPSG:4326")
+
         folium.GeoJson(geojson_data, name="Routes").add_to(fmap)
 
     # Allow user to upload TIFF file
