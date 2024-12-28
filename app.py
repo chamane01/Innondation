@@ -108,8 +108,6 @@ def count_trees(mnt_data, mns_data):
 # Main application
 def main():
     st.title("DESSINER une CARTE ")
-    def main():
-    st.title("DESSINER une CARTE ")
 
     # Initialiser les variables de données
     mnt_data = None
