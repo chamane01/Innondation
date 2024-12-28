@@ -16,6 +16,7 @@ from folium import IFrame
 from streamlit_folium import st_folium
 
 
+
 def reproject_tiff(input_tiff, target_crs):
     """Reproject a TIFF file to a target CRS."""
     with rasterio.open(input_tiff) as src:
@@ -61,16 +62,31 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
 def main():
     st.title("TIFF Viewer and Interactive Map")
 
+    # Initialize session state for drawings
+    if "drawings" not in st.session_state:
+        st.session_state["drawings"] = None
+
     # Default map centered at a specific location (e.g., [0, 0] for equator)
     fmap = folium.Map(location=[0, 0], zoom_start=2)
     fmap.add_child(MeasureControl(position='topleft'))
-    draw = Draw(position='topleft', export=True,
-                draw_options={'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
-                              'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
-                              'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
-                              'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}},
-                edit_options={'edit': True})
+    
+    draw = Draw(
+        position='topleft',
+        export=True,
+        draw_options={
+            'polyline': {'shapeOptions': {'color': 'blue', 'weight': 4, 'opacity': 0.7}},
+            'polygon': {'shapeOptions': {'color': 'green', 'weight': 4, 'opacity': 0.7}},
+            'rectangle': {'shapeOptions': {'color': 'red', 'weight': 4, 'opacity': 0.7}},
+            'circle': {'shapeOptions': {'color': 'purple', 'weight': 4, 'opacity': 0.7}}
+        },
+        edit_options={'edit': True}
+    )
     fmap.add_child(draw)
+
+    # Reapply previous drawings if they exist
+    if st.session_state["drawings"]:
+        for feature in st.session_state["drawings"]["features"]:
+            folium.GeoJson(feature).add_to(fmap)
 
     # Allow user to upload TIFF file
     uploaded_file = st.file_uploader("Upload a TIFF file", type=["tif", "tiff"])
@@ -102,11 +118,25 @@ def main():
         fmap.add_child(draw)
         folium.LayerControl().add_to(fmap)
 
+        # Reapply previous drawings
+        if st.session_state["drawings"]:
+            for feature in st.session_state["drawings"]["features"]:
+                folium.GeoJson(feature).add_to(fmap)
+
     # Display map
-    folium_static(fmap)
+    fmap_rendered = folium_static(fmap)
+
+    # Capture GeoJSON data from Draw
+    if fmap_rendered:
+        if "last_draw" not in st.session_state:
+            st.session_state["last_draw"] = None
+        if st.session_state["last_draw"] != st.session_state.get("draw_data"):
+            st.session_state["drawings"] = st.session_state.get("draw_data")
+            st.session_state["last_draw"] = st.session_state.get("draw_data")
 
 if __name__ == "__main__":
     main()
+
     
 
 
