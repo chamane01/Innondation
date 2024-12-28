@@ -214,8 +214,7 @@ def main():
                 }
             ).add_to(fmap)
         except Exception as e:
-            st.error(f"Erreur lors du chargement du fichier polygonal : {e}")geojson_polygon = st.file_uploader("Téléverser un fichier GeoJSON de polygonale", type=["geojson"])
-    
+            st.error(f"Erreur lors du chargement du fichier polygonal : {e}")
 
     # Ajout des contrôles de calques
     folium.LayerControl().add_to(fmap)
@@ -226,6 +225,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
     
 
 
