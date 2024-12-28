@@ -21,12 +21,7 @@ from rasterio.warp import calculate_default_transform, reproject
 import matplotlib.pyplot as plt
 import os
 
-def upload_file(file, key):
-    if file:
-        st.session_state[key] = file.name
-        with open(file.name, "wb") as f:
-            f.write(file.read())
-        st.success(f"Fichier {key} téléversé avec succès !")
+
 
 
 # Reprojection function
@@ -93,24 +88,12 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
 def main():
     st.title("DESSINER une CARTE ")
 
-    # Initialisation de la session
-    if "files" not in st.session_state:
-        st.session_state["files"] = {}
-
     # Initialize session state for drawings
     if "drawings" not in st.session_state:
         st.session_state["drawings"] = {
             "type": "FeatureCollection",
             "features": [],
         }
-
-    # Téléversement des fichiers
-    st.write("**Téléversement des fichiers**")
-    uploaded_mnt = st.file_uploader("Téléverser un fichier MNT (TIFF)", type=["tif", "tiff"])
-    upload_file(uploaded_mnt, "mnt")  # Sauvegarde dans session_state
-
-    uploaded_mns = st.file_uploader("Téléverser un fichier MNS (TIFF)", type=["tif", "tiff"])
-    upload_file(uploaded_mns, "mns")  # Sauvegarde dans session_state
 
     # Initialize map
     fmap = folium.Map(location=[0, 0], zoom_start=2)
@@ -161,7 +144,60 @@ def main():
         except Exception as e:
             st.error(f"Erreur lors de la reprojection : {e}")
 
-   
+    # Téléversement du fichier MNT (Modèle Numérique de Terrain)
+    uploaded_mnt = st.file_uploader("Téléverser un fichier MNT (TIFF)", type=["tif", "tiff"])
+    if uploaded_mnt:
+        mnt_path = uploaded_mnt.name
+        with open(mnt_path, "wb") as f:
+            f.write(uploaded_mnt.read())
+
+        st.write("Reprojection du fichier MNT...")
+        try:
+            reprojected_mnt = reproject_tiff(mnt_path, "EPSG:4326")
+            
+            # Create a temporary PNG file for the colorized DEM
+            temp_png_path = "mnt_colored.png"
+            apply_color_gradient(reprojected_mnt, temp_png_path)
+            
+            with rasterio.open(reprojected_mnt) as src:
+                bounds = src.bounds
+                center_lat = (bounds.top + bounds.bottom) / 2
+                center_lon = (bounds.left + bounds.right) / 2
+                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+                add_image_overlay(fmap, temp_png_path, bounds, "MNT")
+                
+            # Remove the temporary PNG file
+            os.remove(temp_png_path)
+        except Exception as e:
+            st.error(f"Erreur lors de la reprojection du MNT : {e}")
+
+    # Téléversement du fichier MNS (Modèle Numérique de Surface)
+    uploaded_mns = st.file_uploader("Téléverser un fichier MNS (TIFF)", type=["tif", "tiff"])
+    if uploaded_mns:
+        mns_path = uploaded_mns.name
+        with open(mns_path, "wb") as f:
+            f.write(uploaded_mns.read())
+
+        st.write("Reprojection du fichier MNS...")
+        try:
+            reprojected_mns = reproject_tiff(mns_path, "EPSG:4326")
+            
+            # Create a temporary PNG file for the colorized MNS
+            temp_png_path = "mns_colored.png"
+            apply_color_gradient(reprojected_mns, temp_png_path)
+            
+            with rasterio.open(reprojected_mns) as src:
+                bounds = src.bounds
+                center_lat = (bounds.top + bounds.bottom) / 2
+                center_lon = (bounds.left + bounds.right) / 2
+                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+                add_image_overlay(fmap, temp_png_path, bounds, "MNS")
+                
+            # Remove the temporary PNG file
+            os.remove(temp_png_path)
+        except Exception as e:
+            st.error(f"Erreur lors de la reprojection du MNS : {e}")
+
 
     # Téléversement d'un fichier GeoJSON pour les routes
     geojson_file = st.file_uploader("Téléverser un fichier GeoJSON de routes", type=["geojson"])
@@ -198,21 +234,6 @@ def main():
             ).add_to(fmap)
         except Exception as e:
             st.error(f"Erreur lors du chargement du fichier polygonal : {e}")
-
-    # Boutons d'actions
-    st.write("### Actions disponibles")
-    if st.button("Détecter les arbres"):
-        detect_trees(
-            st.session_state.get("mnt"), 
-            st.session_state.get("mns")
-        )
-
-    if st.button("Autre Fonctionnalité"):
-        st.write("Ajoutez ici une autre fonctionnalité utilisant les fichiers téléversés.")
-        
-    if st.button("Réinitialiser les fichiers"):
-        st.session_state["files"] = {}
-        st.success("Tous les fichiers ont été réinitialisés.")
 
     # Ajout des contrôles de calques
     folium.LayerControl().add_to(fmap)
