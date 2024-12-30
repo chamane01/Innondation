@@ -1,34 +1,22 @@
 import streamlit as st
 import rasterio
-import rasterio.warp
 import folium
 from folium import plugins
 from folium.plugins import MeasureControl, Draw
 from rasterio.plot import reshape_as_image
 from PIL import Image
 from streamlit_folium import folium_static
-from rasterio.warp import transform_bounds
-import numpy as np
-from sklearn.cluster import DBSCAN
-import geopandas as gpd
-from shapely.geometry import Polygon, Point, LineString
-from folium import IFrame
-from streamlit_folium import st_folium
-import json
-from io import BytesIO
-from rasterio.enums import Resampling
 from rasterio.warp import calculate_default_transform, reproject
 import matplotlib.pyplot as plt
 import os
-
-
+import json
 
 
 # Reprojection function
 def reproject_tiff(input_tiff, target_crs):
     """Reproject a TIFF file to a target CRS."""
     with rasterio.open(input_tiff) as src:
-        transform, width, height = rasterio.warp.calculate_default_transform(
+        transform, width, height = calculate_default_transform(
             src.crs, target_crs, src.width, src.height, *src.bounds
         )
         kwargs = src.meta.copy()
@@ -42,31 +30,26 @@ def reproject_tiff(input_tiff, target_crs):
         reprojected_tiff = "reprojected.tiff"
         with rasterio.open(reprojected_tiff, "w", **kwargs) as dst:
             for i in range(1, src.count + 1):
-                rasterio.warp.reproject(
+                reproject(
                     source=rasterio.band(src, i),
                     destination=rasterio.band(dst, i),
                     src_transform=src.transform,
                     src_crs=src.crs,
                     dst_transform=transform,
                     dst_crs=target_crs,
-                    resampling=rasterio.warp.Resampling.nearest,
+                    resampling=rasterio.enums.Resampling.nearest,
                 )
     return reprojected_tiff
+
+
 # Function to apply color gradient to a DEM TIFF
 def apply_color_gradient(tiff_path, output_path):
     """Apply a color gradient to the DEM TIFF and save it as a PNG."""
     with rasterio.open(tiff_path) as src:
-        # Read the DEM data
         dem_data = src.read(1)
-        
-        # Create a color map using matplotlib
         cmap = plt.get_cmap("terrain")
         norm = plt.Normalize(vmin=dem_data.min(), vmax=dem_data.max())
-        
-        # Apply the colormap
         colored_image = cmap(norm(dem_data))
-        
-        # Save the colored image as PNG
         plt.imsave(output_path, colored_image)
         plt.close()
 
@@ -86,85 +69,72 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
 
 # Main application
 def main():
-    st.title("DESSINER une CARTE")
+    st.title("DESSINER une CARTE ")
 
-    # Initialize session state for drawings
-    if "drawings" not in st.session_state:
-        st.session_state["drawings"] = {
-            "type": "FeatureCollection",
-            "features": [],
-        }
+    # Initialize map in session state
+    if "fmap" not in st.session_state:
+        st.session_state["fmap"] = folium.Map(location=[0, 0], zoom_start=2)
+        st.session_state["fmap"].add_child(MeasureControl(position="topleft"))
+        st.session_state["fmap"].add_child(Draw(export=True))
 
-    # Initialize map
-    fmap = folium.Map(location=[0, 0], zoom_start=2)
-    fmap.add_child(MeasureControl(position="topleft"))
-    draw = Draw(
-        position="topleft",
-        export=True,
-        draw_options={
-            "polyline": {"shapeOptions": {"color": "orange", "weight": 4, "opacity": 0.7}},
-            "polygon": {"shapeOptions": {"color": "green", "weight": 4, "opacity": 0.7}},
-            "rectangle": {"shapeOptions": {"color": "red", "weight": 4, "opacity": 0.7}},
-            "circle": {"shapeOptions": {"color": "purple", "weight": 4, "opacity": 0.7}},
-        },
-        edit_options={"edit": True},
-    )
-    fmap.add_child(draw)
+    # Téléversement d'une orthophoto (TIFF)
+    uploaded_tiff = st.file_uploader("Téléverser une orthophoto (TIFF)", type=["tif", "tiff"])
+    if uploaded_tiff:
+        tiff_path = uploaded_tiff.name
+        with open(tiff_path, "wb") as f:
+            f.write(uploaded_tiff.read())
+        try:
+            reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
+            with rasterio.open(reprojected_tiff) as src:
+                bounds = src.bounds
+                add_image_overlay(st.session_state["fmap"], reprojected_tiff, bounds, "Orthophoto")
+        except Exception as e:
+            st.error(f"Erreur lors de la reprojection : {e}")
 
-    # Téléversement des fichiers
-    uploaded_files = st.file_uploader(
-        "Téléverser des fichiers (TIFF ou GeoJSON)", type=["tif", "tiff", "geojson"], accept_multiple_files=True
-    )
-    
-    for uploaded_file in uploaded_files:
-        if uploaded_file.name.endswith((".tif", ".tiff")):
-            with open(uploaded_file.name, "wb") as f:
-                f.write(uploaded_file.read())
+    # Téléversement du fichier MNT
+    uploaded_mnt = st.file_uploader("Téléverser un fichier MNT (TIFF)", type=["tif", "tiff"])
+    if uploaded_mnt:
+        mnt_path = uploaded_mnt.name
+        with open(mnt_path, "wb") as f:
+            f.write(uploaded_mnt.read())
+        try:
+            reprojected_mnt = reproject_tiff(mnt_path, "EPSG:4326")
+            temp_png_path = "mnt_colored.png"
+            apply_color_gradient(reprojected_mnt, temp_png_path)
+            with rasterio.open(reprojected_mnt) as src:
+                bounds = src.bounds
+                add_image_overlay(st.session_state["fmap"], temp_png_path, bounds, "MNT")
+            os.remove(temp_png_path)
+        except Exception as e:
+            st.error(f"Erreur lors de la reprojection du MNT : {e}")
 
-            st.write(f"Reprojection du fichier {uploaded_file.name}...")
-            try:
-                reprojected_file = reproject_tiff(uploaded_file.name, "EPSG:4326")
-                bounds = None
-                with rasterio.open(reprojected_file) as src:
-                    bounds = src.bounds
-
-                # Appliquer un gradient si nécessaire
-                temp_png_path = f"{uploaded_file.name}_colored.png"
-                apply_color_gradient(reprojected_file, temp_png_path)
-
-                # Ajouter en tant que couche
-                if bounds:
-                    add_image_overlay(fmap, temp_png_path, bounds, uploaded_file.name)
-
-                # Supprimer le fichier temporaire
-                os.remove(temp_png_path)
-            except Exception as e:
-                st.error(f"Erreur lors de la reprojection : {e}")
-
-        elif uploaded_file.name.endswith(".geojson"):
-            try:
-                geojson_data = json.load(uploaded_file)
-                folium.GeoJson(
-                    geojson_data,
-                    name=uploaded_file.name,
-                    style_function=lambda x: {
-                        "color": "blue",
-                        "weight": 2,
-                        "opacity": 0.7
-                    },
-                ).add_to(fmap)
-            except Exception as e:
-                st.error(f"Erreur lors du chargement du GeoJSON : {e}")
+    # Téléversement du fichier MNS
+    uploaded_mns = st.file_uploader("Téléverser un fichier MNS (TIFF)", type=["tif", "tiff"])
+    if uploaded_mns:
+        mns_path = uploaded_mns.name
+        with open(mns_path, "wb") as f:
+            f.write(uploaded_mns.read())
+        try:
+            reprojected_mns = reproject_tiff(mns_path, "EPSG:4326")
+            temp_png_path = "mns_colored.png"
+            apply_color_gradient(reprojected_mns, temp_png_path)
+            with rasterio.open(reprojected_mns) as src:
+                bounds = src.bounds
+                add_image_overlay(st.session_state["fmap"], temp_png_path, bounds, "MNS")
+            os.remove(temp_png_path)
+        except Exception as e:
+            st.error(f"Erreur lors de la reprojection du MNS : {e}")
 
     # Ajout des contrôles de calques
-    folium.LayerControl().add_to(fmap)
+    folium.LayerControl().add_to(st.session_state["fmap"])
 
     # Affichage de la carte
-    folium_static(fmap, width=700, height=500)
+    folium_static(st.session_state["fmap"], width=700, height=500)
 
 
 if __name__ == "__main__":
     main()
+
 
     
 
