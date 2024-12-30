@@ -171,33 +171,6 @@ def main():
         except Exception as e:
             st.error(f"Erreur lors de la reprojection du MNT : {e}")
 
-    # Téléversement du fichier MNS (Modèle Numérique de Surface)
-    uploaded_mns = st.file_uploader("Téléverser un fichier MNS (TIFF)", type=["tif", "tiff"])
-    if uploaded_mns:
-        mns_path = uploaded_mns.name
-        with open(mns_path, "wb") as f:
-            f.write(uploaded_mns.read())
-
-        st.write("Reprojection du fichier MNS...")
-        try:
-            reprojected_mns = reproject_tiff(mns_path, "EPSG:4326")
-            
-            # Create a temporary PNG file for the colorized MNS
-            temp_png_path = "mns_colored.png"
-            apply_color_gradient(reprojected_mns, temp_png_path)
-            
-            with rasterio.open(reprojected_mns) as src:
-                bounds = src.bounds
-                center_lat = (bounds.top + bounds.bottom) / 2
-                center_lon = (bounds.left + bounds.right) / 2
-                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-                add_image_overlay(fmap, temp_png_path, bounds, "MNS")
-                
-            # Remove the temporary PNG file
-            os.remove(temp_png_path)
-        except Exception as e:
-            st.error(f"Erreur lors de la reprojection du MNS : {e}")
-
 
     # Téléversement d'un fichier GeoJSON pour les routes
     geojson_file = st.file_uploader("Téléverser un fichier GeoJSON de routes", type=["geojson"])
