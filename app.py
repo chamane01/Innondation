@@ -77,6 +77,7 @@ def main():
         frame = 0
         frames = []  # Pour stocker les frames
 
+        # Animation dynamique
         while True:
             # Appliquer l'effet choisi
             if effect_style == "Lueur dynamique":
@@ -101,7 +102,7 @@ def main():
             if frame > 100:  # 100 frames comme exemple
                 break
 
-        # Bouton pour télécharger l'animation
+        # Ajouter un bouton pour télécharger l'animation si les frames sont générées
         if frames:
             st.download_button(
                 label="Télécharger l'animation",
@@ -112,6 +113,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
