@@ -1,33 +1,36 @@
 import streamlit as st
-from PIL import Image, ImageFilter, ImageOps, ImageEnhance
+from PIL import Image, ImageFilter, ImageDraw
 import numpy as np
 import time
 
-def add_glow_effect(image, intensity=5, glow_color=(255, 255, 255)):
+def add_dynamic_glow(image, frame, intensity=5, glow_color=(255, 255, 255)):
     """
-    Adds a glowing border effect to the provided image.
+    Adds a dynamic glowing border effect to the provided image.
 
     Args:
         image (PIL.Image): The input image.
+        frame (int): The current animation frame.
         intensity (int): The intensity of the glow.
         glow_color (tuple): The RGB color of the glow.
 
     Returns:
-        PIL.Image: Image with glow effect.
+        PIL.Image: Image with dynamic glow effect.
     """
     # Convert image to RGBA if not already
     image = image.convert("RGBA")
 
     # Create an alpha mask
     alpha = image.split()[-1]
-    
-    # Create a white version of the image
-    glow_image = Image.new("RGBA", image.size, glow_color + (0,))
-    
-    # Add the glow by enlarging the alpha mask
+
+    # Create a blank image for the glow
+    glow_image = Image.new("RGBA", image.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(glow_image)
+
+    # Add dynamic glow by varying the offset
+    offset = (frame % 20) * 2  # Adjust speed by changing the modulo and multiplier
     for i in range(intensity):
         alpha = alpha.filter(ImageFilter.GaussianBlur(2))
-        glow_image.paste(glow_color + (255,), (0, 0), alpha)
+        draw.bitmap((offset, offset), alpha, fill=glow_color + (50,))
 
     # Composite the glow with the original image
     result = Image.alpha_composite(glow_image, image)
@@ -35,7 +38,7 @@ def add_glow_effect(image, intensity=5, glow_color=(255, 255, 255)):
     return result
 
 def main():
-    st.title("Effet Lumineux sur une Image PNG")
+    st.title("Effet Lumineux Dynamique sur une Image PNG")
 
     # Upload the image
     uploaded_file = st.file_uploader("Choisissez une image PNG", type=["png"])
@@ -51,14 +54,19 @@ def main():
         glow_color = st.color_picker("Choisissez la couleur de l'effet lumineux", "#FFFFFF")
         glow_color_rgb = tuple(int(glow_color[i:i+2], 16) for i in (1, 3, 5))
 
-        # Add glow effect
-        glowing_image = add_glow_effect(image, intensity=intensity, glow_color=glow_color_rgb)
+        # Dynamic glow animation
+        placeholder = st.empty()
+        frame = 0
 
-        # Display the image
-        st.image(glowing_image, caption="Image avec effet lumineux", use_column_width=True)
+        while True:
+            glowing_image = add_dynamic_glow(image, frame, intensity=intensity, glow_color=glow_color_rgb)
+            placeholder.image(glowing_image, caption="Image avec effet lumineux dynamique", use_column_width=True)
+            frame += 1
+            time.sleep(0.1)  # Adjust the speed of the animation
 
 if __name__ == "__main__":
     main()
+
 
 import streamlit as st
 import rasterio
