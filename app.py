@@ -89,7 +89,7 @@ def main():
             elif effect_style == "Lueur rayonnante":
                 animated_image = add_radiant_glow(image, frame, intensity=intensity, glow_color=glow_color_rgb)
 
-            # Enregistrer le frame pour le téléchargement
+            # Convertir chaque image en bytes et les ajouter à la liste des frames
             with io.BytesIO() as img_byte_array:
                 animated_image.save(img_byte_array, format='PNG')
                 frames.append(img_byte_array.getvalue())
@@ -102,19 +102,22 @@ def main():
             if frame > 100:  # 100 frames comme exemple
                 break
 
-        # Ajouter un bouton pour télécharger l'animation si les frames sont générées
+        # Créer un fichier GIF à partir des frames générées
         if frames:
+            gif_buffer = io.BytesIO()
+            # Créer un fichier GIF à partir des frames (frames doit être en format PNG)
+            first_frame = Image.open(io.BytesIO(frames[0]))
+            first_frame.save(gif_buffer, format='GIF', append_images=[Image.open(io.BytesIO(frame)) for frame in frames[1:]],
+                             save_all=True, duration=100, loop=0)
+            gif_buffer.seek(0)
+
+            # Ajouter le bouton de téléchargement
             st.download_button(
                 label="Télécharger l'animation",
-                data=b"".join(frames),
+                data=gif_buffer,
                 file_name="animation_lumineuse.gif",
                 mime="image/gif"
             )
 
 if __name__ == "__main__":
     main()
-
-
-
-
-
