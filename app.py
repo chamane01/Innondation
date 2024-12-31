@@ -1,4 +1,65 @@
 import streamlit as st
+from PIL import Image, ImageDraw, ImageFilter
+import numpy as np
+from moviepy.editor import VideoClip, ImageSequenceClip
+import os
+
+def create_glow_effect(image_path, output_dir="output", duration=5, fps=30):
+    # Load the image
+    img = Image.open(image_path).convert("RGBA")
+    w, h = img.size
+
+    # Create frames for animation
+    frames = []
+    num_frames = duration * fps
+
+    for frame_num in range(num_frames):
+        # Create a glowing outline
+        glow_img = img.copy()
+        draw = ImageDraw.Draw(glow_img)
+        radius = 10 + 10 * np.sin(2 * np.pi * (frame_num / num_frames))  # Pulsating glow
+
+        for r in range(5, int(radius), 2):
+            outline = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+            outline_draw = ImageDraw.Draw(outline)
+            outline_draw.ellipse((-r, -r, w + r, h + r), outline=(255, 255, 0, int(100 - r)))
+            glow_img = Image.alpha_composite(glow_img, outline)
+
+        frames.append(glow_img.filter(ImageFilter.GaussianBlur(2)))
+
+    # Save frames as a video
+    os.makedirs(output_dir, exist_ok=True)
+    video_path = os.path.join(output_dir, "glow_effect.mp4")
+
+    def make_frame(t):
+        frame_idx = int(t * fps) % len(frames)
+        return np.array(frames[frame_idx])
+
+    video_clip = VideoClip(make_frame, duration=duration)
+    video_clip.write_videofile(video_path, fps=fps, codec="libx264", audio=False)
+
+    return video_path
+
+def main():
+    st.title("Logo Glow Effect Generator")
+
+    # Upload logo
+    uploaded_file = st.file_uploader("Upload your PNG logo", type="png")
+
+    if uploaded_file is not None:
+        st.image(uploaded_file, caption="Uploaded Logo", use_column_width=True)
+
+        if st.button("Generate Glow Effect"):
+            with st.spinner("Creating glow effect..."):
+                output_path = create_glow_effect(uploaded_file, duration=5, fps=30)
+
+            st.success("Glow effect created!")
+            st.video(output_path)
+
+if __name__ == "__main__":
+    main()
+
+import streamlit as st
 import rasterio
 import rasterio.warp
 import folium
