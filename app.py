@@ -96,7 +96,7 @@ def main():
 
             placeholder.image(animated_image, caption="Image avec effet lumineux", use_container_width=True)
             frame += 1
-            time.sleep(1 / speed)
+            time.sleep(0.03)  # Plus de fluidité avec un petit délai pour 30 FPS
 
             # Arrêter l'animation après un certain temps pour la démonstration
             if frame > 100:  # 100 frames comme exemple
