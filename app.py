@@ -1,59 +1,71 @@
 import streamlit as st
-from PIL import Image, ImageDraw, ImageFilter
+from PIL import Image, ImageDraw
 import numpy as np
-from moviepy.editor import VideoClip, ImageSequenceClip
+from moviepy.editor import ImageSequenceClip
 import os
 
-def create_glow_effect(image_path, output_dir="output", duration=5, fps=30):
+def create_luminous_effect(image_path, duration=5, fps=30):
     # Load the image
     img = Image.open(image_path).convert("RGBA")
     w, h = img.size
-
-    # Create frames for animation
     frames = []
     num_frames = duration * fps
 
     for frame_num in range(num_frames):
-        # Create a glowing outline
-        glow_img = img.copy()
-        draw = ImageDraw.Draw(glow_img)
-        radius = 10 + 10 * np.sin(2 * np.pi * (frame_num / num_frames))  # Pulsating glow
+        # Create a blank canvas with the logo
+        frame = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        frame.paste(img, (0, 0), mask=img)
 
-        for r in range(5, int(radius), 2):
-            outline = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-            outline_draw = ImageDraw.Draw(outline)
-            outline_draw.ellipse((-r, -r, w + r, h + r), outline=(255, 255, 0, int(100 - r)))
-            glow_img = Image.alpha_composite(glow_img, outline)
+        # Add the glowing effect
+        draw = ImageDraw.Draw(frame)
+        t = frame_num / num_frames
+        glow_color = (255, 255, 0, 200)  # Yellowish glow
+        x_center, y_center = w // 2, h // 2
+        radius = min(w, h) // 2 - 10
+        glow_width = 5
 
-        frames.append(glow_img.filter(ImageFilter.GaussianBlur(2)))
+        for i in range(glow_width):
+            alpha = int(200 * (1 - i / glow_width))
+            draw.ellipse(
+                [
+                    (x_center - radius - i, y_center - radius - i),
+                    (x_center + radius + i, y_center + radius + i),
+                ],
+                outline=(glow_color[0], glow_color[1], glow_color[2], alpha),
+                width=2,
+            )
 
-    # Save frames as a video
-    os.makedirs(output_dir, exist_ok=True)
-    video_path = os.path.join(output_dir, "glow_effect.mp4")
+        frames.append(frame)
 
-    def make_frame(t):
-        frame_idx = int(t * fps) % len(frames)
-        return np.array(frames[frame_idx])
+    return frames
 
-    video_clip = VideoClip(make_frame, duration=duration)
-    video_clip.write_videofile(video_path, fps=fps, codec="libx264", audio=False)
-
-    return video_path
+def save_video(frames, output_path, fps=30):
+    frames = [np.array(frame) for frame in frames]
+    clip = ImageSequenceClip(frames, fps=fps)
+    clip.write_videofile(output_path, codec="libx264", audio=False)
 
 def main():
     st.title("Logo Glow Effect Generator")
 
-    # Upload logo
-    uploaded_file = st.file_uploader("Upload your PNG logo", type="png")
+    uploaded_file = st.file_uploader("Upload your PNG logo", type=["png"])
+    duration = st.slider("Animation duration (seconds)", 1, 10, 5)
+    fps = st.slider("Frames per second (FPS)", 15, 60, 30)
 
-    if uploaded_file is not None:
+    if uploaded_file:
         st.image(uploaded_file, caption="Uploaded Logo", use_column_width=True)
-
+        
         if st.button("Generate Glow Effect"):
             with st.spinner("Creating glow effect..."):
-                output_path = create_glow_effect(uploaded_file, duration=5, fps=30)
+                # Generate the glow effect frames
+                frames = create_luminous_effect(uploaded_file, duration=duration, fps=fps)
 
-            st.success("Glow effect created!")
+                # Save the animation as a video
+                output_dir = "output"
+                os.makedirs(output_dir, exist_ok=True)
+                output_path = os.path.join(output_dir, "logo_glow_effect.mp4")
+                save_video(frames, output_path, fps=fps)
+
+            st.success("Glow effect animation created!")
             st.video(output_path)
 
 if __name__ == "__main__":
