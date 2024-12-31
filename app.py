@@ -16,7 +16,7 @@ def add_dynamic_glow(image, frame, intensity=5, glow_color=(255, 255, 255)):
     return result
 
 def add_glorious_glow(image, frame, intensity=5, glow_color=(255, 255, 255)):
-    """ Effet de lueur glorieux """
+    """ Effet de lueur glorieuse """
     image = image.convert("RGBA")
     glow_image = Image.new("RGBA", image.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(glow_image)
@@ -93,7 +93,7 @@ def main():
                 animated_image.save(img_byte_array, format='PNG')
                 frames.append(img_byte_array.getvalue())
 
-            placeholder.image(animated_image, caption="Image avec effet lumineux", use_column_width=True)
+            placeholder.image(animated_image, caption="Image avec effet lumineux", use_container_width=True)
             frame += 1
             time.sleep(1 / speed)
 
@@ -112,6 +112,7 @@ def main():
 
 if __name__ == "__main__":
     main()
+
 
 
 
