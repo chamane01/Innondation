@@ -4,9 +4,9 @@ import numpy as np
 import time
 import io
 
-def add_dynamic_glow(image, frame, intensity=5, glow_color=(255, 255, 255)):
+def add_glorious_glow(image, frame, intensity=5, glow_color=(255, 255, 255)):
     """
-    Adds a dynamic glowing border effect to the provided image.
+    Adds a glorious glowing effect to the provided image, creating a radiant halo effect.
 
     Args:
         image (PIL.Image): The input image.
@@ -15,43 +15,32 @@ def add_dynamic_glow(image, frame, intensity=5, glow_color=(255, 255, 255)):
         glow_color (tuple): The RGB color of the glow.
 
     Returns:
-        PIL.Image: Image with dynamic glow effect.
+        PIL.Image: Image with glorious glow effect.
     """
     # Convert image to RGBA if not already
     image = image.convert("RGBA")
-
-    # Create an alpha mask
-    alpha = image.split()[-1]
 
     # Create a blank image for the glow
     glow_image = Image.new("RGBA", image.size, (0, 0, 0, 0))
     draw = ImageDraw.Draw(glow_image)
 
-    # Add dynamic glow by varying the offset
+    # Create dynamic glow by varying the offset and intensity
     offset = (frame % 20) * 2  # Adjust speed by changing the modulo and multiplier
+    blur_radius = (frame % 5) + 2  # Vary the blur for a more dynamic effect
+    alpha = image.split()[-1]
+
+    # Add a glowing effect that expands and fades outwards
     for i in range(intensity):
-        alpha = alpha.filter(ImageFilter.GaussianBlur(2))
-        draw.bitmap((offset, offset), alpha, fill=glow_color + (50,))
+        alpha = alpha.filter(ImageFilter.GaussianBlur(blur_radius))
+        draw.bitmap((offset, offset), alpha, fill=glow_color + (int(255 * (i / intensity)),))
 
     # Composite the glow with the original image
     result = Image.alpha_composite(glow_image, image)
 
     return result
 
-def add_zoom_effect(image, frame):
-    """ Adds a zoom effect to the image. """
-    width, height = image.size
-    zoom_factor = 1 + (frame % 20) * 0.05  # Zoom in and out
-    zoomed_image = image.resize((int(width * zoom_factor), int(height * zoom_factor)))
-    return zoomed_image.crop((0, 0, width, height))  # Keep original size
-
-def add_rotation_effect(image, frame):
-    """ Adds a rotation effect to the image. """
-    angle = (frame % 360)  # Rotate continuously
-    return image.rotate(angle, expand=True)
-
 def main():
-    st.title("Effet Lumineux Dynamique sur une Image PNG")
+    st.title("Effet Lumineux Glorieux sur une Image PNG")
 
     # Upload the image
     uploaded_file = st.file_uploader("Choisissez une image PNG", type=["png"])
@@ -59,10 +48,6 @@ def main():
     if uploaded_file is not None:
         # Load the image
         image = Image.open(uploaded_file)
-
-        # Effect style options
-        effect_style = st.selectbox("Choisissez le style de l'animation", 
-                                    ["Lueur dynamique", "Zoom", "Rotation"])
 
         # Glow intensity slider
         intensity = st.slider("Intensité de l'effet lumineux", min_value=1, max_value=10, value=5)
@@ -81,19 +66,16 @@ def main():
         frames = []  # To store frames for download
 
         while True:
-            if effect_style == "Lueur dynamique":
-                animated_image = add_dynamic_glow(image, frame, intensity=intensity, glow_color=glow_color_rgb)
-            elif effect_style == "Zoom":
-                animated_image = add_zoom_effect(image, frame)
-            elif effect_style == "Rotation":
-                animated_image = add_rotation_effect(image, frame)
+            # Apply the glorious glow effect
+            animated_image = add_glorious_glow(image, frame, intensity=intensity, glow_color=glow_color_rgb)
 
             # Store the frame for downloading
             with io.BytesIO() as img_byte_array:
                 animated_image.save(img_byte_array, format='PNG')
                 frames.append(img_byte_array.getvalue())
 
-            placeholder.image(animated_image, caption="Image avec effet dynamique", use_column_width=True)
+            # Display the image
+            placeholder.image(animated_image, caption="Image avec effet lumineux glorieux", use_column_width=True)
             frame += 1
             time.sleep(1 / speed)  # Adjust the speed of the animation
 
@@ -101,17 +83,18 @@ def main():
             if frame > 100:  # 100 frames as a placeholder
                 break
 
-        # Button to download the animation
+        # Button to download the animation as a GIF
         if frames:
             st.download_button(
                 label="Télécharger l'animation",
                 data=b"".join(frames),
-                file_name="animation.gif",
+                file_name="animation_glorieuse.gif",
                 mime="image/gif"
             )
 
 if __name__ == "__main__":
     main()
+
 
 
 import streamlit as st
