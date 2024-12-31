@@ -2,6 +2,7 @@ import streamlit as st
 from PIL import Image, ImageFilter, ImageDraw
 import numpy as np
 import time
+import io
 
 def add_dynamic_glow(image, frame, intensity=5, glow_color=(255, 255, 255)):
     """
@@ -37,6 +38,18 @@ def add_dynamic_glow(image, frame, intensity=5, glow_color=(255, 255, 255)):
 
     return result
 
+def add_zoom_effect(image, frame):
+    """ Adds a zoom effect to the image. """
+    width, height = image.size
+    zoom_factor = 1 + (frame % 20) * 0.05  # Zoom in and out
+    zoomed_image = image.resize((int(width * zoom_factor), int(height * zoom_factor)))
+    return zoomed_image.crop((0, 0, width, height))  # Keep original size
+
+def add_rotation_effect(image, frame):
+    """ Adds a rotation effect to the image. """
+    angle = (frame % 360)  # Rotate continuously
+    return image.rotate(angle, expand=True)
+
 def main():
     st.title("Effet Lumineux Dynamique sur une Image PNG")
 
@@ -47,6 +60,10 @@ def main():
         # Load the image
         image = Image.open(uploaded_file)
 
+        # Effect style options
+        effect_style = st.selectbox("Choisissez le style de l'animation", 
+                                    ["Lueur dynamique", "Zoom", "Rotation"])
+
         # Glow intensity slider
         intensity = st.slider("Intensité de l'effet lumineux", min_value=1, max_value=10, value=5)
 
@@ -54,15 +71,44 @@ def main():
         glow_color = st.color_picker("Choisissez la couleur de l'effet lumineux", "#FFFFFF")
         glow_color_rgb = tuple(int(glow_color[i:i+2], 16) for i in (1, 3, 5))
 
-        # Dynamic glow animation
+        # Animation speed slider
+        speed = st.slider("Vitesse de l'animation", min_value=1, max_value=10, value=5)
+
+        # Dynamic animation
         placeholder = st.empty()
         frame = 0
 
+        frames = []  # To store frames for download
+
         while True:
-            glowing_image = add_dynamic_glow(image, frame, intensity=intensity, glow_color=glow_color_rgb)
-            placeholder.image(glowing_image, caption="Image avec effet lumineux dynamique", use_column_width=True)
+            if effect_style == "Lueur dynamique":
+                animated_image = add_dynamic_glow(image, frame, intensity=intensity, glow_color=glow_color_rgb)
+            elif effect_style == "Zoom":
+                animated_image = add_zoom_effect(image, frame)
+            elif effect_style == "Rotation":
+                animated_image = add_rotation_effect(image, frame)
+
+            # Store the frame for downloading
+            with io.BytesIO() as img_byte_array:
+                animated_image.save(img_byte_array, format='PNG')
+                frames.append(img_byte_array.getvalue())
+
+            placeholder.image(animated_image, caption="Image avec effet dynamique", use_column_width=True)
             frame += 1
-            time.sleep(0.1)  # Adjust the speed of the animation
+            time.sleep(1 / speed)  # Adjust the speed of the animation
+
+            # Stop animation after a set time for demonstration purposes
+            if frame > 100:  # 100 frames as a placeholder
+                break
+
+        # Button to download the animation
+        if frames:
+            st.download_button(
+                label="Télécharger l'animation",
+                data=b"".join(frames),
+                file_name="animation.gif",
+                mime="image/gif"
+            )
 
 if __name__ == "__main__":
     main()
