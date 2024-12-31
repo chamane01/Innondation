@@ -1,77 +1,50 @@
 import streamlit as st
-from PIL import Image, ImageFilter, ImageDraw
+from PIL import Image, ImageDraw, ImageFilter
+import numpy as np
 import time
 import io
 
-def add_dynamic_glow(image, frame, intensity=5, glow_color=(255, 255, 255)):
-    """ Effet de lueur dynamique """
+def create_serpent(image, frame, radius=50, length=0, num_segments=50, glow_color=(255, 255, 255)):
+    """ Crée un serpent lumineux en forme de ligne qui s'enroule autour du logo """
     image = image.convert("RGBA")
-    glow_image = Image.new("RGBA", image.size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(glow_image)
-    offset = (frame % 20) * 2
-    for i in range(intensity):
-        alpha = image.split()[-1].filter(ImageFilter.GaussianBlur(2))
-        draw.bitmap((offset, offset), alpha, fill=glow_color + (50,))
-    result = Image.alpha_composite(glow_image, image)
-    return result
+    draw = ImageDraw.Draw(image)
+    width, height = image.size
+    center_x, center_y = width // 2, height // 2
 
-def add_glorious_glow(image, frame, intensity=5, glow_color=(255, 255, 255)):
-    """ Effet de lueur glorieuse """
-    image = image.convert("RGBA")
-    glow_image = Image.new("RGBA", image.size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(glow_image)
-    offset = (frame % 20) * 2
-    blur_radius = (frame % 5) + 2
-    alpha = image.split()[-1]
-    for i in range(intensity):
-        alpha = alpha.filter(ImageFilter.GaussianBlur(blur_radius))
-        draw.bitmap((offset, offset), alpha, fill=glow_color + (int(255 * (i / intensity)),))
-    result = Image.alpha_composite(glow_image, image)
-    return result
+    # Calcul des coordonnées des segments du serpent
+    angle_step = 2 * np.pi / num_segments
+    segments = []
+    for i in range(num_segments):
+        angle = angle_step * i + (frame * 0.05)  # Animation par rotation
+        x = center_x + int(np.cos(angle) * (radius + length))  # Calcul de la position x
+        y = center_y + int(np.sin(angle) * (radius + length))  # Calcul de la position y
+        segments.append((x, y))
 
-def add_pulsating_glow(image, frame, intensity=5, glow_color=(255, 255, 255)):
-    """ Effet de lueur pulsante """
-    image = image.convert("RGBA")
-    glow_image = Image.new("RGBA", image.size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(glow_image)
-    pulse_size = int(10 + (frame % 10) * 2)
-    for i in range(intensity):
-        alpha = image.split()[-1].filter(ImageFilter.GaussianBlur(2))
-        draw.bitmap((pulse_size, pulse_size), alpha, fill=glow_color + (50,))
-    result = Image.alpha_composite(glow_image, image)
-    return result
+    # Dessiner les segments du serpent (ligne continue)
+    for i in range(1, len(segments)):
+        draw.line([segments[i - 1], segments[i]], fill=glow_color, width=2)
 
-def add_radiant_glow(image, frame, intensity=5, glow_color=(255, 255, 255)):
-    """ Effet de lueur rayonnante """
-    image = image.convert("RGBA")
-    glow_image = Image.new("RGBA", image.size, (0, 0, 0, 0))
-    draw = ImageDraw.Draw(glow_image)
-    radius = int(10 + (frame % 20) * 3)  # Varied radial glow
-    for i in range(intensity):
-        alpha = image.split()[-1].filter(ImageFilter.GaussianBlur(2))
-        draw.bitmap((radius, radius), alpha, fill=glow_color + (int(255 * (i / intensity)),))
-    result = Image.alpha_composite(glow_image, image)
-    return result
+    # Créer un effet de scintillement lorsque le serpent mord sa queue
+    if length >= 100:  # Scintillement lorsque le serpent est fermé
+        for i in range(len(segments)):
+            x, y = segments[i]
+            draw.ellipse([x - 3, y - 3, x + 3, y + 3], fill=glow_color, outline=None)
+
+    return image
 
 def main():
-    st.title("Effet Lumineux sur une Image PNG")
+    st.title("Effet Lumineux : Serpent autour du logo")
 
     uploaded_file = st.file_uploader("Choisissez une image PNG", type=["png"])
 
     if uploaded_file is not None:
         image = Image.open(uploaded_file)
 
-        # Effet lumineux à appliquer
-        effect_style = st.selectbox("Choisissez un effet lumineux", 
-                                    ["Lueur dynamique", "Lueur glorieuse", "Lueur pulsante", "Lueur rayonnante"])
-
-        # Paramètres des effets
-        intensity = st.slider("Intensité de l'effet lumineux", min_value=1, max_value=10, value=5)
-        glow_color = st.color_picker("Choisissez la couleur de l'effet lumineux", "#FFFFFF")
+        # Paramètres du serpent
+        radius = st.slider("Rayon du serpent", min_value=30, max_value=150, value=50)
+        length = st.slider("Longueur du serpent", min_value=0, max_value=150, value=0)
+        glow_color = st.color_picker("Choisissez la couleur du serpent lumineux", "#FFFFFF")
         glow_color_rgb = tuple(int(glow_color[i:i+2], 16) for i in (1, 3, 5))
-
-        # Vitesse de l'animation
-        speed = st.slider("Vitesse de l'animation", min_value=1, max_value=10, value=5)
 
         placeholder = st.empty()
         frame = 0
@@ -79,24 +52,18 @@ def main():
 
         # Animation dynamique
         while True:
-            # Appliquer l'effet choisi
-            if effect_style == "Lueur dynamique":
-                animated_image = add_dynamic_glow(image, frame, intensity=intensity, glow_color=glow_color_rgb)
-            elif effect_style == "Lueur glorieuse":
-                animated_image = add_glorious_glow(image, frame, intensity=intensity, glow_color=glow_color_rgb)
-            elif effect_style == "Lueur pulsante":
-                animated_image = add_pulsating_glow(image, frame, intensity=intensity, glow_color=glow_color_rgb)
-            elif effect_style == "Lueur rayonnante":
-                animated_image = add_radiant_glow(image, frame, intensity=intensity, glow_color=glow_color_rgb)
+            # Créer le serpent et l'appliquer sur l'image
+            animated_image = create_serpent(image.copy(), frame, radius=radius, length=length, glow_color=glow_color_rgb)
 
             # Convertir chaque image en bytes et les ajouter à la liste des frames
             with io.BytesIO() as img_byte_array:
                 animated_image.save(img_byte_array, format='PNG')
                 frames.append(img_byte_array.getvalue())
 
-            placeholder.image(animated_image, caption="Image avec effet lumineux", use_container_width=True)
+            placeholder.image(animated_image, caption="Serpent lumineux en animation", use_container_width=True)
             frame += 1
-            time.sleep(0.03)  # Plus de fluidité avec un petit délai pour 30 FPS
+            length += 1  # Augmenter la longueur du serpent pour l'animer
+            time.sleep(0.05)  # Ajuster la vitesse pour fluidité
 
             # Arrêter l'animation après un certain temps pour la démonstration
             if frame > 100:  # 100 frames comme exemple
@@ -115,7 +82,7 @@ def main():
             st.download_button(
                 label="Télécharger l'animation",
                 data=gif_buffer,
-                file_name="animation_lumineuse.gif",
+                file_name="serpent_lumineux.gif",
                 mime="image/gif"
             )
 
