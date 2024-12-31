@@ -1,72 +1,61 @@
 import streamlit as st
-from PIL import Image, ImageDraw
+from PIL import Image, ImageFilter, ImageOps, ImageEnhance
 import numpy as np
-from moviepy.editor import ImageSequenceClip
-import os
+import time
 
-def create_luminous_effect(image_path, duration=5, fps=30):
-    # Load the image
-    img = Image.open(image_path).convert("RGBA")
-    w, h = img.size
-    frames = []
-    num_frames = duration * fps
+def add_glow_effect(image, intensity=5, glow_color=(255, 255, 255)):
+    """
+    Adds a glowing border effect to the provided image.
 
-    for frame_num in range(num_frames):
-        # Create a blank canvas with the logo
-        frame = Image.new("RGBA", (w, h), (0, 0, 0, 0))
-        frame.paste(img, (0, 0), mask=img)
+    Args:
+        image (PIL.Image): The input image.
+        intensity (int): The intensity of the glow.
+        glow_color (tuple): The RGB color of the glow.
 
-        # Add the glowing effect
-        draw = ImageDraw.Draw(frame)
-        t = frame_num / num_frames
-        glow_color = (255, 255, 0, 200)  # Yellowish glow
-        x_center, y_center = w // 2, h // 2
-        radius = min(w, h) // 2 - 10
-        glow_width = 5
+    Returns:
+        PIL.Image: Image with glow effect.
+    """
+    # Convert image to RGBA if not already
+    image = image.convert("RGBA")
 
-        for i in range(glow_width):
-            alpha = int(200 * (1 - i / glow_width))
-            draw.ellipse(
-                [
-                    (x_center - radius - i, y_center - radius - i),
-                    (x_center + radius + i, y_center + radius + i),
-                ],
-                outline=(glow_color[0], glow_color[1], glow_color[2], alpha),
-                width=2,
-            )
+    # Create an alpha mask
+    alpha = image.split()[-1]
+    
+    # Create a white version of the image
+    glow_image = Image.new("RGBA", image.size, glow_color + (0,))
+    
+    # Add the glow by enlarging the alpha mask
+    for i in range(intensity):
+        alpha = alpha.filter(ImageFilter.GaussianBlur(2))
+        glow_image.paste(glow_color + (255,), (0, 0), alpha)
 
-        frames.append(frame)
+    # Composite the glow with the original image
+    result = Image.alpha_composite(glow_image, image)
 
-    return frames
-
-def save_video(frames, output_path, fps=30):
-    frames = [np.array(frame) for frame in frames]
-    clip = ImageSequenceClip(frames, fps=fps)
-    clip.write_videofile(output_path, codec="libx264", audio=False)
+    return result
 
 def main():
-    st.title("Logo Glow Effect Generator")
+    st.title("Effet Lumineux sur une Image PNG")
 
-    uploaded_file = st.file_uploader("Upload your PNG logo", type=["png"])
-    duration = st.slider("Animation duration (seconds)", 1, 10, 5)
-    fps = st.slider("Frames per second (FPS)", 15, 60, 30)
+    # Upload the image
+    uploaded_file = st.file_uploader("Choisissez une image PNG", type=["png"])
 
-    if uploaded_file:
-        st.image(uploaded_file, caption="Uploaded Logo", use_column_width=True)
-        
-        if st.button("Generate Glow Effect"):
-            with st.spinner("Creating glow effect..."):
-                # Generate the glow effect frames
-                frames = create_luminous_effect(uploaded_file, duration=duration, fps=fps)
+    if uploaded_file is not None:
+        # Load the image
+        image = Image.open(uploaded_file)
 
-                # Save the animation as a video
-                output_dir = "output"
-                os.makedirs(output_dir, exist_ok=True)
-                output_path = os.path.join(output_dir, "logo_glow_effect.mp4")
-                save_video(frames, output_path, fps=fps)
+        # Glow intensity slider
+        intensity = st.slider("Intensité de l'effet lumineux", min_value=1, max_value=10, value=5)
 
-            st.success("Glow effect animation created!")
-            st.video(output_path)
+        # Glow color picker
+        glow_color = st.color_picker("Choisissez la couleur de l'effet lumineux", "#FFFFFF")
+        glow_color_rgb = tuple(int(glow_color[i:i+2], 16) for i in (1, 3, 5))
+
+        # Add glow effect
+        glowing_image = add_glow_effect(image, intensity=intensity, glow_color=glow_color_rgb)
+
+        # Display the image
+        st.image(glowing_image, caption="Image avec effet lumineux", use_column_width=True)
 
 if __name__ == "__main__":
     main()
