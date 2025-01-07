@@ -7,7 +7,7 @@ import folium
 from folium.plugins import MeasureControl, Draw
 import streamlit as st
 from shapely.geometry import Point
-from streamlit_folium import folium_static  # Importation ajoutée
+from streamlit_folium import folium_static
 
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path, target_crs="EPSG:4326"):
@@ -61,82 +61,29 @@ def calculate_cluster_centroids(coords, clusters):
 
     return centroids
 
-def reproject_tiff(input_tiff, target_crs):
-    """Reproject a TIFF file to a target CRS."""
-    with rasterio.open(input_tiff) as src:
-        transform, width, height = rasterio.warp.calculate_default_transform(
-            src.crs, target_crs, src.width, src.height, *src.bounds
-        )
-        kwargs = src.meta.copy()
-        kwargs.update({
-            'crs': target_crs,
-            'transform': transform,
-            'width': width,
-            'height': height
-        })
+# Fonction pour calculer le volume dans l'emprise de la polygonale
+def calculate_volume_in_polygon(mns, mnt, bounds, polygon_gdf):
+    # Calculer les hauteurs relatives
+    heights = calculate_heights(mns, mnt)
 
-        reprojected_tiff = "reprojected.tiff"
-        with rasterio.open(reprojected_tiff, 'w', **kwargs) as dst:
-            for i in range(1, src.count + 1):
-                rasterio.warp.reproject(
-                    source=rasterio.band(src, i),
-                    destination=rasterio.band(dst, i),
-                    src_transform=src.transform,
-                    src_crs=src.crs,
-                    dst_transform=transform,
-                    dst_crs=target_crs,
-                    resampling=rasterio.warp.Resampling.nearest
-                )
-
-    return reprojected_tiff
-
-def add_image_overlay(map_object, tiff_path, bounds, name):
-    """Add a TIFF image overlay to a Folium map."""
-    with rasterio.open(tiff_path) as src:
-        image = reshape_as_image(src.read())
-        folium.raster_layers.ImageOverlay(
-            image=image,
-            bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
-            name=name
-        ).add_to(map_object)
-
-# Ajout des centroïdes des arbres sur la carte
-def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_name):
+    # Extraire les coordonnées de la polygonale
+    polygon_mask = np.zeros_like(heights, dtype=bool)
     height = bounds[3] - bounds[1]
     width = bounds[2] - bounds[0]
-    img_height, img_width = image_shape[:2]
+    img_height, img_width = heights.shape
 
-    feature_group = folium.FeatureGroup(name=layer_name)
-    for _, centroid in centroids:
-        lat = bounds[3] - height * (centroid[0] / img_height)
-        lon = bounds[0] + width * (centroid[1] / img_width)
+    for _, row in polygon_gdf.iterrows():
+        polygon = row.geometry
+        for x in range(img_width):
+            for y in range(img_height):
+                lat = bounds[3] - height * (y / img_height)
+                lon = bounds[0] + width * (x / img_width)
+                if polygon.contains(Point(lon, lat)):
+                    polygon_mask[y, x] = True
 
-        folium.CircleMarker(
-            location=[lat, lon],
-            radius=3,
-            color="green",
-            fill=True,
-            fill_color="green",
-            fill_opacity=0.8,
-        ).add_to(feature_group)
-
-    feature_group.add_to(map_object)
-
-# Fonction pour compter les arbres à l'intérieur de la polygonale
-def count_trees_in_polygon(centroids, bounds, image_shape, polygon_gdf):
-    height = bounds[3] - bounds[1]
-    width = bounds[2] - bounds[0]
-    img_height, img_width = image_shape[:2]
-
-    tree_count = 0
-    for _, centroid in centroids:
-        lat = bounds[3] - height * (centroid[0] / img_height)
-        lon = bounds[0] + width * (centroid[1] / img_width)
-        point = Point(lon, lat)
-        if polygon_gdf.contains(point).any():
-            tree_count += 1
-
-    return tree_count
+    # Calculer le volume (somme des hauteurs dans la polygonale)
+    volume = np.sum(heights[polygon_mask])  # Volume en m³ (si les données sont en mètres)
+    return volume
 
 # Boutons sous la carte
 col1, col2, col3 = st.columns(3)
@@ -145,14 +92,16 @@ with col1:
         st.info("Fonctionnalité 'Faire une carte' en cours de développement.")
 with col2:
     if st.button("Calculer des volumes"):
-        st.info("Fonctionnalité 'Calculer des volumes' en cours de développement.")
+        st.session_state.show_volume_sidebar = True
+        st.session_state.show_sidebar = False  # Désactiver la détection d'arbres
 with col3:
     if st.button("Détecter les arbres"):
         st.session_state.show_sidebar = True
+        st.session_state.show_volume_sidebar = False  # Désactiver le calcul de volumes
 
-# Affichage des paramètres uniquement si le bouton est cliqué
+# Affichage des paramètres pour la détection des arbres
 if st.session_state.get("show_sidebar", False):
-    st.sidebar.title("Paramètres de détection")
+    st.sidebar.title("Paramètres de détection des arbres")
 
     # Téléversement des fichiers
     mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
@@ -217,3 +166,26 @@ if st.session_state.get("show_sidebar", False):
 
                 # Utilisation de folium_static pour afficher la carte
                 folium_static(fmap, width=700, height=500)
+
+# Affichage des paramètres pour le calcul des volumes
+if st.session_state.get("show_volume_sidebar", False):
+    st.sidebar.title("Paramètres de calcul des volumes")
+
+    # Téléversement des fichiers
+    mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
+    mns_file = st.sidebar.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
+    polygon_file = st.sidebar.file_uploader("Téléchargez un fichier de polygone (obligatoire)", type=["geojson", "shp"])
+
+    if mnt_file and mns_file and polygon_file:
+        mnt, mnt_bounds = load_tiff(mnt_file)
+        mns, mns_bounds = load_tiff(mns_file)
+        polygons_gdf = load_and_reproject_shapefile(polygon_file)
+
+        if mnt is None or mns is None or polygons_gdf is None:
+            st.sidebar.error("Erreur lors du chargement des fichiers.")
+        elif mnt_bounds != mns_bounds:
+            st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
+        else:
+            # Calculer le volume dans l'emprise de la polygonale
+            volume = calculate_volume_in_polygon(mns, mnt, mnt_bounds, polygons_gdf)
+            st.sidebar.write(f"Volume calculé dans la polygonale : {volume:.2f} m³")
