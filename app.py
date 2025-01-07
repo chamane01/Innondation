@@ -6,10 +6,11 @@ import folium
 from folium.plugins import MeasureControl, Draw
 import streamlit as st
 from rasterio.features import rasterize
+from shapely.geometry import Point
 from streamlit_folium import folium_static
 
-# Function to load a TIFF file and reproject to a target CRS
-def load_tiff(file_path, target_crs):
+# Function to load a TIFF file
+def load_tiff(file_path, target_crs="EPSG:4326"):
     try:
         with rasterio.open(file_path) as src:
             data = src.read(1)  # Read the first band
@@ -31,38 +32,19 @@ def load_tiff(file_path, target_crs):
                 source=rasterio.band(src, 1),
                 destination=data_reprojected,
                 src_transform=src.transform,
-                src_crs=src_crs,
+                src_crs=src.crs,
                 dst_transform=target_transform,
                 dst_crs=target_crs,
                 resampling=Resampling.nearest
             )
 
-        return data_reprojected, target_transform, target_crs, bounds
+            # Reproject bounds to target CRS
+            target_bounds = transform_bounds(src_crs, target_crs, *src.bounds)
+
+        return data, transform, src_crs, data_reprojected, target_transform, target_crs, target_bounds
     except Exception as e:
         st.error(f"Error loading GeoTIFF file: {e}")
-        return None, None, None, None
-
-# Function to match resolution and bounds of two datasets
-def match_resolution_and_bounds(mns_data, mnt_data, mns_transform, mnt_transform, mns_crs, mnt_crs, mns_bounds, mnt_bounds):
-    # Choose MNS as the reference
-    ref_crs = mns_crs
-    ref_transform = mns_transform
-    ref_width = mns_data.shape[1]
-    ref_height = mns_data.shape[0]
-
-    # Reproject MNT to MNS's CRS and resolution
-    mnt_aligned = np.zeros_like(mns_data)
-    reproject(
-        source=rasterio.band(mnt_data, 1),
-        destination=mnt_aligned,
-        src_transform=mnt_transform,
-        src_crs=mnt_crs,
-        dst_transform=ref_transform,
-        dst_crs=ref_crs,
-        resampling=Resampling.nearest
-    )
-
-    return mnt_aligned
+        return None, None, None, None, None, None, None
 
 # Function to load and reproject a shapefile or GeoJSON
 def load_and_reproject_shapefile(file_path, target_crs):
@@ -74,39 +56,18 @@ def load_and_reproject_shapefile(file_path, target_crs):
         st.error(f"Error loading Shapefile/GeoJSON file: {e}")
         return None
 
-# Function to calculate volume using MNS - MNT
-def calculate_volume_with_mnt(mns, mnt, mns_transform, polygon_gdf):
-    # Calculate heights
-    heights = np.maximum(0, mns - mnt)
-
-    # Create a mask from the polygon
-    out_shape = mns.shape
-    mask = rasterize([(geom, 1) for geom in polygon_gdf.geometry], out_shape=out_shape, transform=mns_transform, fill=0, default_value=1)
-    mask = mask.astype(bool)
-
-    # Calculate cell area
-    pixel_width = mns_transform[0]
-    pixel_height = mns_transform[4]
-    cell_area = pixel_width * pixel_height  # in m²
-
-    # Extract heights within the polygon
-    heights_in_polygon = heights[mask]
-
-    # Calculate volume
-    volume = np.sum(heights_in_polygon) * cell_area  # in m³
-
-    return volume
-
 # Function to calculate volume using only MNS
-def calculate_volume_without_mnt(mns, mns_transform, polygon_gdf):
+def calculate_volume_without_mnt(mns, mns_transform, mns_crs, polygon_gdf):
     # Create a mask from the polygon
     out_shape = mns.shape
-    mask = rasterize([(geom, 1) for geom in polygon_gdf.geometry], out_shape=out_shape, transform=mns_transform, fill=0, default_value=1)
+    mask = np.zeros(out_shape, dtype=int)
+    for geom in polygon_gdf.geometry:
+        mask += rasterize([(geom, 1)], out_shape=out_shape, transform=mns_transform, fill=0, default_value=1)
     mask = mask.astype(bool)
 
     # Calculate cell area
     pixel_width = mns_transform[0]
-    pixel_height = mns_transform[4]
+    pixel_height = -mns_transform[4]  # Negative because it's in the y-direction
     cell_area = pixel_width * pixel_height  # in m²
 
     # Extract MNS values within the polygon
@@ -114,6 +75,31 @@ def calculate_volume_without_mnt(mns, mns_transform, polygon_gdf):
 
     # Calculate volume
     volume = np.sum(mns_in_polygon) * cell_area  # in m³
+
+    return volume
+
+# Function to calculate volume using MNS and MNT
+def calculate_volume_with_mnt(mns, mnt, bounds, polygon_gdf):
+    # Calculate relative heights
+    heights = np.maximum(0, mns - mnt)
+
+    # Create a mask from the polygon
+    out_shape = mns.shape
+    mask = np.zeros(out_shape, dtype=int)
+    for geom in polygon_gdf.geometry:
+        mask += rasterize([(geom, 1)], out_shape=out_shape, transform=mns_transform, fill=0, default_value=1)
+    mask = mask.astype(bool)
+
+    # Calculate cell area
+    pixel_width = mns_transform[0]
+    pixel_height = -mns_transform[4]  # Negative because it's in the y-direction
+    cell_area = pixel_width * pixel_height  # in m²
+
+    # Extract heights within the polygon
+    heights_in_polygon = heights[mask]
+
+    # Calculate volume
+    volume = np.sum(heights_in_polygon) * cell_area  # in m³
 
     return volume
 
@@ -152,54 +138,51 @@ if st.session_state.get("show_volume_sidebar", False):
         mnt_file = None
 
     if mns_file and polygon_file and (method == "Method 2: MNS only" or mnt_file):
-        # Load MNS
-        mns_data, mns_transform, mns_crs, mns_bounds = load_tiff(mns_file, "EPSG:4326")
+        mns, mns_transform, mns_crs, mns_reprojected, mns_target_transform, mns_target_crs, mns_bounds = load_tiff(mns_file)
         polygons_gdf = load_and_reproject_shapefile(polygon_file, mns_crs)
 
-        if mns_data is None or polygons_gdf is None:
+        if mns is None or polygons_gdf is None:
             st.sidebar.error("Error loading files.")
         else:
-            if method == "Method 1: MNS - MNT":
-                # Load MNT
-                mnt_data, mnt_transform, mnt_crs, mnt_bounds = load_tiff(mnt_file, mns_crs)
-                if mnt_data is None:
-                    st.sidebar.error("Error loading MNT file.")
+            try:
+                if method == "Method 1: MNS - MNT":
+                    mnt, mnt_transform, mnt_crs, mnt_reprojected, mnt_target_transform, mnt_target_crs, mnt_bounds = load_tiff(mnt_file)
+                    if mnt is None or mnt_bounds != mns_bounds:
+                        st.sidebar.error("Files must have the same geographic bounds.")
+                    else:
+                        volume = calculate_volume_with_mnt(mns, mnt, mns_bounds, polygons_gdf)
+                        st.sidebar.write(f"Calculated volume within the polygon: {volume:.2f} m³")
                 else:
-                    # Match MNT to MNS resolution and bounds
-                    mnt_aligned = match_resolution_and_bounds(mns_data, mnt_data, mns_transform, mnt_transform, mns_crs, mnt_crs, mns_bounds, mnt_bounds)
+                    volume = calculate_volume_without_mnt(mns, mns_transform, mns_crs, polygons_gdf)
+                    st.sidebar.write(f"Calculated volume within the polygon: {volume:.2f} m³")
 
-                    # Calculate volume
-                    volume = calculate_volume_with_mnt(mns_data, mnt_aligned, mns_transform, polygons_gdf)
-                    st.sidebar.write(f"Calculated volume using MNS - MNT: {volume:.2f} m³")
-            else:
-                # Calculate volume using only MNS
-                volume = calculate_volume_without_mnt(mns_data, mns_transform, polygons_gdf)
-                st.sidebar.write(f"Calculated volume using MNS only: {volume:.2f} m³")
+                # Display the map
+                center_lat = (mns_bounds[1] + mns_bounds[3]) / 2
+                center_lon = (mns_bounds[0] + mns_bounds[2]) / 2
+                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-            # Display the map
-            center_lat = (mns_bounds[1] + mns_bounds[3]) / 2
-            center_lon = (mns_bounds[0] + mns_bounds[2]) / 2
-            fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+                # Add MNS as an image overlay in EPSG:4326
+                folium.raster_layers.ImageOverlay(
+                    image=mns_reprojected,
+                    bounds=[[mns_bounds[1], mns_bounds[0]], [mns_bounds[3], mns_bounds[2]]],
+                    opacity=0.7,
+                    name="MNS"
+                ).add_to(fmap)
 
-            # Add MNS as an image overlay in EPSG:4326
-            folium.raster_layers.ImageOverlay(
-                image=mns_data,
-                bounds=[[mns_bounds[1], mns_bounds[0]], [mns_bounds[3], mns_bounds[2]]],
-                opacity=0.7,
-                name="MNS"
-            ).add_to(fmap)
+                # Add the polygon
+                folium.GeoJson(
+                    polygons_gdf.to_crs("EPSG:4326"),
+                    name="Polygon",
+                    style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}
+                ).add_to(fmap)
 
-            # Add the polygon
-            folium.GeoJson(
-                polygons_gdf.to_crs("EPSG:4326"),
-                name="Polygon",
-                style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}
-            ).add_to(fmap)
+                # Add map controls
+                fmap.add_child(MeasureControl(position='topleft'))
+                fmap.add_child(Draw(position='topleft', export=True))
+                fmap.add_child(folium.LayerControl(position='topright'))
 
-            # Add map controls
-            fmap.add_child(MeasureControl(position='topleft'))
-            fmap.add_child(Draw(position='topleft', export=True))
-            fmap.add_child(folium.LayerControl(position='topright'))
+                # Display the map
+                folium_static(fmap, width=700, height=500)
 
-            # Display the map
-            folium_static(fmap, width=700, height=500)
+            except Exception as e:
+                st.sidebar.error(f"Error calculating volume: {e}")
