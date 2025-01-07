@@ -1,188 +1,134 @@
 import rasterio
-from rasterio.warp import calculate_default_transform, reproject, Resampling, transform_bounds
+from rasterio.warp import transform_bounds
 import geopandas as gpd
 import numpy as np
 import folium
 from folium.plugins import MeasureControl, Draw
 import streamlit as st
-from rasterio.features import rasterize
 from shapely.geometry import Point
 from streamlit_folium import folium_static
 
-# Function to load a TIFF file
+# Fonction pour charger un fichier TIFF
 def load_tiff(file_path, target_crs="EPSG:4326"):
     try:
         with rasterio.open(file_path) as src:
-            data = src.read(1)  # Read the first band
-            src_crs = src.crs  # Source CRS
-            transform = src.transform  # Affine transform
-            bounds = src.bounds  # Source bounds
+            data = src.read(1)  # Lire la première bande
+            src_crs = src.crs  # CRS source
+            bounds = src.bounds  # Bornes source
 
-            # Reproject the data to target CRS
-            target_transform, width, height = calculate_default_transform(src_crs, target_crs, src.width, src.height, *src.bounds)
-            kwargs = src.meta.copy()
-            kwargs.update({
-                'crs': target_crs,
-                'transform': target_transform,
-                'width': width,
-                'height': height
-            })
-            data_reprojected = np.zeros((height, width), dtype=src.dtypes[0])
-            reproject(
-                source=rasterio.band(src, 1),
-                destination=data_reprojected,
-                src_transform=src.transform,
-                src_crs=src.crs,
-                dst_transform=target_transform,
-                dst_crs=target_crs,
-                resampling=Resampling.nearest
-            )
+            # Reprojeter les bornes vers le CRS cible
+            target_bounds = transform_bounds(src_crs, target_crs, *bounds)
 
-            # Reproject bounds to target CRS
-            target_bounds = transform_bounds(src_crs, target_crs, *src.bounds)
-
-        return data, transform, src_crs, data_reprojected, target_transform, target_crs, target_bounds
+        return data, target_bounds
     except Exception as e:
-        st.error(f"Error loading GeoTIFF file: {e}")
-        return None, None, None, None, None, None, None
+        st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
+        return None, None
 
-# Function to load and reproject a shapefile or GeoJSON
-def load_and_reproject_shapefile(file_path, target_crs):
+# Fonction pour charger un fichier GeoJSON ou Shapefile et le projeter
+def load_and_reproject_shapefile(file_path, target_crs="EPSG:4326"):
     try:
         gdf = gpd.read_file(file_path)
-        gdf = gdf.to_crs(target_crs)  # Reproject to target CRS
+        gdf = gdf.to_crs(target_crs)  # Reprojection au CRS cible
         return gdf
     except Exception as e:
-        st.error(f"Error loading Shapefile/GeoJSON file: {e}")
+        st.error(f"Erreur lors du chargement du fichier Shapefile/GeoJSON : {e}")
         return None
 
-# Function to calculate volume using only MNS
-def calculate_volume_without_mnt(mns, mns_transform, mns_crs, polygon_gdf):
-    # Create a mask from the polygon
-    out_shape = mns.shape
-    mask = np.zeros(out_shape, dtype=int)
-    for geom in polygon_gdf.geometry:
-        mask += rasterize([(geom, 1)], out_shape=out_shape, transform=mns_transform, fill=0, default_value=1)
-    mask = mask.astype(bool)
+# Calcul de hauteur relative
+def calculate_heights(mns, mnt):
+    return np.maximum(0, mns - mnt)
 
-    # Calculate cell area
-    pixel_width = mns_transform[0]
-    pixel_height = -mns_transform[4]  # Negative because it's in the y-direction
-    cell_area = pixel_width * pixel_height  # in m²
+# Fonction pour calculer le volume dans l'emprise de la polygonale
+def calculate_volume_in_polygon(mns, mnt, bounds, polygon_gdf):
+    # Calculer les hauteurs relatives
+    heights = calculate_heights(mns, mnt)
 
-    # Extract MNS values within the polygon
-    mns_in_polygon = mns[mask]
+    # Extraire les coordonnées de la polygonale
+    polygon_mask = np.zeros_like(heights, dtype=bool)
+    height = bounds[3] - bounds[1]
+    width = bounds[2] - bounds[0]
+    img_height, img_width = heights.shape
 
-    # Calculate volume
-    volume = np.sum(mns_in_polygon) * cell_area  # in m³
+    for _, row in polygon_gdf.iterrows():
+        polygon = row.geometry
+        for x in range(img_width):
+            for y in range(img_height):
+                lat = bounds[3] - height * (y / img_height)
+                lon = bounds[0] + width * (x / img_width)
+                if polygon.contains(Point(lon, lat)):
+                    polygon_mask[y, x] = True
 
+    # Calculer le volume (somme des hauteurs dans la polygonale)
+    volume = np.sum(heights[polygon_mask])  # Volume en m³ (si les données sont en mètres)
     return volume
 
-# Function to calculate volume using MNS and MNT
-def calculate_volume_with_mnt(mns, mnt, bounds, polygon_gdf):
-    # Calculate relative heights
-    heights = np.maximum(0, mns - mnt)
-
-    # Create a mask from the polygon
-    out_shape = mns.shape
-    mask = np.zeros(out_shape, dtype=int)
-    for geom in polygon_gdf.geometry:
-        mask += rasterize([(geom, 1)], out_shape=out_shape, transform=mns_transform, fill=0, default_value=1)
-    mask = mask.astype(bool)
-
-    # Calculate cell area
-    pixel_width = mns_transform[0]
-    pixel_height = -mns_transform[4]  # Negative because it's in the y-direction
-    cell_area = pixel_width * pixel_height  # in m²
-
-    # Extract heights within the polygon
-    heights_in_polygon = heights[mask]
-
-    # Calculate volume
-    volume = np.sum(heights_in_polygon) * cell_area  # in m³
-
-    return volume
-
-# Streamlit app
-st.title("Volume Calculation using MNS and MNT")
-
-# Buttons under the map
+# Boutons sous la carte
 col1, col2, col3 = st.columns(3)
 with col1:
-    if st.button("Create Map"):
-        st.info("Map creation feature under development.")
+    if st.button("Faire une carte"):
+        st.info("Fonctionnalité 'Faire une carte' en cours de développement.")
 with col2:
-    if st.button("Calculate Volumes"):
+    if st.button("Calculer des volumes"):
         st.session_state.show_volume_sidebar = True
 with col3:
-    if st.button("Detect Trees"):
-        st.info("Tree detection feature under development.")
+    if st.button("Détecter les arbres"):
+        st.info("Fonctionnalité 'Détecter les arbres' en cours de développement.")
 
-# Volume calculation parameters sidebar
+# Affichage des paramètres pour le calcul des volumes
 if st.session_state.get("show_volume_sidebar", False):
-    st.sidebar.title("Volume Calculation Parameters")
+    st.sidebar.title("Paramètres de calcul des volumes")
 
-    # Choice of calculation method
-    method = st.sidebar.radio(
-        "Choose calculation method:",
-        ("Method 1: MNS - MNT", "Method 2: MNS only")
-    )
+    # Téléversement des fichiers
+    mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
+    mns_file = st.sidebar.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
+    polygon_file = st.sidebar.file_uploader("Téléchargez un fichier de polygone (obligatoire)", type=["geojson", "shp"])
 
-    # File uploaders
-    mns_file = st.sidebar.file_uploader("Upload MNS file (TIFF)", type=["tif", "tiff"])
-    polygon_file = st.sidebar.file_uploader("Upload polygon file (required)", type=["geojson", "shp"])
+    if mnt_file and mns_file and polygon_file:
+        mnt, mnt_bounds = load_tiff(mnt_file)
+        mns, mns_bounds = load_tiff(mns_file)
+        polygons_gdf = load_and_reproject_shapefile(polygon_file)
 
-    if method == "Method 1: MNS - MNT":
-        mnt_file = st.sidebar.file_uploader("Upload MNT file (TIFF)", type=["tif", "tiff"])
-    else:
-        mnt_file = None
-
-    if mns_file and polygon_file and (method == "Method 2: MNS only" or mnt_file):
-        mns, mns_transform, mns_crs, mns_reprojected, mns_target_transform, mns_target_crs, mns_bounds = load_tiff(mns_file)
-        polygons_gdf = load_and_reproject_shapefile(polygon_file, mns_crs)
-
-        if mns is None or polygons_gdf is None:
-            st.sidebar.error("Error loading files.")
+        if mnt is None or mns is None or polygons_gdf is None:
+            st.sidebar.error("Erreur lors du chargement des fichiers.")
+        elif mnt_bounds != mns_bounds:
+            st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
         else:
-            try:
-                if method == "Method 1: MNS - MNT":
-                    mnt, mnt_transform, mnt_crs, mnt_reprojected, mnt_target_transform, mnt_target_crs, mnt_bounds = load_tiff(mnt_file)
-                    if mnt is None or mnt_bounds != mns_bounds:
-                        st.sidebar.error("Files must have the same geographic bounds.")
-                    else:
-                        volume = calculate_volume_with_mnt(mns, mnt, mns_bounds, polygons_gdf)
-                        st.sidebar.write(f"Calculated volume within the polygon: {volume:.2f} m³")
-                else:
-                    volume = calculate_volume_without_mnt(mns, mns_transform, mns_crs, polygons_gdf)
-                    st.sidebar.write(f"Calculated volume within the polygon: {volume:.2f} m³")
+            # Calculer le volume dans l'emprise de la polygonale
+            volume = calculate_volume_in_polygon(mns, mnt, mnt_bounds, polygons_gdf)
+            st.sidebar.write(f"Volume calculé dans la polygonale : {volume:.2f} m³")
 
-                # Display the map
-                center_lat = (mns_bounds[1] + mns_bounds[3]) / 2
-                center_lon = (mns_bounds[0] + mns_bounds[2]) / 2
-                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+            # Afficher la carte
+            center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
+            center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
+            fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-                # Add MNS as an image overlay in EPSG:4326
-                folium.raster_layers.ImageOverlay(
-                    image=mns_reprojected,
-                    bounds=[[mns_bounds[1], mns_bounds[0]], [mns_bounds[3], mns_bounds[2]]],
-                    opacity=0.7,
-                    name="MNS"
-                ).add_to(fmap)
+            # Ajouter le MNT
+            folium.raster_layers.ImageOverlay(
+                image=mnt,
+                bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
+                opacity=0.5,
+                name="MNT"
+            ).add_to(fmap)
 
-                # Add the polygon
-                folium.GeoJson(
-                    polygons_gdf.to_crs("EPSG:4326"),
-                    name="Polygon",
-                    style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}
-                ).add_to(fmap)
+            # Ajouter le MNS
+            folium.raster_layers.ImageOverlay(
+                image=mns,
+                bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
+                opacity=0.5,
+                name="MNS"
+            ).add_to(fmap)
 
-                # Add map controls
-                fmap.add_child(MeasureControl(position='topleft'))
-                fmap.add_child(Draw(position='topleft', export=True))
-                fmap.add_child(folium.LayerControl(position='topright'))
+            # Ajouter la polygonale
+            folium.GeoJson(
+                polygons_gdf,
+                name="Polygone",
+                style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}
+            ).add_to(fmap)
 
-                # Display the map
-                folium_static(fmap, width=700, height=500)
+            # Ajouter les contrôles de carte
+            fmap.add_child(MeasureControl(position='topleft'))
+            fmap.add_child(Draw(position='topleft', export=True))
+            fmap.add_child(folium.LayerControl(position='topright'))
 
-            except Exception as e:
-                st.sidebar.error(f"Error calculating volume: {e}")
+            # Afficher la carte
+            folium_static(fmap, width=700, height=500)
