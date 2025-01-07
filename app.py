@@ -161,9 +161,11 @@ with col1:
 with col2:
     if st.button("Calculer des volumes"):
         st.session_state.show_volume_sidebar = True
+        st.session_state.show_tree_sidebar = False  # Désactiver l'autre sidebar
 with col3:
     if st.button("Détecter les arbres"):
         st.session_state.show_tree_sidebar = True
+        st.session_state.show_volume_sidebar = False  # Désactiver l'autre sidebar
 
 # Affichage des paramètres pour le calcul des volumes
 if st.session_state.get("show_volume_sidebar", False):
@@ -172,15 +174,16 @@ if st.session_state.get("show_volume_sidebar", False):
     # Choix de la méthode
     method = st.sidebar.radio(
         "Choisissez la méthode de calcul :",
-        ("Méthode 1 : MNS - MNT", "Méthode 2 : MNS seul")
+        ("Méthode 1 : MNS - MNT", "Méthode 2 : MNS seul"),
+        key="volume_method"
     )
 
     # Téléversement des fichiers
-    mns_file = st.sidebar.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
-    polygon_file = st.sidebar.file_uploader("Téléchargez un fichier de polygone (obligatoire)", type=["geojson", "shp"])
+    mns_file = st.sidebar.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"], key="mns_volume")
+    polygon_file = st.sidebar.file_uploader("Téléchargez un fichier de polygone (obligatoire)", type=["geojson", "shp"], key="polygon_volume")
 
     if method == "Méthode 1 : MNS - MNT":
-        mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
+        mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"], key="mnt_volume")
     else:
         mnt_file = None
 
@@ -204,7 +207,8 @@ if st.session_state.get("show_volume_sidebar", False):
                     reference_altitude = st.sidebar.number_input(
                         "Entrez l'altitude de référence (en mètres) :",
                         value=0.0,
-                        step=0.1
+                        step=0.1,
+                        key="reference_altitude"
                     )
                     positive_volume, negative_volume, real_volume = calculate_volume_without_mnt(
                         mns, mns_bounds, polygons_gdf, reference_altitude
@@ -249,9 +253,9 @@ if st.session_state.get("show_tree_sidebar", False):
     st.sidebar.title("Paramètres de détection des arbres")
 
     # Téléversement des fichiers
-    mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
-    mns_file = st.sidebar.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
-    polygon_file = st.sidebar.file_uploader("Téléchargez un fichier de polygone (optionnel)", type=["geojson", "shp"])
+    mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"], key="mnt_tree")
+    mns_file = st.sidebar.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"], key="mns_tree")
+    polygon_file = st.sidebar.file_uploader("Téléchargez un fichier de polygone (optionnel)", type=["geojson", "shp"], key="polygon_tree")
 
     if mnt_file and mns_file:
         mnt, mnt_bounds = load_tiff(mnt_file)
@@ -265,9 +269,9 @@ if st.session_state.get("show_tree_sidebar", False):
             heights = calculate_heights(mns, mnt)
 
             # Paramètres de détection
-            height_threshold = st.sidebar.slider("Seuil de hauteur", 0.1, 20.0, 2.0, 0.1)
-            eps = st.sidebar.slider("Rayon de voisinage", 0.1, 10.0, 2.0, 0.1)
-            min_samples = st.sidebar.slider("Min. points pour un cluster", 1, 10, 5, 1)
+            height_threshold = st.sidebar.slider("Seuil de hauteur", 0.1, 20.0, 2.0, 0.1, key="height_threshold")
+            eps = st.sidebar.slider("Rayon de voisinage", 0.1, 10.0, 2.0, 0.1, key="eps")
+            min_samples = st.sidebar.slider("Min. points pour un cluster", 1, 10, 5, 1, key="min_samples")
 
             # Détection et visualisation
             if st.sidebar.button("Lancer la détection"):
