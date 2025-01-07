@@ -138,7 +138,12 @@ if df is not None:
                     if len(contour) > 0:
                         for path in contour:
                             if len(path) > 0:
-                                contour_paths.append(Polygon(path))
+                                try:
+                                    polygon = Polygon(path)
+                                    if polygon.is_valid:  # Vérifier si le polygone est valide
+                                        contour_paths.append(polygon)
+                                except Exception as e:
+                                    st.warning(f"Erreur lors de la création d'un polygone : {e}")
 
             if len(contour_paths) > 0:
                 zone_inondee = gpd.GeoDataFrame(geometry=[MultiPolygon(contour_paths)], crs="EPSG:32630")
@@ -151,14 +156,17 @@ if df is not None:
                 batiments_dans_emprise.plot(ax=ax, facecolor='grey', edgecolor='black', linewidth=0.5, alpha=0.6, label="Bâtiments non inondés")
 
                 # Séparer les bâtiments inondés
-                if zone_inondee is not None:
-                    batiments_inondes = batiments_dans_emprise[batiments_dans_emprise.intersects(zone_inondee.unary_union)]
-                    nombre_batiments_inondes = len(batiments_inondes)
+                if zone_inondee is not None and not zone_inondee.is_empty.all():
+                    try:
+                        batiments_inondes = batiments_dans_emprise[batiments_dans_emprise.intersects(zone_inondee.unary_union)]
+                        nombre_batiments_inondes = len(batiments_inondes)
 
-                    # Afficher les bâtiments inondés en rouge
-                    batiments_inondes.plot(ax=ax, facecolor='red', edgecolor='red', linewidth=1, alpha=0.8, label="Bâtiments inondés")
+                        # Afficher les bâtiments inondés en rouge
+                        batiments_inondes.plot(ax=ax, facecolor='red', edgecolor='red', linewidth=1, alpha=0.8, label="Bâtiments inondés")
 
-                    st.write(f"Nombre de bâtiments dans la zone inondée : {nombre_batiments_inondes}")
+                        st.write(f"Nombre de bâtiments dans la zone inondée : {nombre_batiments_inondes}")
+                    except Exception as e:
+                        st.error(f"Erreur lors de la sélection des bâtiments inondés : {e}")
                 else:
                     st.write("Aucun bâtiment inondé trouvé.")
                 ax.legend()
