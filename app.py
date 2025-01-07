@@ -1,11 +1,11 @@
 import rasterio
 from rasterio.warp import transform_bounds
-from rasterio.features import rasterize
 import geopandas as gpd
 import numpy as np
 import folium
 from folium.plugins import MeasureControl, Draw
 import streamlit as st
+from shapely.geometry import Point
 from streamlit_folium import folium_static
 
 # Fonction pour charger un fichier TIFF
@@ -14,16 +14,15 @@ def load_tiff(file_path, target_crs="EPSG:4326"):
         with rasterio.open(file_path) as src:
             data = src.read(1)  # Lire la première bande
             src_crs = src.crs  # CRS source
-            transform = src.transform  # Transformation affine
             bounds = src.bounds  # Bornes source
 
             # Reprojeter les bornes vers le CRS cible
             target_bounds = transform_bounds(src_crs, target_crs, *bounds)
 
-        return data, transform, src_crs, bounds, target_bounds
+        return data, target_bounds
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
-        return None, None, None, None, None
+        return None, None
 
 # Fonction pour charger un fichier GeoJSON ou Shapefile et le projeter
 def load_and_reproject_shapefile(file_path, target_crs="EPSG:4326"):
@@ -40,48 +39,48 @@ def calculate_heights(mns, mnt):
     return np.maximum(0, mns - mnt)
 
 # Fonction pour calculer le volume dans l'emprise de la polygonale (Méthode 1 : MNS - MNT)
-def calculate_volume_with_mnt(mns, mnt, transform, polygon_gdf):
+def calculate_volume_in_polygon(mns, mnt, bounds, polygon_gdf):
     # Calculer les hauteurs relatives
     heights = calculate_heights(mns, mnt)
 
-    # Créer un masque à partir du polygone
-    mask = rasterize(
-        shapes=polygon_gdf.geometry,
-        out_shape=mns.shape,
-        transform=transform,
-        fill=0,
-        default_value=1,
-        dtype=np.uint8
-    ).astype(bool)
+    # Extraire les coordonnées de la polygonale
+    polygon_mask = np.zeros_like(heights, dtype=bool)
+    height = bounds[3] - bounds[1]
+    width = bounds[2] - bounds[0]
+    img_height, img_width = heights.shape
 
-    # Calculer la surface d'un pixel
-    pixel_width = transform[0]
-    pixel_height = -transform[4]  # Négatif car la transformation est en y inversé
-    cell_area = pixel_width * pixel_height  # Surface en m²
+    for _, row in polygon_gdf.iterrows():
+        polygon = row.geometry
+        for x in range(img_width):
+            for y in range(img_height):
+                lat = bounds[3] - height * (y / img_height)
+                lon = bounds[0] + width * (x / img_width)
+                if polygon.contains(Point(lon, lat)):
+                    polygon_mask[y, x] = True
 
-    # Calculer le volume
-    volume = np.sum(heights[mask]) * cell_area  # Volume en m³
+    # Calculer le volume (somme des hauteurs dans la polygonale)
+    volume = np.sum(heights[polygon_mask])  # Volume en m³ (si les données sont en mètres)
     return volume
 
 # Fonction pour calculer le volume avec MNS seul (Méthode 2 : MNS seul)
-def calculate_volume_without_mnt(mns, transform, polygon_gdf):
-    # Créer un masque à partir du polygone
-    mask = rasterize(
-        shapes=polygon_gdf.geometry,
-        out_shape=mns.shape,
-        transform=transform,
-        fill=0,
-        default_value=1,
-        dtype=np.uint8
-    ).astype(bool)
+def calculate_volume_without_mnt(mns, bounds, polygon_gdf):
+    # Extraire les coordonnées de la polygonale
+    polygon_mask = np.zeros_like(mns, dtype=bool)
+    height = bounds[3] - bounds[1]
+    width = bounds[2] - bounds[0]
+    img_height, img_width = mns.shape
 
-    # Calculer la surface d'un pixel
-    pixel_width = transform[0]
-    pixel_height = -transform[4]  # Négatif car la transformation est en y inversé
-    cell_area = pixel_width * pixel_height  # Surface en m²
+    for _, row in polygon_gdf.iterrows():
+        polygon = row.geometry
+        for x in range(img_width):
+            for y in range(img_height):
+                lat = bounds[3] - height * (y / img_height)
+                lon = bounds[0] + width * (x / img_width)
+                if polygon.contains(Point(lon, lat)):
+                    polygon_mask[y, x] = True
 
-    # Calculer le volume
-    volume = np.sum(mns[mask]) * cell_area  # Volume en m³
+    # Calculer le volume (somme des valeurs du MNS dans la polygonale)
+    volume = np.sum(mns[polygon_mask])  # Volume en m³ (si les données sont en mètres)
     return volume
 
 # Streamlit app
@@ -90,8 +89,8 @@ st.title("Calcul de volume avec MNS et MNT")
 # Boutons sous la carte
 col1, col2, col3 = st.columns(3)
 with col1:
-    if st.button("Créer une carte"):
-        st.info("Fonctionnalité 'Créer une carte' en cours de développement.")
+    if st.button("Faire une carte"):
+        st.info("Fonctionnalité 'Faire une carte' en cours de développement.")
 with col2:
     if st.button("Calculer des volumes"):
         st.session_state.show_volume_sidebar = True
@@ -119,33 +118,33 @@ if st.session_state.get("show_volume_sidebar", False):
         mnt_file = None
 
     if mns_file and polygon_file and (method == "Méthode 2 : MNS seul" or mnt_file):
-        mns, mns_transform, mns_crs, mns_bounds, mns_target_bounds = load_tiff(mns_file)
-        polygons_gdf = load_and_reproject_shapefile(polygon_file, mns_crs)
+        mns, mns_bounds = load_tiff(mns_file)
+        polygons_gdf = load_and_reproject_shapefile(polygon_file)
 
         if mns is None or polygons_gdf is None:
             st.sidebar.error("Erreur lors du chargement des fichiers.")
         else:
             try:
                 if method == "Méthode 1 : MNS - MNT":
-                    mnt, mnt_transform, mnt_crs, mnt_bounds, mnt_target_bounds = load_tiff(mnt_file)
+                    mnt, mnt_bounds = load_tiff(mnt_file)
                     if mnt is None or mnt_bounds != mns_bounds:
                         st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
                     else:
-                        volume = calculate_volume_with_mnt(mns, mnt, mns_transform, polygons_gdf)
+                        volume = calculate_volume_in_polygon(mns, mnt, mnt_bounds, polygons_gdf)
                         st.sidebar.write(f"Volume calculé dans la polygonale : {volume:.2f} m³")
                 else:
-                    volume = calculate_volume_without_mnt(mns, mns_transform, polygons_gdf)
+                    volume = calculate_volume_without_mnt(mns, mns_bounds, polygons_gdf)
                     st.sidebar.write(f"Volume calculé dans la polygonale : {volume:.2f} m³")
 
                 # Afficher la carte
-                center_lat = (mns_target_bounds[1] + mns_target_bounds[3]) / 2
-                center_lon = (mns_target_bounds[0] + mns_target_bounds[2]) / 2
+                center_lat = (mns_bounds[1] + mns_bounds[3]) / 2
+                center_lon = (mns_bounds[0] + mns_bounds[2]) / 2
                 fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
                 # Ajouter le MNS
                 folium.raster_layers.ImageOverlay(
                     image=mns,
-                    bounds=[[mns_target_bounds[1], mns_target_bounds[0]], [mns_target_bounds[3], mns_target_bounds[2]]],
+                    bounds=[[mns_bounds[1], mns_bounds[0]], [mns_bounds[3], mns_bounds[2]]],
                     opacity=0.7,
                     name="MNS"
                 ).add_to(fmap)
