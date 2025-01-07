@@ -155,11 +155,6 @@ if st.session_state.get("show_volume_sidebar", False):
     mns_file = st.sidebar.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
     polygon_file = st.sidebar.file_uploader("Téléchargez un fichier de polygone (obligatoire)", type=["geojson", "shp"])
 
-    if method == "Méthode 1 : MNS - MNT":
-        mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
-    else:
-        mnt_file = None
-
     if mns_file and polygon_file and (method == "Méthode 2 : MNS seulement" or mnt_file):
         mns, mns_bounds = load_tiff(mns_file)
         polygons_gdf = load_and_reproject_shapefile(polygon_file)
@@ -167,6 +162,15 @@ if st.session_state.get("show_volume_sidebar", False):
         if mns is None or polygons_gdf is None:
             st.sidebar.error("Erreur lors du chargement des fichiers.")
         else:
+            # Afficher les informations de la polygonale
+            st.sidebar.write("CRS de la polygonale :", polygons_gdf.crs)
+            st.sidebar.write("Bornes du raster MNS :", mns_bounds)
+            st.sidebar.write("Géométries de la polygonale :")
+            for _, row in polygons_gdf.iterrows():
+                polygon = row.geometry
+                if polygon.geom_type == "Polygon":
+                    st.sidebar.write(list(polygon.exterior.coords))
+
             try:
                 if method == "Méthode 1 : MNS - MNT":
                     mnt, mnt_bounds = load_tiff(mnt_file)
