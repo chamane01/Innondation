@@ -5,7 +5,7 @@ import numpy as np
 import folium
 from folium.plugins import MeasureControl, Draw
 import streamlit as st
-from shapely.geometry import Point
+from shapely.geometry import Point, Polygon
 from scipy.interpolate import griddata
 from streamlit_folium import folium_static
 
@@ -48,8 +48,8 @@ def calculate_volume_with_mnt(mns, mnt, bounds, polygon_gdf):
 
 # Fonction pour calculer le volume dans l'emprise de la polygonale (méthode 2 : MNS seulement)
 def calculate_volume_without_mnt(mns, bounds, polygon_gdf):
-    # Extraire les valeurs du MNS aux sommets de la polygonale
-    vertices, values = extract_mns_values_at_polygon_vertices(mns, bounds, polygon_gdf)
+    # Extraire les sommets de la polygonale et leurs valeurs Z (altitudes)
+    vertices, values = extract_vertices_and_z_values(mns, bounds, polygon_gdf)
     if vertices is None or values is None:
         return 0.0  # Retourne 0 si aucun sommet n'est trouvé
 
@@ -66,8 +66,8 @@ def calculate_volume_without_mnt(mns, bounds, polygon_gdf):
     volume = np.sum(heights[polygon_mask])  # Volume en m³
     return volume
 
-# Fonction pour extraire les valeurs du MNS aux sommets de la polygonale
-def extract_mns_values_at_polygon_vertices(mns, bounds, polygon_gdf):
+# Fonction pour extraire les sommets de la polygonale et leurs valeurs Z
+def extract_vertices_and_z_values(mns, bounds, polygon_gdf):
     height = bounds[3] - bounds[1]
     width = bounds[2] - bounds[0]
     img_height, img_width = mns.shape
@@ -86,7 +86,7 @@ def extract_mns_values_at_polygon_vertices(mns, bounds, polygon_gdf):
                 y = int((bounds[3] - lat) / height * img_height)
                 if 0 <= x < img_width and 0 <= y < img_height:
                     vertices.append([x, y])  # Format [x, y]
-                    values.append(mns[y, x])
+                    values.append(mns[y, x])  # Valeur Z (altitude) du MNS
 
     if len(vertices) == 0:
         st.error("Aucun sommet trouvé dans la polygonale. Vérifiez la projection et les coordonnées.")
