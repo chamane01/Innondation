@@ -38,12 +38,24 @@ def load_and_reproject_shapefile(file_path, target_crs="EPSG:4326"):
 def calculate_heights(mns, mnt):
     return np.maximum(0, mns - mnt)
 
-# Fonction pour calculer le volume dans l'emprise de la polygonale
-def calculate_volume_in_polygon(mns, mnt, bounds, polygon_gdf):
-    # Calculer les hauteurs relatives
+# Fonction pour calculer le volume dans l'emprise de la polygonale (méthode 1 : MNS - MNT)
+def calculate_volume_with_mnt(mns, mnt, bounds, polygon_gdf):
     heights = calculate_heights(mns, mnt)
+    polygon_mask = create_polygon_mask(heights, bounds, polygon_gdf)
+    volume = np.sum(heights[polygon_mask])  # Volume en m³
+    return volume
 
-    # Extraire les coordonnées de la polygonale
+# Fonction pour calculer le volume dans l'emprise de la polygonale (méthode 2 : MNS seulement)
+def calculate_volume_without_mnt(mns, bounds, polygon_gdf):
+    # Extraire les altitudes des sommets de la polygonale
+    polygon_altitudes = extract_polygon_altitudes(mns, bounds, polygon_gdf)
+    heights = np.maximum(0, mns - polygon_altitudes)
+    polygon_mask = create_polygon_mask(heights, bounds, polygon_gdf)
+    volume = np.sum(heights[polygon_mask])  # Volume en m³
+    return volume
+
+# Fonction pour créer un masque de la polygonale
+def create_polygon_mask(heights, bounds, polygon_gdf):
     polygon_mask = np.zeros_like(heights, dtype=bool)
     height = bounds[3] - bounds[1]
     width = bounds[2] - bounds[0]
@@ -58,9 +70,25 @@ def calculate_volume_in_polygon(mns, mnt, bounds, polygon_gdf):
                 if polygon.contains(Point(lon, lat)):
                     polygon_mask[y, x] = True
 
-    # Calculer le volume (somme des hauteurs dans la polygonale)
-    volume = np.sum(heights[polygon_mask])  # Volume en m³ (si les données sont en mètres)
-    return volume
+    return polygon_mask
+
+# Fonction pour extraire les altitudes des sommets de la polygonale
+def extract_polygon_altitudes(mns, bounds, polygon_gdf):
+    height = bounds[3] - bounds[1]
+    width = bounds[2] - bounds[0]
+    img_height, img_width = mns.shape
+    polygon_altitudes = np.zeros_like(mns)
+
+    for _, row in polygon_gdf.iterrows():
+        polygon = row.geometry
+        for x in range(img_width):
+            for y in range(img_height):
+                lat = bounds[3] - height * (y / img_height)
+                lon = bounds[0] + width * (x / img_width)
+                if polygon.contains(Point(lon, lat)):
+                    polygon_altitudes[y, x] = mns[y, x]
+
+    return polygon_altitudes
 
 # Boutons sous la carte
 col1, col2, col3 = st.columns(3)
@@ -78,42 +106,48 @@ with col3:
 if st.session_state.get("show_volume_sidebar", False):
     st.sidebar.title("Paramètres de calcul des volumes")
 
+    # Choix de la méthode de calcul
+    method = st.sidebar.radio(
+        "Choisissez la méthode de calcul :",
+        ("Méthode 1 : MNS - MNT", "Méthode 2 : MNS seulement")
+    )
+
     # Téléversement des fichiers
-    mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
     mns_file = st.sidebar.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
     polygon_file = st.sidebar.file_uploader("Téléchargez un fichier de polygone (obligatoire)", type=["geojson", "shp"])
 
-    if mnt_file and mns_file and polygon_file:
-        mnt, mnt_bounds = load_tiff(mnt_file)
+    if method == "Méthode 1 : MNS - MNT":
+        mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
+    else:
+        mnt_file = None
+
+    if mns_file and polygon_file and (method == "Méthode 2 : MNS seulement" or mnt_file):
         mns, mns_bounds = load_tiff(mns_file)
         polygons_gdf = load_and_reproject_shapefile(polygon_file)
 
-        if mnt is None or mns is None or polygons_gdf is None:
+        if mns is None or polygons_gdf is None:
             st.sidebar.error("Erreur lors du chargement des fichiers.")
-        elif mnt_bounds != mns_bounds:
-            st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
         else:
-            # Calculer le volume dans l'emprise de la polygonale
-            volume = calculate_volume_in_polygon(mns, mnt, mnt_bounds, polygons_gdf)
+            if method == "Méthode 1 : MNS - MNT":
+                mnt, mnt_bounds = load_tiff(mnt_file)
+                if mnt is None or mnt_bounds != mns_bounds:
+                    st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
+                else:
+                    volume = calculate_volume_with_mnt(mns, mnt, mns_bounds, polygons_gdf)
+            else:
+                volume = calculate_volume_without_mnt(mns, mns_bounds, polygons_gdf)
+
             st.sidebar.write(f"Volume calculé dans la polygonale : {volume:.2f} m³")
 
             # Afficher la carte
-            center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
-            center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
+            center_lat = (mns_bounds[1] + mns_bounds[3]) / 2
+            center_lon = (mns_bounds[0] + mns_bounds[2]) / 2
             fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-
-            # Ajouter le MNT
-            folium.raster_layers.ImageOverlay(
-                image=mnt,
-                bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
-                opacity=0.5,
-                name="MNT"
-            ).add_to(fmap)
 
             # Ajouter le MNS
             folium.raster_layers.ImageOverlay(
                 image=mns,
-                bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
+                bounds=[[mns_bounds[1], mns_bounds[0]], [mns_bounds[3], mns_bounds[2]]],
                 opacity=0.5,
                 name="MNS"
             ).add_to(fmap)
