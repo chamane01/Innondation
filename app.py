@@ -114,16 +114,22 @@ if df is not None:
 
             st.pyplot(fig)
 
-            doc = ezdxf.new(dxfversion='R2010')
-            msp = doc.modelspace()
-            for collection in contours_inondation.collections:
-                for path in collection.get_paths():
-                    points = path.vertices
-                    for i in range(len(points)-1):
-                        msp.add_line(points[i], points[i+1])
+            # Enregistrer les contours en fichier DXF
+            if contours_inondation.allsegs:
+                doc = ezdxf.new(dxfversion='R2010')
+                msp = doc.modelspace()
+                for contour in contours_inondation.allsegs:
+                    if len(contour) > 0:
+                        for path in contour:
+                            if len(path) > 0:
+                                for i in range(len(path) - 1):
+                                    msp.add_line(path[i], path[i + 1])
 
-            dxf_file = "contours_inondation.dxf"
-            doc.saveas(dxf_file)
+                dxf_file = "contours_inondation.dxf"
+                doc.saveas(dxf_file)
+            else:
+                st.warning("Aucun contour trouvé pour le niveau d'eau spécifié.")
+
             carte_file = "carte_inondation.png"
             fig.savefig(carte_file)
 
