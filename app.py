@@ -7,6 +7,7 @@ import folium
 from folium.plugins import MeasureControl, Draw
 import streamlit as st
 from shapely.geometry import Point
+from streamlit_folium import folium_static  # Importation ajoutée
 
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path, target_crs="EPSG:4326"):
@@ -214,4 +215,5 @@ if st.session_state.get("show_sidebar", False):
                 fmap.add_child(Draw(position='topleft', export=True))
                 fmap.add_child(folium.LayerControl(position='topright'))
 
-                folium_static(fmap)
+                # Utilisation de folium_static pour afficher la carte
+                folium_static(fmap, width=700, height=500)
