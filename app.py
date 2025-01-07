@@ -5,7 +5,7 @@ import numpy as np
 import folium
 from folium.plugins import MeasureControl, Draw
 import streamlit as st
-from shapely.geometry import Point, Polygon
+from shapely.geometry import Point
 from scipy.interpolate import griddata
 from streamlit_folium import folium_static
 
@@ -35,6 +35,37 @@ def load_and_reproject_shapefile(file_path, target_crs="EPSG:4326"):
         st.error(f"Erreur lors du chargement du fichier Shapefile/GeoJSON : {e}")
         return None
 
+# Calcul de hauteur relative
+def calculate_heights(mns, mnt):
+    return np.maximum(0, mns - mnt)
+
+# Fonction pour calculer le volume dans l'emprise de la polygonale (méthode 1 : MNS - MNT)
+def calculate_volume_with_mnt(mns, mnt, bounds, polygon_gdf):
+    heights = calculate_heights(mns, mnt)
+    polygon_mask = create_polygon_mask(heights, bounds, polygon_gdf)
+    volume = np.sum(heights[polygon_mask])  # Volume en m³
+    return volume
+
+# Fonction pour calculer le volume dans l'emprise de la polygonale (méthode 2 : MNS seulement)
+def calculate_volume_without_mnt(mns, bounds, polygon_gdf):
+    # Extraire les valeurs du MNS aux sommets de la polygonale
+    vertices, values = extract_mns_values_at_polygon_vertices(mns, bounds, polygon_gdf)
+    if vertices is None or values is None:
+        return 0.0  # Retourne 0 si aucun sommet n'est trouvé
+
+    # Créer un MNT artificiel par interpolation
+    artificial_mnt = create_artificial_mnt(mns, vertices, values)
+
+    # Calculer les hauteurs relatives
+    heights = np.maximum(0, mns - artificial_mnt)
+
+    # Créer un masque pour la polygonale
+    polygon_mask = create_polygon_mask(heights, bounds, polygon_gdf)
+
+    # Calculer le volume (somme des hauteurs dans la polygonale)
+    volume = np.sum(heights[polygon_mask])  # Volume en m³
+    return volume
+
 # Fonction pour extraire les valeurs du MNS aux sommets de la polygonale
 def extract_mns_values_at_polygon_vertices(mns, bounds, polygon_gdf):
     height = bounds[3] - bounds[1]
@@ -57,6 +88,10 @@ def extract_mns_values_at_polygon_vertices(mns, bounds, polygon_gdf):
                     vertices.append([x, y])  # Format [x, y]
                     values.append(mns[y, x])
 
+    if len(vertices) == 0:
+        st.error("Aucun sommet trouvé dans la polygonale. Vérifiez la projection et les coordonnées.")
+        return None, None
+
     return np.array(vertices), np.array(values)
 
 # Fonction pour créer un MNT artificiel par interpolation
@@ -75,18 +110,6 @@ def create_artificial_mnt(mns, vertices, values):
     artificial_mnt = np.nan_to_num(artificial_mnt, nan=0.0)
 
     return artificial_mnt
-
-# Fonction pour calculer le volume entre le MNS et le MNT artificiel
-def calculate_volume(mns, artificial_mnt, bounds, polygon_gdf):
-    # Calculer les hauteurs relatives
-    heights = np.maximum(0, mns - artificial_mnt)
-
-    # Créer un masque pour la polygonale
-    polygon_mask = create_polygon_mask(heights, bounds, polygon_gdf)
-
-    # Calculer le volume (somme des hauteurs dans la polygonale)
-    volume = np.sum(heights[polygon_mask])  # Volume en m³
-    return volume
 
 # Fonction pour créer un masque de la polygonale
 def create_polygon_mask(heights, bounds, polygon_gdf):
@@ -122,11 +145,22 @@ with col3:
 if st.session_state.get("show_volume_sidebar", False):
     st.sidebar.title("Paramètres de calcul des volumes")
 
+    # Choix de la méthode de calcul
+    method = st.sidebar.radio(
+        "Choisissez la méthode de calcul :",
+        ("Méthode 1 : MNS - MNT", "Méthode 2 : MNS seulement")
+    )
+
     # Téléversement des fichiers
     mns_file = st.sidebar.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"])
     polygon_file = st.sidebar.file_uploader("Téléchargez un fichier de polygone (obligatoire)", type=["geojson", "shp"])
 
-    if mns_file and polygon_file:
+    if method == "Méthode 1 : MNS - MNT":
+        mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"])
+    else:
+        mnt_file = None
+
+    if mns_file and polygon_file and (method == "Méthode 2 : MNS seulement" or mnt_file):
         mns, mns_bounds = load_tiff(mns_file)
         polygons_gdf = load_and_reproject_shapefile(polygon_file)
 
@@ -134,14 +168,15 @@ if st.session_state.get("show_volume_sidebar", False):
             st.sidebar.error("Erreur lors du chargement des fichiers.")
         else:
             try:
-                # Extraire les valeurs du MNS aux sommets de la polygonale
-                vertices, values = extract_mns_values_at_polygon_vertices(mns, mns_bounds, polygons_gdf)
+                if method == "Méthode 1 : MNS - MNT":
+                    mnt, mnt_bounds = load_tiff(mnt_file)
+                    if mnt is None or mnt_bounds != mns_bounds:
+                        st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
+                    else:
+                        volume = calculate_volume_with_mnt(mns, mnt, mns_bounds, polygons_gdf)
+                else:
+                    volume = calculate_volume_without_mnt(mns, mns_bounds, polygons_gdf)
 
-                # Créer un MNT artificiel par interpolation
-                artificial_mnt = create_artificial_mnt(mns, vertices, values)
-
-                # Calculer le volume
-                volume = calculate_volume(mns, artificial_mnt, mns_bounds, polygons_gdf)
                 st.sidebar.write(f"Volume calculé dans la polygonale : {volume:.2f} m³")
 
                 # Afficher la carte
