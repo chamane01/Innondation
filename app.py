@@ -6,7 +6,6 @@ import numpy as np
 import folium
 from folium.plugins import MeasureControl, Draw
 import streamlit as st
-from shapely.geometry import Point
 from streamlit_folium import folium_static
 
 # Fonction pour charger un fichier TIFF
@@ -36,11 +35,11 @@ def load_and_reproject_shapefile(file_path, target_crs="EPSG:4326"):
         st.error(f"Erreur lors du chargement du fichier Shapefile/GeoJSON : {e}")
         return None
 
-# Calcul de hauteur relative
+# Calcul de hauteur relative (pour la méthode 1 : MNS - MNT)
 def calculate_heights(mns, mnt):
     return np.maximum(0, mns - mnt)
 
-# Fonction pour calculer le volume dans l'emprise de la polygonale (MNS - MNT)
+# Fonction pour calculer le volume dans l'emprise de la polygonale (Méthode 1 : MNS - MNT)
 def calculate_volume_with_mnt(mns, mnt, transform, polygon_gdf):
     # Calculer les hauteurs relatives
     heights = calculate_heights(mns, mnt)
@@ -64,7 +63,7 @@ def calculate_volume_with_mnt(mns, mnt, transform, polygon_gdf):
     volume = np.sum(heights[mask]) * cell_area  # Volume en m³
     return volume
 
-# Fonction pour calculer le volume avec MNS seul
+# Fonction pour calculer le volume avec MNS seul (Méthode 2 : MNS seul)
 def calculate_volume_without_mnt(mns, transform, polygon_gdf):
     # Créer un masque à partir du polygone
     mask = rasterize(
