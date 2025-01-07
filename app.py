@@ -54,13 +54,16 @@ def extract_mns_values_at_polygon_vertices(mns, bounds, polygon_gdf):
                 x = int((lon - bounds[0]) / width * img_width)
                 y = int((bounds[3] - lat) / height * img_height)
                 if 0 <= x < img_width and 0 <= y < img_height:
-                    vertices.append((x, y))
+                    vertices.append([x, y])  # Format [x, y]
                     values.append(mns[y, x])
 
     return np.array(vertices), np.array(values)
 
 # Fonction pour créer un MNT artificiel par interpolation
 def create_artificial_mnt(mns, vertices, values):
+    if len(vertices) == 0:
+        raise ValueError("Aucun sommet trouvé dans la polygonale.")
+
     # Créer une grille de coordonnées pour l'interpolation
     img_height, img_width = mns.shape
     grid_x, grid_y = np.meshgrid(np.arange(img_width), np.arange(img_height))
@@ -130,40 +133,44 @@ if st.session_state.get("show_volume_sidebar", False):
         if mns is None or polygons_gdf is None:
             st.sidebar.error("Erreur lors du chargement des fichiers.")
         else:
-            # Extraire les valeurs du MNS aux sommets de la polygonale
-            vertices, values = extract_mns_values_at_polygon_vertices(mns, mns_bounds, polygons_gdf)
+            try:
+                # Extraire les valeurs du MNS aux sommets de la polygonale
+                vertices, values = extract_mns_values_at_polygon_vertices(mns, mns_bounds, polygons_gdf)
 
-            # Créer un MNT artificiel par interpolation
-            artificial_mnt = create_artificial_mnt(mns, vertices, values)
+                # Créer un MNT artificiel par interpolation
+                artificial_mnt = create_artificial_mnt(mns, vertices, values)
 
-            # Calculer le volume
-            volume = calculate_volume(mns, artificial_mnt, mns_bounds, polygons_gdf)
-            st.sidebar.write(f"Volume calculé dans la polygonale : {volume:.2f} m³")
+                # Calculer le volume
+                volume = calculate_volume(mns, artificial_mnt, mns_bounds, polygons_gdf)
+                st.sidebar.write(f"Volume calculé dans la polygonale : {volume:.2f} m³")
 
-            # Afficher la carte
-            center_lat = (mns_bounds[1] + mns_bounds[3]) / 2
-            center_lon = (mns_bounds[0] + mns_bounds[2]) / 2
-            fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+                # Afficher la carte
+                center_lat = (mns_bounds[1] + mns_bounds[3]) / 2
+                center_lon = (mns_bounds[0] + mns_bounds[2]) / 2
+                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-            # Ajouter le MNS
-            folium.raster_layers.ImageOverlay(
-                image=mns,
-                bounds=[[mns_bounds[1], mns_bounds[0]], [mns_bounds[3], mns_bounds[2]]],
-                opacity=0.5,
-                name="MNS"
-            ).add_to(fmap)
+                # Ajouter le MNS
+                folium.raster_layers.ImageOverlay(
+                    image=mns,
+                    bounds=[[mns_bounds[1], mns_bounds[0]], [mns_bounds[3], mns_bounds[2]]],
+                    opacity=0.5,
+                    name="MNS"
+                ).add_to(fmap)
 
-            # Ajouter la polygonale
-            folium.GeoJson(
-                polygons_gdf,
-                name="Polygone",
-                style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}
-            ).add_to(fmap)
+                # Ajouter la polygonale
+                folium.GeoJson(
+                    polygons_gdf,
+                    name="Polygone",
+                    style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}
+                ).add_to(fmap)
 
-            # Ajouter les contrôles de carte
-            fmap.add_child(MeasureControl(position='topleft'))
-            fmap.add_child(Draw(position='topleft', export=True))
-            fmap.add_child(folium.LayerControl(position='topright'))
+                # Ajouter les contrôles de carte
+                fmap.add_child(MeasureControl(position='topleft'))
+                fmap.add_child(Draw(position='topleft', export=True))
+                fmap.add_child(folium.LayerControl(position='topright'))
 
-            # Afficher la carte
-            folium_static(fmap, width=700, height=500)
+                # Afficher la carte
+                folium_static(fmap, width=700, height=500)
+
+            except ValueError as e:
+                st.sidebar.error(f"Erreur lors du calcul du volume : {e}")
