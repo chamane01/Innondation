@@ -168,48 +168,52 @@ def main():
 
     # Button to add all uploaded layers to the map
     if st.button("Ajouter la liste de couches à la carte"):
+        # Use a set to track added layers and avoid duplicates
+        added_layers = set()
         for layer in st.session_state["uploaded_layers"]:
-            if layer["type"] == "TIFF":
-                if layer["name"] in ["MNT", "MNS"]:
-                    temp_png_path = f"{layer['name'].lower()}_colored.png"
-                    apply_color_gradient(layer["path"], temp_png_path)
-                    add_image_overlay(fmap, temp_png_path, layer["bounds"], layer["name"])
-                    os.remove(temp_png_path)
-                else:
-                    add_image_overlay(fmap, layer["path"], layer["bounds"], layer["name"])
-            elif layer["type"] == "GeoJSON":
-                if layer["name"] == "Routes":
-                    folium.GeoJson(
-                        layer["data"],
-                        name="Routes",
-                        style_function=lambda x: {
-                            "color": "orange",
-                            "weight": 4,
-                            "opacity": 0.7
-                        }
-                    ).add_to(fmap)
-                elif layer["name"] == "Polygonale":
-                    folium.GeoJson(
-                        layer["data"],
-                        name="Polygonale",
-                        style_function=lambda x: {
-                            "color": "red",
-                            "weight": 2,
-                            "opacity": 1,
-                            "fillColor": "transparent",
-                            "fillOpacity": 0.1
-                        }
-                    ).add_to(fmap)
-                elif layer["name"] == "Cours d'eau":
-                    folium.GeoJson(
-                        layer["data"],
-                        name="Cours d'eau",
-                        style_function=lambda x: {
-                            "color": "blue",
-                            "weight": 4,
-                            "opacity": 0.7
-                        }
-                    ).add_to(fmap)
+            if layer["name"] not in added_layers:
+                if layer["type"] == "TIFF":
+                    if layer["name"] in ["MNT", "MNS"]:
+                        temp_png_path = f"{layer['name'].lower()}_colored.png"
+                        apply_color_gradient(layer["path"], temp_png_path)
+                        add_image_overlay(fmap, temp_png_path, layer["bounds"], layer["name"])
+                        os.remove(temp_png_path)
+                    else:
+                        add_image_overlay(fmap, layer["path"], layer["bounds"], layer["name"])
+                elif layer["type"] == "GeoJSON":
+                    if layer["name"] == "Routes":
+                        folium.GeoJson(
+                            layer["data"],
+                            name="Routes",
+                            style_function=lambda x: {
+                                "color": "orange",
+                                "weight": 4,
+                                "opacity": 0.7
+                            }
+                        ).add_to(fmap)
+                    elif layer["name"] == "Polygonale":
+                        folium.GeoJson(
+                            layer["data"],
+                            name="Polygonale",
+                            style_function=lambda x: {
+                                "color": "red",
+                                "weight": 2,
+                                "opacity": 1,
+                                "fillColor": "transparent",
+                                "fillOpacity": 0.1
+                            }
+                        ).add_to(fmap)
+                    elif layer["name"] == "Cours d'eau":
+                        folium.GeoJson(
+                            layer["data"],
+                            name="Cours d'eau",
+                            style_function=lambda x: {
+                                "color": "blue",
+                                "weight": 4,
+                                "opacity": 0.7
+                            }
+                        ).add_to(fmap)
+                added_layers.add(layer["name"])
         st.success("Toutes les couches ont été ajoutées à la carte.")
 
     # Ajout des contrôles de calques
@@ -217,6 +221,9 @@ def main():
 
     # Affichage de la carte
     folium_static(fmap, width=700, height=500)
+
+if __name__ == "__main__":
+    main()
 
 if __name__ == "__main__":
     main()
