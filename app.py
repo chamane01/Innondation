@@ -117,8 +117,8 @@ def main():
     weight = st.slider(f"Choisir l'épaisseur pour {geojson_type}", 1, 10, 4, key="geojson_weight")
     opacity = st.slider(f"Choisir l'opacité pour {geojson_type}", 0.1, 1.0, 0.7, key="geojson_opacity")
 
-    # Bouton pour ajouter les fichiers à la carte
-    if st.button("Ajouter à la carte"):
+    # Bouton pour ajouter une couche
+    if st.button("Ajouter une couche"):
         if uploaded_tiff:
             tiff_path = uploaded_tiff.name
             with open(tiff_path, "wb") as f:
@@ -128,7 +128,7 @@ def main():
             try:
                 reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
                 st.session_state["map_layers"].append(("tiff", reprojected_tiff, tiff_type))
-                st.success(f"Fichier {tiff_type} téléversé et ajouté à la carte.")
+                st.success(f"Fichier {tiff_type} ajouté à la liste des couches.")
             except Exception as e:
                 st.error(f"Erreur lors de la reprojection : {e}")
 
@@ -136,48 +136,53 @@ def main():
             try:
                 geojson_data = json.load(uploaded_geojson)
                 st.session_state["map_layers"].append(("geojson", geojson_data, geojson_type, color, weight, opacity))
-                st.success(f"Fichier {geojson_type} téléversé et ajouté à la carte.")
+                st.success(f"Fichier {geojson_type} ajouté à la liste des couches.")
             except Exception as e:
                 st.error(f"Erreur lors du chargement du GeoJSON : {e}")
 
-    # Affichage des couches de la carte
-    for layer in st.session_state["map_layers"]:
-        if layer[0] == "tiff":
-            tiff_path, tiff_type = layer[1], layer[2]
-            try:
-                with rasterio.open(tiff_path) as src:
-                    bounds = src.bounds
-                    center_lat = (bounds.top + bounds.bottom) / 2
-                    center_lon = (bounds.left + bounds.right) / 2
-                    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+    # Afficher la liste des couches disponibles
+    if st.session_state["map_layers"]:
+        st.subheader("Liste des couches disponibles")
+        layer_names = [f"{layer[2]} ({layer[0]})" for layer in st.session_state["map_layers"]]
+        selected_layers = st.multiselect("Sélectionnez les couches à afficher", layer_names)
 
-                    if tiff_type == "MNT" or tiff_type == "MNS":
-                        # Create a temporary PNG file for the colorized DEM
-                        temp_png_path = f"{tiff_type.lower()}_colored.png"
-                        apply_color_gradient(tiff_path, temp_png_path)
-                        add_image_overlay(fmap, temp_png_path, bounds, tiff_type)
-                        os.remove(temp_png_path)
-                    else:
-                        add_image_overlay(fmap, tiff_path, bounds, tiff_type)
-            except Exception as e:
-                st.error(f"Erreur lors de l'affichage du fichier {tiff_type} : {e}")
+        # Bouton pour afficher les couches sélectionnées sur la carte
+        if st.button("Afficher sur la carte"):
+            for layer in st.session_state["map_layers"]:
+                layer_name = f"{layer[2]} ({layer[0]})"
+                if layer_name in selected_layers:
+                    if layer[0] == "tiff":
+                        tiff_path, tiff_type = layer[1], layer[2]
+                        try:
+                            with rasterio.open(tiff_path) as src:
+                                bounds = src.bounds
+                                if tiff_type == "MNT" or tiff_type == "MNS":
+                                    # Create a temporary PNG file for the colorized DEM
+                                    temp_png_path = f"{tiff_type.lower()}_colored.png"
+                                    apply_color_gradient(tiff_path, temp_png_path)
+                                    add_image_overlay(fmap, temp_png_path, bounds, tiff_type)
+                                    os.remove(temp_png_path)
+                                else:
+                                    add_image_overlay(fmap, tiff_path, bounds, tiff_type)
+                        except Exception as e:
+                            st.error(f"Erreur lors de l'affichage du fichier {tiff_type} : {e}")
 
-        elif layer[0] == "geojson":
-            geojson_data, geojson_type, color, weight, opacity = layer[1], layer[2], layer[3], layer[4], layer[5]
-            try:
-                folium.GeoJson(
-                    geojson_data,
-                    name=geojson_type,
-                    style_function=lambda x, color=color, weight=weight, opacity=opacity: {
-                        "color": color,
-                        "weight": weight,
-                        "opacity": opacity,
-                        "fillColor": "transparent" if geojson_type == "Polygonale" else color,
-                        "fillOpacity": 0.1 if geojson_type == "Polygonale" else opacity,
-                    }
-                ).add_to(fmap)
-            except Exception as e:
-                st.error(f"Erreur lors de l'affichage du fichier {geojson_type} : {e}")
+                    elif layer[0] == "geojson":
+                        geojson_data, geojson_type, color, weight, opacity = layer[1], layer[2], layer[3], layer[4], layer[5]
+                        try:
+                            folium.GeoJson(
+                                geojson_data,
+                                name=geojson_type,
+                                style_function=lambda x, color=color, weight=weight, opacity=opacity: {
+                                    "color": color,
+                                    "weight": weight,
+                                    "opacity": opacity,
+                                    "fillColor": "transparent" if geojson_type == "Polygonale" else color,
+                                    "fillOpacity": 0.1 if geojson_type == "Polygonale" else opacity,
+                                }
+                            ).add_to(fmap)
+                        except Exception as e:
+                            st.error(f"Erreur lors de l'affichage du fichier {geojson_type} : {e}")
 
     # Ajout des contrôles de calques
     folium.LayerControl().add_to(fmap)
