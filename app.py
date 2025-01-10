@@ -190,7 +190,13 @@ def main():
             st.error(f"Erreur lors du chargement du GeoJSON : {e}")
 
     # Display the list of uploaded layers with delete buttons
-    st.subheader("Liste des couches téléversées")
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        st.subheader("Liste des couches téléversées")
+    with col2:
+        if st.button("Rafraîchir la liste", key="refresh_list"):
+            st.experimental_rerun()  # Force refresh the app
+
     if st.session_state["uploaded_layers"]:
         for i, layer in enumerate(st.session_state["uploaded_layers"]):
             col1, col2 = st.columns([4, 1])
@@ -201,7 +207,7 @@ def main():
                     # Remove the layer from the list
                     st.session_state["uploaded_layers"].pop(i)
                     st.success(f"Couche {layer['name']} supprimée.")
-                    # Streamlit will automatically re-run the script
+                    st.experimental_rerun()  # Force refresh the app after deletion
     else:
         st.write("Aucune couche téléversée pour le moment.")
 
