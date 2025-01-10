@@ -235,6 +235,21 @@ def main():
                 st.error(f"Erreur lors du chargement du GeoJSON : {e}")
 
     # Display the list of uploaded layers with delete buttons
+    st.markdown(
+        """
+        <style>
+        .uploaded-layers-box {
+            border: 2px solid #4CAF50;
+            border-radius: 10px;
+            padding: 10px;
+            margin: 10px 0;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
+    st.markdown('<div class="uploaded-layers-box">', unsafe_allow_html=True)
     col1, col2 = st.columns([4, 1])
     with col1:
         st.subheader("Liste des couches téléversées")
@@ -256,6 +271,7 @@ def main():
                     # Streamlit will automatically re-run the script
     else:
         st.write("Aucune couche téléversée pour le moment.")
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # Button to add all uploaded layers to the map
     if st.button("Ajouter la liste de couches à la carte", key="add_layers_button"):
@@ -305,7 +321,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 
 import rasterio
