@@ -195,7 +195,7 @@ def main():
                     # Remove the layer from the list
                     st.session_state["uploaded_layers"].pop(i)
                     st.success(f"Couche {layer['name']} supprimée.")
-                    st.experimental_rerun()  # Refresh the page to update the list
+                    # Streamlit will automatically re-run the script
     else:
         st.write("Aucune couche téléversée pour le moment.")
 
