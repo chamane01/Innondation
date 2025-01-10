@@ -80,6 +80,13 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
             opacity=0.6,
         ).add_to(map_object)
 
+# Function to calculate bounds from GeoJSON
+def calculate_geojson_bounds(geojson_data):
+    """Calculate bounds from a GeoJSON object."""
+    geometries = [feature["geometry"] for feature in geojson_data["features"]]
+    gdf = gpd.GeoDataFrame.from_features(geojson_data)
+    return gdf.total_bounds  # Returns [minx, miny, maxx, maxy]
+
 # Main application
 def main():
     st.title("DESSINER une CARTE ")
@@ -188,6 +195,8 @@ def main():
     if st.button("Ajouter la liste de couches à la carte", key="add_layers_button"):
         # Use a set to track added layers and avoid duplicates
         added_layers = set()
+        all_bounds = []  # To store bounds of all layers
+
         for layer in st.session_state["uploaded_layers"]:
             if layer["name"] not in added_layers:
                 if layer["type"] == "TIFF":
@@ -198,6 +207,8 @@ def main():
                         os.remove(temp_png_path)
                     else:
                         add_image_overlay(fmap, layer["path"], layer["bounds"], layer["name"])
+                    # Add bounds to the list
+                    all_bounds.append([[layer["bounds"].bottom, layer["bounds"].left], [layer["bounds"].top, layer["bounds"].right]])
                 elif layer["type"] == "GeoJSON":
                     if layer["name"] == "Routes":
                         folium.GeoJson(
@@ -231,7 +242,14 @@ def main():
                                 "opacity": 0.7
                             }
                         ).add_to(fmap)
+                    # Calculate bounds for GeoJSON and add to the list
+                    geojson_bounds = calculate_geojson_bounds(layer["data"])
+                    all_bounds.append([[geojson_bounds[1], geojson_bounds[0]], [geojson_bounds[3], geojson_bounds[2]]])
                 added_layers.add(layer["name"])
+
+        # Adjust the map view to fit all bounds
+        if all_bounds:
+            fmap.fit_bounds(all_bounds)
         st.success("Toutes les couches ont été ajoutées à la carte.")
 
     # Ajout des contrôles de calques
@@ -242,6 +260,12 @@ def main():
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path, target_crs="EPSG:4326"):
     try:
