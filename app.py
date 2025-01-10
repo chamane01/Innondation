@@ -234,36 +234,13 @@ def main():
             except Exception as e:
                 st.error(f"Erreur lors du chargement du GeoJSON : {e}")
 
-    # Ajouter un style CSS pour la zone avec un fond légèrement plus foncé
-    st.markdown(
-        """
-        <style>
-        div.stButton > button {
-            color: #000000;  /* Texte des boutons en noir */
-        }
-        div.stMarkdown > div {
-            background-color: #2e2e2e;  /* Couleur de fond plus foncée */
-            padding: 20px;
-            border-radius: 10px;
-            margin: 10px 0;
-            color: #ffffff;  /* Texte en blanc pour contraster avec le fond foncé */
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-
-    # Encadrer la section concernée dans une div avec le style personnalisé
+    # Utiliser un conteneur Streamlit pour créer une zone distincte
     with st.container():
-        st.markdown('<div style="background-color: #2e2e2e; padding: 20px; border-radius: 10px; margin: 10px 0; color: #ffffff;">', unsafe_allow_html=True)
-
-        # Display the list of uploaded layers with delete buttons
-        col1, col2 = st.columns([4, 1])
-        with col1:
-            st.subheader("Liste des couches téléversées")
-        with col2:
-            if st.button("Rafraîchir la liste", key="refresh_list"):
-                pass  # Rafraîchir la liste
+        st.markdown("### Liste des couches téléversées")
+        
+        # Rafraîchir la liste
+        if st.button("Rafraîchir la liste", key="refresh_list"):
+            pass  # Rafraîchir la liste
 
         if st.session_state["uploaded_layers"]:
             for i, layer in enumerate(st.session_state["uploaded_layers"]):
@@ -277,7 +254,7 @@ def main():
         else:
             st.write("Aucune couche téléversée pour le moment.")
 
-        # Button to add all uploaded layers to the map
+        # Bouton pour ajouter toutes les couches à la carte
         if st.button("Ajouter la liste de couches à la carte", key="add_layers_button"):
             added_layers = set()
             all_bounds = []  # Pour stocker les limites de toutes les couches
@@ -313,9 +290,6 @@ def main():
                 fmap.fit_bounds(all_bounds)
             st.success("Toutes les couches ont été ajoutées à la carte.")
 
-        # Fermer la div personnalisée
-        st.markdown('</div>', unsafe_allow_html=True)
-
     # Ajout des contrôles de calques
     folium.LayerControl().add_to(fmap)
 
@@ -324,7 +298,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 
 
