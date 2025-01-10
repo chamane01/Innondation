@@ -140,18 +140,9 @@ def main():
                 )
                 fmap.add_child(draw)
 
-                # Add the layer to the map immediately
-                if tiff_type in ["MNT", "MNS"]:
-                    temp_png_path = f"{tiff_type.lower()}_colored.png"
-                    apply_color_gradient(reprojected_tiff, temp_png_path)
-                    add_image_overlay(fmap, temp_png_path, bounds, tiff_type)
-                    os.remove(temp_png_path)
-                else:
-                    add_image_overlay(fmap, reprojected_tiff, bounds, tiff_type)
-
-                # Store the layer in the uploaded_layers list
+                # Store the layer in the uploaded_layers list without displaying it
                 st.session_state["uploaded_layers"].append({"type": "TIFF", "name": tiff_type, "path": reprojected_tiff, "bounds": bounds})
-                st.success(f"Couche {tiff_type} téléversée et ajoutée à la carte.")
+                st.success(f"Couche {tiff_type} téléversée et ajoutée à la liste des couches.")
         except Exception as e:
             st.error(f"Erreur lors de la reprojection : {e}")
 
@@ -161,43 +152,9 @@ def main():
     if uploaded_geojson:
         try:
             geojson_data = json.load(uploaded_geojson)
-            # Add the layer to the map immediately
-            if geojson_type == "Routes":
-                folium.GeoJson(
-                    geojson_data,
-                    name="Routes",
-                    style_function=lambda x: {
-                        "color": "orange",
-                        "weight": 4,
-                        "opacity": 0.7
-                    }
-                ).add_to(fmap)
-            elif geojson_type == "Polygonale":
-                folium.GeoJson(
-                    geojson_data,
-                    name="Polygonale",
-                    style_function=lambda x: {
-                        "color": "red",
-                        "weight": 2,
-                        "opacity": 1,
-                        "fillColor": "transparent",
-                        "fillOpacity": 0.1
-                    }
-                ).add_to(fmap)
-            elif geojson_type == "Cours d'eau":
-                folium.GeoJson(
-                    geojson_data,
-                    name="Cours d'eau",
-                    style_function=lambda x: {
-                        "color": "blue",
-                        "weight": 4,
-                        "opacity": 0.7
-                    }
-                ).add_to(fmap)
-
-            # Store the layer in the uploaded_layers list
+            # Store the layer in the uploaded_layers list without displaying it
             st.session_state["uploaded_layers"].append({"type": "GeoJSON", "name": geojson_type, "data": geojson_data})
-            st.success(f"Couche {geojson_type} téléversée et ajoutée à la carte.")
+            st.success(f"Couche {geojson_type} téléversée et ajoutée à la liste des couches.")
         except Exception as e:
             st.error(f"Erreur lors du chargement du GeoJSON : {e}")
 
@@ -208,6 +165,52 @@ def main():
             st.write(f"{i + 1}. {layer['name']} ({layer['type']})")
     else:
         st.write("Aucune couche téléversée pour le moment.")
+
+    # Button to add all uploaded layers to the map
+    if st.button("Ajouter la liste de couches à la carte"):
+        for layer in st.session_state["uploaded_layers"]:
+            if layer["type"] == "TIFF":
+                if layer["name"] in ["MNT", "MNS"]:
+                    temp_png_path = f"{layer['name'].lower()}_colored.png"
+                    apply_color_gradient(layer["path"], temp_png_path)
+                    add_image_overlay(fmap, temp_png_path, layer["bounds"], layer["name"])
+                    os.remove(temp_png_path)
+                else:
+                    add_image_overlay(fmap, layer["path"], layer["bounds"], layer["name"])
+            elif layer["type"] == "GeoJSON":
+                if layer["name"] == "Routes":
+                    folium.GeoJson(
+                        layer["data"],
+                        name="Routes",
+                        style_function=lambda x: {
+                            "color": "orange",
+                            "weight": 4,
+                            "opacity": 0.7
+                        }
+                    ).add_to(fmap)
+                elif layer["name"] == "Polygonale":
+                    folium.GeoJson(
+                        layer["data"],
+                        name="Polygonale",
+                        style_function=lambda x: {
+                            "color": "red",
+                            "weight": 2,
+                            "opacity": 1,
+                            "fillColor": "transparent",
+                            "fillOpacity": 0.1
+                        }
+                    ).add_to(fmap)
+                elif layer["name"] == "Cours d'eau":
+                    folium.GeoJson(
+                        layer["data"],
+                        name="Cours d'eau",
+                        style_function=lambda x: {
+                            "color": "blue",
+                            "weight": 4,
+                            "opacity": 0.7
+                        }
+                    ).add_to(fmap)
+        st.success("Toutes les couches ont été ajoutées à la carte.")
 
     # Ajout des contrôles de calques
     folium.LayerControl().add_to(fmap)
