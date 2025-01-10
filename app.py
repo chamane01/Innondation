@@ -119,6 +119,7 @@ def main():
     # Single button for TIFF upload with type selection
     tiff_type = st.selectbox("Sélectionnez le type de fichier TIFF", ["MNT", "MNS", "Orthophoto"], key="tiff_selectbox")
     uploaded_tiff = st.file_uploader(f"Téléverser un fichier TIFF ({tiff_type})", type=["tif", "tiff"], key="tiff_uploader")
+
     if uploaded_tiff:
         tiff_path = uploaded_tiff.name
         with open(tiff_path, "wb") as f:
@@ -147,39 +148,44 @@ def main():
                 )
                 fmap.add_child(draw)
 
-                # Check if the layer already exists in the list
-                layer_exists = any(
-                    layer["type"] == "TIFF" and layer["name"] == tiff_type and layer["path"] == reprojected_tiff
-                    for layer in st.session_state["uploaded_layers"]
-                )
+                # Bouton pour ajouter le fichier TIFF à la liste des couches
+                if st.button(f"Ajouter {tiff_type} à la liste de couches", key=f"add_tiff_{tiff_type}"):
+                    # Check if the layer already exists in the list
+                    layer_exists = any(
+                        layer["type"] == "TIFF" and layer["name"] == tiff_type and layer["path"] == reprojected_tiff
+                        for layer in st.session_state["uploaded_layers"]
+                    )
 
-                if not layer_exists:
-                    # Store the layer in the uploaded_layers list without displaying it
-                    st.session_state["uploaded_layers"].append({"type": "TIFF", "name": tiff_type, "path": reprojected_tiff, "bounds": bounds})
-                    st.success(f"Couche {tiff_type} téléversée et ajoutée à la liste des couches.")
-                else:
-                    st.warning(f"La couche {tiff_type} existe déjà dans la liste.")
+                    if not layer_exists:
+                        # Store the layer in the uploaded_layers list
+                        st.session_state["uploaded_layers"].append({"type": "TIFF", "name": tiff_type, "path": reprojected_tiff, "bounds": bounds})
+                        st.success(f"Couche {tiff_type} ajoutée à la liste des couches.")
+                    else:
+                        st.warning(f"La couche {tiff_type} existe déjà dans la liste.")
         except Exception as e:
             st.error(f"Erreur lors de la reprojection : {e}")
 
     # Single button for GeoJSON upload with type selection
     geojson_type = st.selectbox("Sélectionnez le type de fichier GeoJSON", ["Routes", "Polygonale", "Cours d'eau"], key="geojson_selectbox")
     uploaded_geojson = st.file_uploader(f"Téléverser un fichier GeoJSON ({geojson_type})", type=["geojson"], key="geojson_uploader")
+
     if uploaded_geojson:
         try:
             geojson_data = json.load(uploaded_geojson)
-            # Check if the layer already exists in the list
-            layer_exists = any(
-                layer["type"] == "GeoJSON" and layer["name"] == geojson_type and layer["data"] == geojson_data
-                for layer in st.session_state["uploaded_layers"]
-            )
+            # Bouton pour ajouter le fichier GeoJSON à la liste des couches
+            if st.button(f"Ajouter {geojson_type} à la liste de couches", key=f"add_geojson_{geojson_type}"):
+                # Check if the layer already exists in the list
+                layer_exists = any(
+                    layer["type"] == "GeoJSON" and layer["name"] == geojson_type and layer["data"] == geojson_data
+                    for layer in st.session_state["uploaded_layers"]
+                )
 
-            if not layer_exists:
-                # Store the layer in the uploaded_layers list without displaying it
-                st.session_state["uploaded_layers"].append({"type": "GeoJSON", "name": geojson_type, "data": geojson_data})
-                st.success(f"Couche {geojson_type} téléversée et ajoutée à la liste des couches.")
-            else:
-                st.warning(f"La couche {geojson_type} existe déjà dans la liste.")
+                if not layer_exists:
+                    # Store the layer in the uploaded_layers list
+                    st.session_state["uploaded_layers"].append({"type": "GeoJSON", "name": geojson_type, "data": geojson_data})
+                    st.success(f"Couche {geojson_type} ajoutée à la liste des couches.")
+                else:
+                    st.warning(f"La couche {geojson_type} existe déjà dans la liste.")
         except Exception as e:
             st.error(f"Erreur lors du chargement du GeoJSON : {e}")
 
