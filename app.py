@@ -455,124 +455,7 @@ def main():
 
     
 
-   # ... (le reste du code reste inchangé jusqu'à la partie des boutons d'analyse)
-
-  # ... (le reste du code reste inchangé jusqu'à la partie des boutons d'analyse)
-
-  # ... (le reste du code reste inchangé jusqu'à la partie des boutons d'analyse)
-
-    # Boutons pour les analyses
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        if st.button("Faire une carte"):
-            st.info("Fonctionnalité 'Faire une carte' en cours de développement.")
-    with col2:
-        if st.button("Calculer des volumes"):
-            # Vérifier si les fichiers nécessaires sont disponibles
-            mns_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "MNS"), None)
-            polygon_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "Polygonale"), None)
-
-            if not mns_layer:
-                st.error("Le fichier MNS est requis pour calculer les volumes.")
-            elif not polygon_layer:
-                st.error("Le fichier Polygonale est requis pour calculer les volumes.")
-            else:
-                st.session_state.show_volume_sidebar = True
-                st.session_state.show_tree_sidebar = False  # Désactiver l'autre sidebar
-    with col3:
-        if st.button("Détecter les arbres"):
-            # Vérifier si les fichiers nécessaires sont disponibles
-            mnt_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "MNT"), None)
-            mns_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "MNS"), None)
-
-            if not mnt_layer:
-                st.error("Le fichier MNT est requis pour détecter les arbres.")
-            elif not mns_layer:
-                st.error("Le fichier MNS est requis pour détecter les arbres.")
-            else:
-                st.session_state.show_tree_sidebar = True
-                st.session_state.show_volume_sidebar = False  # Désactiver l'autre sidebar
-
-    # Affichage des paramètres pour le calcul des volumes
-    if st.session_state.get("show_volume_sidebar", False):
-        st.sidebar.title("Paramètres de calcul des volumes")
-
-        # Choix de la méthode
-        method = st.sidebar.radio(
-            "Choisissez la méthode de calcul :",
-            ("Méthode 1 : MNS - MNT", "Méthode 2 : MNS seul"),
-            key="volume_method"
-        )
-
-        # Vérifier si les fichiers nécessaires sont disponibles
-        mns_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "MNS"), None)
-        mnt_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "MNT"), None)
-        polygon_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "Polygonale"), None)
-
-        if mns_layer and polygon_layer and (method == "Méthode 2 : MNS seul" or mnt_layer):
-            try:
-                mns, mns_bounds = load_tiff(mns_layer["path"])
-                if polygon_layer and "path" in polygon_layer:
-                    polygons_gdf = load_and_reproject_shapefile(polygon_layer["path"])
-                else:
-                    st.error("Le fichier Polygonale n'a pas été correctement téléversé ou est manquant.")
-                    return
-
-                if mns is None or polygons_gdf is None:
-                    st.sidebar.error("Erreur lors du chargement des fichiers.")
-                else:
-                    if method == "Méthode 1 : MNS - MNT":
-                        mnt, mnt_bounds = load_tiff(mnt_layer["path"])
-                        if mnt is None or mnt_bounds != mns_bounds:
-                            st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
-                        else:
-                            volume = calculate_volume_in_polygon(mns, mnt, mnt_bounds, polygons_gdf)
-                            st.sidebar.write(f"Volume calculé dans la polygonale : {volume:.2f} m³")
-                    else:
-                        # Saisie de l'altitude de référence pour la méthode 2
-                        reference_altitude = st.sidebar.number_input(
-                            "Entrez l'altitude de référence (en mètres) :",
-                            value=0.0,
-                            step=0.1,
-                            key="reference_altitude"
-                        )
-                        positive_volume, negative_volume, real_volume = calculate_volume_without_mnt(
-                            mns, mns_bounds, polygons_gdf, reference_altitude
-                        )
-                        st.sidebar.write(f"Volume positif (au-dessus de la référence) : {positive_volume:.2f} m³")
-                        st.sidebar.write(f"Volume négatif (en dessous de la référence) : {negative_volume:.2f} m³")
-                        st.sidebar.write(f"Volume réel (différence) : {real_volume:.2f} m³")
-
-                    # Afficher la carte
-                    center_lat = (mns_bounds[1] + mns_bounds[3]) / 2
-                    center_lon = (mns_bounds[0] + mns_bounds[2]) / 2
-                    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-
-                    # Ajouter le MNS
-                    folium.raster_layers.ImageOverlay(
-                        image=mns,
-                        bounds=[[mns_bounds[1], mns_bounds[0]], [mns_bounds[3], mns_bounds[2]]],
-                        opacity=0.7,
-                        name="MNS"
-                    ).add_to(fmap)
-
-                    # Ajouter la polygonale
-                    folium.GeoJson(
-                        polygons_gdf,
-                        name="Polygone",
-                        style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}
-                    ).add_to(fmap)
-
-                    # Ajouter les contrôles de carte
-                    fmap.add_child(MeasureControl(position='topleft'))
-                    fmap.add_child(Draw(position='topleft', export=True))
-                    fmap.add_child(folium.LayerControl(position='topright'))
-
-                    # Afficher la carte
-                    folium_static(fmap, width=700, height=500)
-
-            except Exception as e:
-                st.sidebar.error(f"Erreur lors du calcul du volume : {e}")
+ # ... (le reste du code reste inchangé jusqu'à la partie des boutons d'analyse)
 
     # Affichage des paramètres pour la détection des arbres
     if st.session_state.get("show_tree_sidebar", False):
@@ -595,8 +478,14 @@ def main():
                 else:
                     heights = calculate_heights(mns, mnt)
 
+                    # Afficher des informations sur les données
+                    st.sidebar.write(f"Hauteur minimale dans MNS : {mns.min()}")
+                    st.sidebar.write(f"Hauteur maximale dans MNS : {mns.max()}")
+                    st.sidebar.write(f"Hauteur minimale dans MNT : {mnt.min()}")
+                    st.sidebar.write(f"Hauteur maximale dans MNT : {mnt.max()}")
+
                     # Paramètres de détection
-                    height_threshold = st.sidebar.slider("Seuil de hauteur", 0.1, 20.0, 2.0, 0.1, key="height_threshold")
+                    height_threshold = st.sidebar.slider("Seuil de hauteur", 0.1, 20.0, 1.0, 0.1, key="height_threshold")  # Valeur par défaut réduite à 1.0
                     eps = st.sidebar.slider("Rayon de voisinage", 0.1, 10.0, 2.0, 0.1, key="eps")
                     min_samples = st.sidebar.slider("Min. points pour un cluster", 1, 10, 5, 1, key="min_samples")
 
