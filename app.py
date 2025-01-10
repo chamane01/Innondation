@@ -183,19 +183,11 @@ def main():
         except Exception as e:
             st.error(f"Erreur lors du chargement du GeoJSON : {e}")
 
-    # Display the list of uploaded layers with delete buttons
+    # Display the list of uploaded layers
     st.subheader("Liste des couches téléversées")
     if st.session_state["uploaded_layers"]:
         for i, layer in enumerate(st.session_state["uploaded_layers"]):
-            col1, col2 = st.columns([4, 1])
-            with col1:
-                st.write(f"{i + 1}. {layer['name']} ({layer['type']})")
-            with col2:
-                if st.button(f"Supprimer {layer['name']}", key=f"delete_{i}"):
-                    # Remove the layer from the list
-                    st.session_state["uploaded_layers"].pop(i)
-                    st.success(f"Couche {layer['name']} supprimée de la liste.")
-                    st.experimental_rerun()  # Refresh the page to update the list
+            st.write(f"{i + 1}. {layer['name']} ({layer['type']})")
     else:
         st.write("Aucune couche téléversée pour le moment.")
 
