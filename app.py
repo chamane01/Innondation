@@ -12,107 +12,220 @@ import ezdxf  # Bibliothèque pour créer des fichiers DXF
 from datetime import datetime
 import rasterio
 
-from streamlit_folium import st_folium  # Importation de st_folium
+
 import streamlit as st
 import rasterio
 import numpy as np
-import folium
-from folium import raster_layers
-import io
+import matplotlib.pyplot as plt
+from rasterio.plot import show
+from shapely.geometry import shape, box, mapping
+import geopandas as gpd
+from matplotlib.colors import ListedColormap
+import json
 
-# Fonction pour charger et lire un fichier GeoTIFF
+# Titre de l'application
+st.title("Carte des zones inondées avec niveaux d'eau (sans GDAL)")
+
+# Initialiser session_state pour stocker les données
+if 'flood_data' not in st.session_state:
+    st.session_state.flood_data = {
+        'surface_inondee': None,
+        'niveau_inondation': 0.0
+    }
+
+# Étape 1 : Téléverser un fichier GeoTIFF
+uploaded_tiff = st.file_uploader("Téléversez un fichier GeoTIFF", type=["tif", "tiff"])
+
+if uploaded_tiff is not None:
+    try:
+        # Charger les données GeoTIFF
+        with rasterio.open(uploaded_tiff) as src:
+            elevation = src.read(1)  # Lire la première bande
+            transform = src.transform
+            crs = src.crs
+
+        # Afficher les informations de base du fichier
+        st.write(f"Dimensions: {elevation.shape}")
+        st.write(f"Système de coordonnées: {crs}")
+
+        # Étape 2 : Afficher une prévisualisation du raster
+        st.markdown("### Aperçu des altitudes")
+        fig, ax = plt.subplots(figsize=(8, 6))
+        show(elevation, transform=transform, ax=ax, cmap="terrain")
+        ax.set_title("Carte des altitudes")
+        st.pyplot(fig)
+
+        # Étape 3 : Définir le niveau d'eau
+        niveau_eau = st.slider("Niveau d'inondation (mètres)", float(np.min(elevation)), float(np.max(elevation)), step=0.1)
+        st.session_state.flood_data['niveau_inondation'] = niveau_eau
+
+        # Étape 4 : Calcul des zones inondées
+        zone_inondee = elevation <= niveau_eau
+
+        # Calculer la surface inondée
+        pixel_area = transform[0] * abs(transform[4])  # Taille d'un pixel (en m²)
+        surface_inondee = np.sum(zone_inondee) * pixel_area / 10000  # Surface en hectares
+        st.session_state.flood_data['surface_inondee'] = surface_inondee
+
+        st.write(f"Surface inondée: {surface_inondee:.2f} hectares")
+
+        # Étape 5 : Visualisation des zones inondées
+        st.markdown("### Carte des zones inondées")
+        fig, ax = plt.subplots(figsize=(8, 6))
+        cmap = ListedColormap(["blue", "lightgreen"])
+        show(zone_inondee.astype(int), transform=transform, ax=ax, cmap=cmap)
+        ax.set_title("Zones inondées")
+        st.pyplot(fig)
+
+        # Étape 6 : Exporter les zones inondées en GeoJSON
+        if st.button("Exporter les zones inondées en GeoJSON"):
+            mask = zone_inondee.astype(np.uint8)
+            shapes_generator = rasterio.features.shapes(mask, transform=transform)
+            polygons = [shape for shape, value in shapes_generator if value == 1]
+
+            # Créer un GeoJSON
+            features = [{"type": "Feature", "geometry": mapping(polygon), "properties": {}} for polygon in polygons]
+            geojson = {"type": "FeatureCollection", "features": features}
+
+            # Sauvegarder le fichier
+            with open("zones_inondees.geojson", "w") as f:
+                json.dump(geojson, f)
+
+            st.success("Fichier GeoJSON des zones inondées exporté.")
+
+    except Exception as e:
+        st.error(f"Erreur lors du traitement du fichier GeoTIFF : {e}")
+else:
+    st.warning("Veuillez téléverser un fichier GeoTIFF pour commencer.")
+
+
+import streamlit as st
+import numpy as np
+import rasterio
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+from matplotlib.patches import Patch
+
+# Fonction pour charger le fichier TIFF
 def charger_tiff(fichier_tiff):
     try:
         with rasterio.open(fichier_tiff) as src:
             data = src.read(1)  # Lire la première bande
-            transform = src.transform  # Transformation géographique
-            crs = src.crs  # Système de coordonnées
-            bounds = src.bounds  # (xmin, ymin, xmax, ymax)
+            transform = src.transform
+            crs = src.crs
+            bounds = src.bounds
             return data, transform, crs, bounds
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
         return None, None, None, None
 
-# Fonction pour créer une carte Folium avec l'emprise du TIFF
-def create_map(bounds, data_tiff, transform_tiff):
-    lat_min, lon_min = bounds[1], bounds[0]  # Coin inférieur gauche
-    lat_max, lon_max = bounds[3], bounds[2]  # Coin supérieur droit
+# Fonction pour afficher la carte de profondeur
+def afficher_carte_profondeur(data_tiff, bounds_tiff):
+    # Étendue géographique (extent)
+    extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
 
-    # Créer la carte centrée sur le centre de l'emprise du TIFF
-    map_center = [(lat_max + lat_min) / 2, (lon_max + lon_min) / 2]
-    m = folium.Map(location=map_center, zoom_start=13)
+    # Créer la figure
+    fig, ax = plt.subplots(figsize=(8, 6))
+    im = ax.imshow(data_tiff, cmap='terrain', extent=extent)
+    cbar = fig.colorbar(im, ax=ax, label="Altitude (m)")
 
-    # Ajouter la carte OpenStreetMap
-    folium.TileLayer('OpenStreetMap').add_to(m)
+    # Titre et axes
+    ax.set_title("Carte de profondeur (terrain)", fontsize=14)
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    st.pyplot(fig)
 
-    # Ajouter l'image raster du fichier TIFF sur la carte
-    img_overlay = raster_layers.ImageOverlay(
-        image=data_tiff,
-        bounds=[[lat_min, lon_min], [lat_max, lon_max]],
-        opacity=0.6
+# Fonction pour afficher la zone inondée en magenta
+def afficher_zone_inondee(data_tiff, niveau_inondation, bounds_tiff):
+    # Étendue géographique (extent)
+    extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
+
+    # Créer un masque des pixels inondés
+    inondation_mask = data_tiff <= niveau_inondation
+    nb_pixels_inondes = np.sum(inondation_mask)
+
+    # Créer une nouvelle couche pour la zone inondée (valeurs 1 pour inondées, 0 sinon)
+    zone_inondee = np.zeros_like(data_tiff, dtype=np.uint8)
+    zone_inondee[inondation_mask] = 1
+
+    # Créer la figure
+    fig, ax = plt.subplots(figsize=(8, 6))
+    
+    # Afficher l'image de fond (altitudes)
+    im = ax.imshow(data_tiff, cmap='terrain', extent=extent)
+    cbar = fig.colorbar(im, ax=ax, label="Altitude (m)")
+
+    # Superposer la couche des zones inondées en magenta
+    cmap = ListedColormap(["none", "red"])
+    ax.imshow(
+        zone_inondee,
+        cmap=cmap,
+        alpha=0.5,
+        extent=extent
     )
-    img_overlay.add_to(m)
 
-    return m
+    # Ajouter une légende manuelle pour les zones inondées
+    legend_elements = [
+        Patch(facecolor='red', edgecolor='none', label='Zone inondée (red)')
+    ]
+    ax.legend(handles=legend_elements, loc='upper right')
 
-# Définition de l'application Streamlit
+    # Titre et axes
+    ax.set_title(f"Zone inondée pour une cote de {niveau_inondation:.2f} m", fontsize=14)
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+
+    # Afficher le nombre de pixels inondés
+    st.write(f"**Nombre de pixels inondés :** {nb_pixels_inondes}")
+    st.pyplot(fig)
+
+# Interface Streamlit
 def main():
     st.title("Analyse des zones inondées")
-    st.markdown("## Téléversez un fichier GeoTIFF pour analyser les zones inondées.")
+    st.markdown("### Téléchargez un fichier GeoTIFF pour analyser les zones inondées.")
 
-    # Téléchargement du fichier GeoTIFF
-    uploaded_tiff_file = st.file_uploader("Choisissez un fichier GeoTIFF (.tif)", type=["tif"])
-    
-    if uploaded_tiff_file is not None:
-        # Charger les données GeoTIFF
-        data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(uploaded_tiff_file)
+    # Téléversement du fichier GeoTIFF
+    fichier_tiff = st.file_uploader("Téléchargez un fichier GeoTIFF", type=["tif"])
+
+    if fichier_tiff is not None:
+        # Charger le fichier TIFF
+        data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
 
         if data_tiff is not None:
-            # Affichage des informations de base
-            st.write("### Informations sur le fichier GeoTIFF")
-            st.write(f"- Dimensions : {data_tiff.shape}")
-            st.write(f"- Valeurs min : {data_tiff.min()}, max : {data_tiff.max()}")
-            st.write(f"- Système de coordonnées : {crs_tiff}")
-            
-            # Visualisation initiale avec Folium
-            st.write("### Carte d'altitude")
-            m = create_map(bounds_tiff, data_tiff, transform_tiff)
-            
-            # Affichage de la carte
-            st.write("Carte avec le fond OSM et les données TIFF")
-            st_folium(m, width=700, height=500)
+            # Afficher les informations de base
+            st.write(f"Dimensions : {data_tiff.shape}")
+            st.write(f"Altitude min : {data_tiff.min()}, max : {data_tiff.max()}")
 
-            # Sélection du niveau d'eau
-            niveau_inondation = st.slider("Définir le niveau d'inondation (m)", 
-                                          float(data_tiff.min()), float(data_tiff.max()), step=0.1)
-            
-            if st.button("Calculer et afficher la zone inondée"):
-                # Calcul du masque d'inondation
-                inondation_mask = data_tiff <= niveau_inondation
-                surface_inondee = np.sum(inondation_mask) * (transform_tiff[0] * abs(transform_tiff[4])) / 10_000  # En hectares
-                st.write(f"### Surface inondée : {surface_inondee:.2f} hectares")
+            # Afficher la carte de profondeur
+            if st.checkbox("Afficher la carte de profondeur"):
+                afficher_carte_profondeur(data_tiff, bounds_tiff)
 
-                # Afficher la carte avec les zones inondées
-                st.write("### Carte avec la zone inondée affichée")
-                m = create_map(bounds_tiff, data_tiff, transform_tiff)
+            # Sélectionner le niveau d'inondation
+            niveau_inondation = st.slider(
+                "Choisissez le niveau d'inondation",
+                float(data_tiff.min()),
+                float(data_tiff.max()),
+                float(np.percentile(data_tiff, 50)),  # Par défaut, la médiane
+                step=0.1
+            )
 
-                # Superposition du masque d'inondation
-                lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
-                lat_max, lon_max = bounds_tiff[3], bounds_tiff[2]
-
-                inondation_mask_overlay = raster_layers.ImageOverlay(
-                    image=inondation_mask.astype(np.uint8) * 255,  # Assurez-vous que l'image est en valeurs 0-255
-                    bounds=[[lat_min, lon_min], [lat_max, lon_max]],
-                    opacity=0.6,
-                    colormap='Blues'
-                )
-                inondation_mask_overlay.add_to(m)
-                
-                # Afficher la carte
-                st_folium(m, width=700, height=500)
+            # Bouton pour afficher la zone inondée
+            if st.button("Afficher la zone inondée"):
+                afficher_zone_inondee(data_tiff, niveau_inondation, bounds_tiff)
 
 if __name__ == "__main__":
     main()
+
+
+
+
+
+
+
+
+
+
+
 
 
 
