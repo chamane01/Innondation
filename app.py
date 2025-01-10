@@ -446,6 +446,8 @@ def main():
 
    # ... (le reste du code reste inchangé jusqu'à la partie des boutons d'analyse)
 
+  # ... (le reste du code reste inchangé jusqu'à la partie des boutons d'analyse)
+
     # Boutons pour les analyses
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -495,13 +497,17 @@ def main():
         polygon_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "Polygonale"), None)
 
         if mns_layer and polygon_layer and (method == "Méthode 2 : MNS seul" or mnt_layer):
-            mns, mns_bounds = load_tiff(mns_layer["path"])
-            polygons_gdf = load_and_reproject_shapefile(polygon_layer["path"])
+            try:
+                mns, mns_bounds = load_tiff(mns_layer["path"])
+                if polygon_layer and "path" in polygon_layer:
+                    polygons_gdf = load_and_reproject_shapefile(polygon_layer["path"])
+                else:
+                    st.error("Le fichier Polygonale n'a pas été correctement téléversé ou est manquant.")
+                    return
 
-            if mns is None or polygons_gdf is None:
-                st.sidebar.error("Erreur lors du chargement des fichiers.")
-            else:
-                try:
+                if mns is None or polygons_gdf is None:
+                    st.sidebar.error("Erreur lors du chargement des fichiers.")
+                else:
                     if method == "Méthode 1 : MNS - MNT":
                         mnt, mnt_bounds = load_tiff(mnt_layer["path"])
                         if mnt is None or mnt_bounds != mns_bounds:
@@ -552,8 +558,8 @@ def main():
                     # Afficher la carte
                     folium_static(fmap, width=700, height=500)
 
-                except Exception as e:
-                    st.sidebar.error(f"Erreur lors du calcul du volume : {e}")
+            except Exception as e:
+                st.sidebar.error(f"Erreur lors du calcul du volume : {e}")
 
     # Affichage des paramètres pour la détection des arbres
     if st.session_state.get("show_tree_sidebar", False):
@@ -565,62 +571,67 @@ def main():
         polygon_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "Polygonale"), None)
 
         if mnt_layer and mns_layer:
-            mnt, mnt_bounds = load_tiff(mnt_layer["path"])
-            mns, mns_bounds = load_tiff(mns_layer["path"])
+            try:
+                mnt, mnt_bounds = load_tiff(mnt_layer["path"])
+                mns, mns_bounds = load_tiff(mns_layer["path"])
 
-            if mnt is None or mns is None:
-                st.sidebar.error("Erreur lors du chargement des fichiers.")
-            elif mnt_bounds != mns_bounds:
-                st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
-            else:
-                heights = calculate_heights(mns, mnt)
+                if mnt is None or mns is None:
+                    st.sidebar.error("Erreur lors du chargement des fichiers.")
+                elif mnt_bounds != mns_bounds:
+                    st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
+                else:
+                    heights = calculate_heights(mns, mnt)
 
-                # Paramètres de détection
-                height_threshold = st.sidebar.slider("Seuil de hauteur", 0.1, 20.0, 2.0, 0.1, key="height_threshold")
-                eps = st.sidebar.slider("Rayon de voisinage", 0.1, 10.0, 2.0, 0.1, key="eps")
-                min_samples = st.sidebar.slider("Min. points pour un cluster", 1, 10, 5, 1, key="min_samples")
+                    # Paramètres de détection
+                    height_threshold = st.sidebar.slider("Seuil de hauteur", 0.1, 20.0, 2.0, 0.1, key="height_threshold")
+                    eps = st.sidebar.slider("Rayon de voisinage", 0.1, 10.0, 2.0, 0.1, key="eps")
+                    min_samples = st.sidebar.slider("Min. points pour un cluster", 1, 10, 5, 1, key="min_samples")
 
-                # Détection et visualisation
-                if st.sidebar.button("Lancer la détection"):
-                    coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
-                    num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
-                    st.sidebar.write(f"Nombre d'arbres détectés : {num_trees}")
+                    # Détection et visualisation
+                    if st.sidebar.button("Lancer la détection"):
+                        coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
+                        if coords is not None and tree_clusters is not None:
+                            num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
+                            st.sidebar.write(f"Nombre d'arbres détectés : {num_trees}")
 
-                    centroids = calculate_cluster_centroids(coords, tree_clusters)
+                            centroids = calculate_cluster_centroids(coords, tree_clusters)
 
-                    # Mise à jour de la carte
-                    center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
-                    center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
-                    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+                            # Mise à jour de la carte
+                            center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
+                            center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
+                            fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-                    folium.raster_layers.ImageOverlay(
-                        image=mnt,
-                        bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
-                        opacity=0.5,
-                        name="MNT"
-                    ).add_to(fmap)
+                            folium.raster_layers.ImageOverlay(
+                                image=mnt,
+                                bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
+                                opacity=0.5,
+                                name="MNT"
+                            ).add_to(fmap)
 
-                    add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
+                            add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
 
-                    # Ajout des polygones (optionnel)
-                    if polygon_layer:
-                        polygons_gdf = load_and_reproject_shapefile(polygon_layer["path"])
-                        folium.GeoJson(
-                            polygons_gdf,
-                            name="Polygones",
-                            style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}
-                        ).add_to(fmap)
+                            # Ajout des polygones (optionnel)
+                            if polygon_layer and "path" in polygon_layer:
+                                polygons_gdf = load_and_reproject_shapefile(polygon_layer["path"])
+                                folium.GeoJson(
+                                    polygons_gdf,
+                                    name="Polygones",
+                                    style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}
+                                ).add_to(fmap)
 
-                        # Compter les arbres à l'intérieur de la polygonale
-                        tree_count_in_polygon = count_trees_in_polygon(centroids, mnt_bounds, mnt.shape, polygons_gdf)
-                        st.sidebar.write(f"Nombre d'arbres dans la polygonale : {tree_count_in_polygon}")
+                                # Compter les arbres à l'intérieur de la polygonale
+                                tree_count_in_polygon = count_trees_in_polygon(centroids, mnt_bounds, mnt.shape, polygons_gdf)
+                                st.sidebar.write(f"Nombre d'arbres dans la polygonale : {tree_count_in_polygon}")
 
-                    fmap.add_child(MeasureControl(position='topleft'))
-                    fmap.add_child(Draw(position='topleft', export=True))
-                    fmap.add_child(folium.LayerControl(position='topright'))
+                            fmap.add_child(MeasureControl(position='topleft'))
+                            fmap.add_child(Draw(position='topleft', export=True))
+                            fmap.add_child(folium.LayerControl(position='topright'))
 
-                    # Afficher la carte
-                    folium_static(fmap, width=700, height=500)
+                            # Afficher la carte
+                            folium_static(fmap, width=700, height=500)
+
+            except Exception as e:
+                st.sidebar.error(f"Erreur lors de la détection des arbres : {e}")
 
 if __name__ == "__main__":
     main()
