@@ -88,22 +88,6 @@ def main():
     if "map_layers" not in st.session_state:
         st.session_state["map_layers"] = []
 
-    # Initialize map
-    fmap = folium.Map(location=[0, 0], zoom_start=2)
-    fmap.add_child(MeasureControl(position="topleft"))
-    draw = Draw(
-        position="topleft",
-        export=True,
-        draw_options={
-            "polyline": {"shapeOptions": {"color": "orange", "weight": 4, "opacity": 0.7}},
-            "polygon": {"shapeOptions": {"color": "green", "weight": 4, "opacity": 0.7}},
-            "rectangle": {"shapeOptions": {"color": "red", "weight": 4, "opacity": 0.7}},
-            "circle": {"shapeOptions": {"color": "purple", "weight": 4, "opacity": 0.7}},
-        },
-        edit_options={"edit": True},
-    )
-    fmap.add_child(draw)
-
     # Téléversement des fichiers TIFF
     st.subheader("Téléverser des fichiers TIFF")
     uploaded_tiff = st.file_uploader("Choisir un fichier TIFF (Orthophoto, MNT, MNS)", type=["tif", "tiff"], key="tiff_uploader")
@@ -152,8 +136,25 @@ def main():
         layer_names = [f"{layer[2]} ({layer[0]})" for layer in st.session_state["map_layers"]]
         selected_layers = st.multiselect("Sélectionnez les couches à afficher", layer_names)
 
-        # Bouton pour afficher les couches sélectionnées sur la carte
-        if st.button("Afficher sur la carte"):
+        # Bouton pour ajouter les couches sélectionnées à la carte
+        if st.button("Ajouter à la carte"):
+            # Réinitialiser la carte
+            fmap = folium.Map(location=[0, 0], zoom_start=2)
+            fmap.add_child(MeasureControl(position="topleft"))
+            draw = Draw(
+                position="topleft",
+                export=True,
+                draw_options={
+                    "polyline": {"shapeOptions": {"color": "orange", "weight": 4, "opacity": 0.7}},
+                    "polygon": {"shapeOptions": {"color": "green", "weight": 4, "opacity": 0.7}},
+                    "rectangle": {"shapeOptions": {"color": "red", "weight": 4, "opacity": 0.7}},
+                    "circle": {"shapeOptions": {"color": "purple", "weight": 4, "opacity": 0.7}},
+                },
+                edit_options={"edit": True},
+            )
+            fmap.add_child(draw)
+
+            # Ajouter les couches sélectionnées à la carte
             for layer in st.session_state["map_layers"]:
                 layer_name = f"{layer[2]} ({layer[0]})"
                 if layer_name in selected_layers:
@@ -190,11 +191,11 @@ def main():
                         except Exception as e:
                             st.error(f"Erreur lors de l'affichage du fichier {geojson_type} : {e}")
 
-    # Ajout des contrôles de calques
-    folium.LayerControl().add_to(fmap)
+            # Ajout des contrôles de calques
+            folium.LayerControl().add_to(fmap)
 
-    # Affichage de la carte
-    folium_static(fmap, width=700, height=500)
+            # Affichage de la carte
+            folium_static(fmap, width=700, height=500)
 
 if __name__ == "__main__":
     main()
