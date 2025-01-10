@@ -195,7 +195,8 @@ def main():
         st.subheader("Liste des couches téléversées")
     with col2:
         if st.button("Rafraîchir la liste", key="refresh_list"):
-            st.experimental_rerun()  # Force refresh the app
+            # No need to call st.experimental_rerun(), Streamlit will automatically re-run the script
+            pass
 
     if st.session_state["uploaded_layers"]:
         for i, layer in enumerate(st.session_state["uploaded_layers"]):
@@ -207,7 +208,7 @@ def main():
                     # Remove the layer from the list
                     st.session_state["uploaded_layers"].pop(i)
                     st.success(f"Couche {layer['name']} supprimée.")
-                    st.experimental_rerun()  # Force refresh the app after deletion
+                    # Streamlit will automatically re-run the script
     else:
         st.write("Aucune couche téléversée pour le moment.")
 
@@ -280,7 +281,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 
 
