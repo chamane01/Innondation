@@ -132,10 +132,6 @@ def main():
     )
     fmap.add_child(draw)
 
-    # Section pour le téléversement des fichiers TIFF
-    st.markdown("### Téléversement des fichiers TIFF")
-    st.markdown("Sélectionnez le type de fichier TIFF et téléversez-le pour l'ajouter à la carte.")
-    
     # Single button for TIFF upload with type selection
     tiff_type = st.selectbox(
         "Sélectionnez le type de fichier TIFF",
@@ -193,13 +189,6 @@ def main():
             except Exception as e:
                 st.error(f"Erreur lors de la reprojection : {e}")
 
-    # Espace entre les sections
-    st.markdown("---")
-
-    # Section pour le téléversement des fichiers GeoJSON
-    st.markdown("### Téléversement des fichiers GeoJSON")
-    st.markdown("Sélectionnez le type de fichier GeoJSON et téléversez-le pour l'ajouter à la carte.")
-
     # Single button for GeoJSON upload with type selection
     geojson_type = st.selectbox(
         "Sélectionnez le type de fichier GeoJSON",
@@ -245,16 +234,10 @@ def main():
             except Exception as e:
                 st.error(f"Erreur lors du chargement du GeoJSON : {e}")
 
-    # Espace entre les sections
-    st.markdown("---")
-
-    # Section pour afficher la liste des couches téléversées
-    st.markdown("### Liste des couches téléversées")
-    st.markdown("Voici la liste des couches que vous avez ajoutées. Vous pouvez les supprimer ou les ajouter à la carte.")
-
+    # Display the list of uploaded layers with delete buttons
     col1, col2 = st.columns([4, 1])
     with col1:
-        st.subheader("Liste des couches")
+        st.subheader("Liste des couches téléversées")
     with col2:
         if st.button("Rafraîchir la liste", key="refresh_list"):
             # No need to call st.experimental_rerun(), Streamlit will automatically re-run the script
@@ -274,10 +257,7 @@ def main():
     else:
         st.write("Aucune couche téléversée pour le moment.")
 
-    # Espace entre les sections
-    st.markdown("---")
-
-    # Bouton pour ajouter toutes les couches à la carte
+    # Button to add all uploaded layers to the map
     if st.button("Ajouter la liste de couches à la carte", key="add_layers_button"):
         # Use a set to track added layers and avoid duplicates
         added_layers = set()
