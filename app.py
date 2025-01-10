@@ -195,17 +195,6 @@ if __name__ == "__main__":
 
 
 
-import rasterio
-from rasterio.warp import transform_bounds
-import geopandas as gpd
-import numpy as np
-from sklearn.cluster import DBSCAN
-import folium
-from folium.plugins import MeasureControl, Draw
-import streamlit as st
-from shapely.geometry import Point
-from streamlit_folium import folium_static
-
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path, target_crs="EPSG:4326"):
     try:
@@ -348,7 +337,7 @@ def count_trees_in_polygon(centroids, bounds, image_shape, polygon_gdf):
     return tree_count
 
 # Streamlit app
-st.title("Application de cartographie et d'analyse")
+st.title("Outils et d'analyses")
 
 # Boutons sous la carte
 col1, col2, col3 = st.columns(3)
