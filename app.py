@@ -388,7 +388,7 @@ def count_trees_in_polygon(centroids, bounds, image_shape, polygon_gdf):
     return tree_count
 
 # Streamlit app
-st.title("Application de cartographie et d'analyse")
+st.title("Outils d'analyses")
 
 # Boutons sous la carte
 col1, col2, col3 = st.columns(3)
