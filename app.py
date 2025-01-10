@@ -444,6 +444,8 @@ def main():
     # Affichage de la carte
     folium_static(fmap, width=700, height=500)
 
+   # ... (le reste du code reste inchangé jusqu'à la partie des boutons d'analyse)
+
     # Boutons pour les analyses
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -451,12 +453,30 @@ def main():
             st.info("Fonctionnalité 'Faire une carte' en cours de développement.")
     with col2:
         if st.button("Calculer des volumes"):
-            st.session_state.show_volume_sidebar = True
-            st.session_state.show_tree_sidebar = False  # Désactiver l'autre sidebar
+            # Vérifier si les fichiers nécessaires sont disponibles
+            mns_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "MNS"), None)
+            polygon_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "Polygonale"), None)
+
+            if not mns_layer:
+                st.error("Le fichier MNS est requis pour calculer les volumes.")
+            elif not polygon_layer:
+                st.error("Le fichier Polygonale est requis pour calculer les volumes.")
+            else:
+                st.session_state.show_volume_sidebar = True
+                st.session_state.show_tree_sidebar = False  # Désactiver l'autre sidebar
     with col3:
         if st.button("Détecter les arbres"):
-            st.session_state.show_tree_sidebar = True
-            st.session_state.show_volume_sidebar = False  # Désactiver l'autre sidebar
+            # Vérifier si les fichiers nécessaires sont disponibles
+            mnt_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "MNT"), None)
+            mns_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "MNS"), None)
+
+            if not mnt_layer:
+                st.error("Le fichier MNT est requis pour détecter les arbres.")
+            elif not mns_layer:
+                st.error("Le fichier MNS est requis pour détecter les arbres.")
+            else:
+                st.session_state.show_tree_sidebar = True
+                st.session_state.show_volume_sidebar = False  # Désactiver l'autre sidebar
 
     # Affichage des paramètres pour le calcul des volumes
     if st.session_state.get("show_volume_sidebar", False):
