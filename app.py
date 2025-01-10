@@ -87,6 +87,22 @@ def calculate_geojson_bounds(geojson_data):
     gdf = gpd.GeoDataFrame.from_features(geojson_data)
     return gdf.total_bounds  # Returns [minx, miny, maxx, maxy]
 
+# Dictionnaire des couleurs pour les types de fichiers GeoJSON
+geojson_colors = {
+    "Routes": "orange",
+    "Pistes": "brown",
+    "Plantations": "green",
+    "Bâtiments": "gray",
+    "Électricité": "yellow",
+    "Assainissements": "blue",
+    "Villages": "purple",
+    "Villes": "red",
+    "Chemin de fer": "black",
+    "Parc et réserves": "darkgreen",
+    "Cours d'eau": "lightblue",
+    "Polygonale": "pink"
+}
+
 # Main application
 def main():
     st.title("DESSINER une CARTE ")
@@ -117,77 +133,106 @@ def main():
     fmap.add_child(draw)
 
     # Single button for TIFF upload with type selection
-    tiff_type = st.selectbox("Sélectionnez le type de fichier TIFF", ["MNT", "MNS", "Orthophoto"], key="tiff_selectbox")
-    uploaded_tiff = st.file_uploader(f"Téléverser un fichier TIFF ({tiff_type})", type=["tif", "tiff"], key="tiff_uploader")
+    tiff_type = st.selectbox(
+        "Sélectionnez le type de fichier TIFF",
+        options=["MNT", "MNS", "Orthophoto"],
+        index=None,  # Aucune option sélectionnée par défaut
+        placeholder="Veuillez sélectionner",
+        key="tiff_selectbox"
+    )
 
-    if uploaded_tiff:
-        tiff_path = uploaded_tiff.name
-        with open(tiff_path, "wb") as f:
-            f.write(uploaded_tiff.read())
+    if tiff_type:
+        uploaded_tiff = st.file_uploader(f"Téléverser un fichier TIFF ({tiff_type})", type=["tif", "tiff"], key="tiff_uploader")
 
-        st.write(f"Reprojection du fichier TIFF ({tiff_type})...")
-        try:
-            reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
-            with rasterio.open(reprojected_tiff) as src:
-                bounds = src.bounds
-                center_lat = (bounds.top + bounds.bottom) / 2
-                center_lon = (bounds.left + bounds.right) / 2
-                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+        if uploaded_tiff:
+            tiff_path = uploaded_tiff.name
+            with open(tiff_path, "wb") as f:
+                f.write(uploaded_tiff.read())
 
-                fmap.add_child(MeasureControl(position="topleft"))
-                draw = Draw(
-                    position="topleft",
-                    export=True,
-                    draw_options={
-                        "polyline": {"shapeOptions": {"color": "orange", "weight": 4, "opacity": 0.7}},
-                        "polygon": {"shapeOptions": {"color": "green", "weight": 4, "opacity": 0.7}},
-                        "rectangle": {"shapeOptions": {"color": "red", "weight": 4, "opacity": 0.7}},
-                        "circle": {"shapeOptions": {"color": "purple", "weight": 4, "opacity": 0.7}},
-                    },
-                    edit_options={"edit": True},
-                )
-                fmap.add_child(draw)
+            st.write(f"Reprojection du fichier TIFF ({tiff_type})...")
+            try:
+                reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
+                with rasterio.open(reprojected_tiff) as src:
+                    bounds = src.bounds
+                    center_lat = (bounds.top + bounds.bottom) / 2
+                    center_lon = (bounds.left + bounds.right) / 2
+                    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-                # Bouton pour ajouter le fichier TIFF à la liste des couches
-                if st.button(f"Ajouter {tiff_type} à la liste de couches", key=f"add_tiff_{tiff_type}"):
+                    fmap.add_child(MeasureControl(position="topleft"))
+                    draw = Draw(
+                        position="topleft",
+                        export=True,
+                        draw_options={
+                            "polyline": {"shapeOptions": {"color": "orange", "weight": 4, "opacity": 0.7}},
+                            "polygon": {"shapeOptions": {"color": "green", "weight": 4, "opacity": 0.7}},
+                            "rectangle": {"shapeOptions": {"color": "red", "weight": 4, "opacity": 0.7}},
+                            "circle": {"shapeOptions": {"color": "purple", "weight": 4, "opacity": 0.7}},
+                        },
+                        edit_options={"edit": True},
+                    )
+                    fmap.add_child(draw)
+
+                    # Bouton pour ajouter le fichier TIFF à la liste des couches
+                    if st.button(f"Ajouter {tiff_type} à la liste de couches", key=f"add_tiff_{tiff_type}"):
+                        # Check if the layer already exists in the list
+                        layer_exists = any(
+                            layer["type"] == "TIFF" and layer["name"] == tiff_type and layer["path"] == reprojected_tiff
+                            for layer in st.session_state["uploaded_layers"]
+                        )
+
+                        if not layer_exists:
+                            # Store the layer in the uploaded_layers list
+                            st.session_state["uploaded_layers"].append({"type": "TIFF", "name": tiff_type, "path": reprojected_tiff, "bounds": bounds})
+                            st.success(f"Couche {tiff_type} ajoutée à la liste des couches.")
+                        else:
+                            st.warning(f"La couche {tiff_type} existe déjà dans la liste.")
+            except Exception as e:
+                st.error(f"Erreur lors de la reprojection : {e}")
+
+    # Single button for GeoJSON upload with type selection
+    geojson_type = st.selectbox(
+        "Sélectionnez le type de fichier GeoJSON",
+        options=[
+            "Routes",
+            "Pistes",
+            "Plantations",
+            "Bâtiments",
+            "Électricité",
+            "Assainissements",
+            "Villages",
+            "Villes",
+            "Chemin de fer",
+            "Parc et réserves",
+            "Cours d'eau",
+            "Polygonale"
+        ],
+        index=None,  # Aucune option sélectionnée par défaut
+        placeholder="Veuillez sélectionner",
+        key="geojson_selectbox"
+    )
+
+    if geojson_type:
+        uploaded_geojson = st.file_uploader(f"Téléverser un fichier GeoJSON ({geojson_type})", type=["geojson"], key="geojson_uploader")
+
+        if uploaded_geojson:
+            try:
+                geojson_data = json.load(uploaded_geojson)
+                # Bouton pour ajouter le fichier GeoJSON à la liste des couches
+                if st.button(f"Ajouter {geojson_type} à la liste de couches", key=f"add_geojson_{geojson_type}"):
                     # Check if the layer already exists in the list
                     layer_exists = any(
-                        layer["type"] == "TIFF" and layer["name"] == tiff_type and layer["path"] == reprojected_tiff
+                        layer["type"] == "GeoJSON" and layer["name"] == geojson_type and layer["data"] == geojson_data
                         for layer in st.session_state["uploaded_layers"]
                     )
 
                     if not layer_exists:
                         # Store the layer in the uploaded_layers list
-                        st.session_state["uploaded_layers"].append({"type": "TIFF", "name": tiff_type, "path": reprojected_tiff, "bounds": bounds})
-                        st.success(f"Couche {tiff_type} ajoutée à la liste des couches.")
+                        st.session_state["uploaded_layers"].append({"type": "GeoJSON", "name": geojson_type, "data": geojson_data})
+                        st.success(f"Couche {geojson_type} ajoutée à la liste des couches.")
                     else:
-                        st.warning(f"La couche {tiff_type} existe déjà dans la liste.")
-        except Exception as e:
-            st.error(f"Erreur lors de la reprojection : {e}")
-
-    # Single button for GeoJSON upload with type selection
-    geojson_type = st.selectbox("Sélectionnez le type de fichier GeoJSON", ["Routes", "Polygonale", "Cours d'eau"], key="geojson_selectbox")
-    uploaded_geojson = st.file_uploader(f"Téléverser un fichier GeoJSON ({geojson_type})", type=["geojson"], key="geojson_uploader")
-
-    if uploaded_geojson:
-        try:
-            geojson_data = json.load(uploaded_geojson)
-            # Bouton pour ajouter le fichier GeoJSON à la liste des couches
-            if st.button(f"Ajouter {geojson_type} à la liste de couches", key=f"add_geojson_{geojson_type}"):
-                # Check if the layer already exists in the list
-                layer_exists = any(
-                    layer["type"] == "GeoJSON" and layer["name"] == geojson_type and layer["data"] == geojson_data
-                    for layer in st.session_state["uploaded_layers"]
-                )
-
-                if not layer_exists:
-                    # Store the layer in the uploaded_layers list
-                    st.session_state["uploaded_layers"].append({"type": "GeoJSON", "name": geojson_type, "data": geojson_data})
-                    st.success(f"Couche {geojson_type} ajoutée à la liste des couches.")
-                else:
-                    st.warning(f"La couche {geojson_type} existe déjà dans la liste.")
-        except Exception as e:
-            st.error(f"Erreur lors du chargement du GeoJSON : {e}")
+                        st.warning(f"La couche {geojson_type} existe déjà dans la liste.")
+            except Exception as e:
+                st.error(f"Erreur lors du chargement du GeoJSON : {e}")
 
     # Display the list of uploaded layers with delete buttons
     col1, col2 = st.columns([4, 1])
@@ -231,38 +276,17 @@ def main():
                     # Add bounds to the list
                     all_bounds.append([[layer["bounds"].bottom, layer["bounds"].left], [layer["bounds"].top, layer["bounds"].right]])
                 elif layer["type"] == "GeoJSON":
-                    if layer["name"] == "Routes":
-                        folium.GeoJson(
-                            layer["data"],
-                            name="Routes",
-                            style_function=lambda x: {
-                                "color": "orange",
-                                "weight": 4,
-                                "opacity": 0.7
-                            }
-                        ).add_to(fmap)
-                    elif layer["name"] == "Polygonale":
-                        folium.GeoJson(
-                            layer["data"],
-                            name="Polygonale",
-                            style_function=lambda x: {
-                                "color": "red",
-                                "weight": 2,
-                                "opacity": 1,
-                                "fillColor": "transparent",
-                                "fillOpacity": 0.1
-                            }
-                        ).add_to(fmap)
-                    elif layer["name"] == "Cours d'eau":
-                        folium.GeoJson(
-                            layer["data"],
-                            name="Cours d'eau",
-                            style_function=lambda x: {
-                                "color": "blue",
-                                "weight": 4,
-                                "opacity": 0.7
-                            }
-                        ).add_to(fmap)
+                    # Get the color for the GeoJSON layer
+                    color = geojson_colors.get(layer["name"], "blue")  # Default to blue if not found
+                    folium.GeoJson(
+                        layer["data"],
+                        name=layer["name"],
+                        style_function=lambda x, color=color: {
+                            "color": color,
+                            "weight": 4,
+                            "opacity": 0.7
+                        }
+                    ).add_to(fmap)
                     # Calculate bounds for GeoJSON and add to the list
                     geojson_bounds = calculate_geojson_bounds(layer["data"])
                     all_bounds.append([[geojson_bounds[1], geojson_bounds[0]], [geojson_bounds[3], geojson_bounds[2]]])
@@ -281,7 +305,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 
 # Fonction pour charger un fichier TIFF
