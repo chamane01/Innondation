@@ -109,35 +109,38 @@ def main():
     # Téléversement des fichiers TIFF
     st.subheader("Téléverser des fichiers TIFF")
     uploaded_tiff = st.file_uploader("Choisir un fichier TIFF (Orthophoto, MNT, MNS)", type=["tif", "tiff"], key="tiff_uploader")
-    if uploaded_tiff:
-        tiff_type = st.selectbox("Sélectionnez le type de fichier TIFF", ["Orthophoto", "MNT", "MNS"])
-        tiff_path = uploaded_tiff.name
-        with open(tiff_path, "wb") as f:
-            f.write(uploaded_tiff.read())
-
-        st.write(f"Reprojection du fichier {tiff_type}...")
-        try:
-            reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
-            st.session_state["uploaded_tiffs"].append((reprojected_tiff, tiff_type))
-            st.success(f"Fichier {tiff_type} téléversé et ajouté à la carte.")
-        except Exception as e:
-            st.error(f"Erreur lors de la reprojection : {e}")
+    tiff_type = st.selectbox("Sélectionnez le type de fichier TIFF", ["Orthophoto", "MNT", "MNS"], key="tiff_type")
 
     # Téléversement des fichiers GeoJSON
     st.subheader("Téléverser des fichiers GeoJSON")
     uploaded_geojson = st.file_uploader("Choisir un fichier GeoJSON (Routes, Polygonale)", type=["geojson"], key="geojson_uploader")
-    if uploaded_geojson:
-        geojson_type = st.selectbox("Sélectionnez le type de fichier GeoJSON", ["Routes", "Polygonale"])
-        color = st.color_picker(f"Choisir la couleur pour {geojson_type}", "#FFA500" if geojson_type == "Routes" else "#FF0000")
-        weight = st.slider(f"Choisir l'épaisseur pour {geojson_type}", 1, 10, 4)
-        opacity = st.slider(f"Choisir l'opacité pour {geojson_type}", 0.1, 1.0, 0.7)
+    geojson_type = st.selectbox("Sélectionnez le type de fichier GeoJSON", ["Routes", "Polygonale"], key="geojson_type")
+    color = st.color_picker(f"Choisir la couleur pour {geojson_type}", "#FFA500" if geojson_type == "Routes" else "#FF0000", key="geojson_color")
+    weight = st.slider(f"Choisir l'épaisseur pour {geojson_type}", 1, 10, 4, key="geojson_weight")
+    opacity = st.slider(f"Choisir l'opacité pour {geojson_type}", 0.1, 1.0, 0.7, key="geojson_opacity")
 
-        try:
-            geojson_data = json.load(uploaded_geojson)
-            st.session_state["uploaded_geojsons"].append((geojson_data, geojson_type, color, weight, opacity))
-            st.success(f"Fichier {geojson_type} téléversé et ajouté à la carte.")
-        except Exception as e:
-            st.error(f"Erreur lors du chargement du GeoJSON : {e}")
+    # Bouton pour ajouter les fichiers à la carte
+    if st.button("Ajouter à la carte"):
+        if uploaded_tiff:
+            tiff_path = uploaded_tiff.name
+            with open(tiff_path, "wb") as f:
+                f.write(uploaded_tiff.read())
+
+            st.write(f"Reprojection du fichier {tiff_type}...")
+            try:
+                reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
+                st.session_state["uploaded_tiffs"].append((reprojected_tiff, tiff_type))
+                st.success(f"Fichier {tiff_type} téléversé et ajouté à la carte.")
+            except Exception as e:
+                st.error(f"Erreur lors de la reprojection : {e}")
+
+        if uploaded_geojson:
+            try:
+                geojson_data = json.load(uploaded_geojson)
+                st.session_state["uploaded_geojsons"].append((geojson_data, geojson_type, color, weight, opacity))
+                st.success(f"Fichier {geojson_type} téléversé et ajouté à la carte.")
+            except Exception as e:
+                st.error(f"Erreur lors du chargement du GeoJSON : {e}")
 
     # Affichage des fichiers TIFF sur la carte
     for tiff_path, tiff_type in st.session_state["uploaded_tiffs"]:
@@ -184,7 +187,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path, target_crs="EPSG:4326"):
