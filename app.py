@@ -110,8 +110,8 @@ def main():
     fmap.add_child(draw)
 
     # Single button for TIFF upload with type selection
-    tiff_type = st.selectbox("Sélectionnez le type de fichier TIFF", ["MNT", "MNS", "Orthophoto"])
-    uploaded_tiff = st.file_uploader(f"Téléverser un fichier TIFF ({tiff_type})", type=["tif", "tiff"])
+    tiff_type = st.selectbox("Sélectionnez le type de fichier TIFF", ["MNT", "MNS", "Orthophoto"], key="tiff_selectbox")
+    uploaded_tiff = st.file_uploader(f"Téléverser un fichier TIFF ({tiff_type})", type=["tif", "tiff"], key="tiff_uploader")
     if uploaded_tiff:
         tiff_path = uploaded_tiff.name
         with open(tiff_path, "wb") as f:
@@ -140,21 +140,39 @@ def main():
                 )
                 fmap.add_child(draw)
 
-                # Store the layer in the uploaded_layers list without displaying it
-                st.session_state["uploaded_layers"].append({"type": "TIFF", "name": tiff_type, "path": reprojected_tiff, "bounds": bounds})
-                st.success(f"Couche {tiff_type} téléversée et ajoutée à la liste des couches.")
+                # Check if the layer already exists in the list
+                layer_exists = any(
+                    layer["type"] == "TIFF" and layer["name"] == tiff_type and layer["path"] == reprojected_tiff
+                    for layer in st.session_state["uploaded_layers"]
+                )
+
+                if not layer_exists:
+                    # Store the layer in the uploaded_layers list without displaying it
+                    st.session_state["uploaded_layers"].append({"type": "TIFF", "name": tiff_type, "path": reprojected_tiff, "bounds": bounds})
+                    st.success(f"Couche {tiff_type} téléversée et ajoutée à la liste des couches.")
+                else:
+                    st.warning(f"La couche {tiff_type} existe déjà dans la liste.")
         except Exception as e:
             st.error(f"Erreur lors de la reprojection : {e}")
 
     # Single button for GeoJSON upload with type selection
-    geojson_type = st.selectbox("Sélectionnez le type de fichier GeoJSON", ["Routes", "Polygonale", "Cours d'eau"])
-    uploaded_geojson = st.file_uploader(f"Téléverser un fichier GeoJSON ({geojson_type})", type=["geojson"])
+    geojson_type = st.selectbox("Sélectionnez le type de fichier GeoJSON", ["Routes", "Polygonale", "Cours d'eau"], key="geojson_selectbox")
+    uploaded_geojson = st.file_uploader(f"Téléverser un fichier GeoJSON ({geojson_type})", type=["geojson"], key="geojson_uploader")
     if uploaded_geojson:
         try:
             geojson_data = json.load(uploaded_geojson)
-            # Store the layer in the uploaded_layers list without displaying it
-            st.session_state["uploaded_layers"].append({"type": "GeoJSON", "name": geojson_type, "data": geojson_data})
-            st.success(f"Couche {geojson_type} téléversée et ajoutée à la liste des couches.")
+            # Check if the layer already exists in the list
+            layer_exists = any(
+                layer["type"] == "GeoJSON" and layer["name"] == geojson_type and layer["data"] == geojson_data
+                for layer in st.session_state["uploaded_layers"]
+            )
+
+            if not layer_exists:
+                # Store the layer in the uploaded_layers list without displaying it
+                st.session_state["uploaded_layers"].append({"type": "GeoJSON", "name": geojson_type, "data": geojson_data})
+                st.success(f"Couche {geojson_type} téléversée et ajoutée à la liste des couches.")
+            else:
+                st.warning(f"La couche {geojson_type} existe déjà dans la liste.")
         except Exception as e:
             st.error(f"Erreur lors du chargement du GeoJSON : {e}")
 
@@ -167,7 +185,7 @@ def main():
         st.write("Aucune couche téléversée pour le moment.")
 
     # Button to add all uploaded layers to the map
-    if st.button("Ajouter la liste de couches à la carte"):
+    if st.button("Ajouter la liste de couches à la carte", key="add_layers_button"):
         # Use a set to track added layers and avoid duplicates
         added_layers = set()
         for layer in st.session_state["uploaded_layers"]:
@@ -224,7 +242,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path, target_crs="EPSG:4326"):
     try:
