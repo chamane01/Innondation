@@ -225,8 +225,6 @@ def main():
 if __name__ == "__main__":
     main()
 
-if __name__ == "__main__":
-    main()
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path, target_crs="EPSG:4326"):
     try:
