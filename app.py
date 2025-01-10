@@ -1,316 +1,244 @@
+
+# Importer les bibliothèques nécessaires
 import streamlit as st
-import rasterio
-import rasterio.warp
-import folium
-from folium import plugins
-from folium.plugins import MeasureControl, Draw
-from rasterio.plot import reshape_as_image
-from PIL import Image
-from streamlit_folium import folium_static
-from rasterio.warp import transform_bounds
+import pandas as pd
 import numpy as np
-from sklearn.cluster import DBSCAN
 import geopandas as gpd
-from shapely.geometry import Polygon, Point, LineString
-from folium import IFrame
-from streamlit_folium import st_folium
-import json
-from io import BytesIO
-from rasterio.enums import Resampling
-from rasterio.warp import calculate_default_transform, reproject
 import matplotlib.pyplot as plt
-import os
+from scipy.interpolate import griddata
+from shapely.geometry import Polygon, box
+from shapely.geometry import MultiPolygon
+import contextily as ctx
+import ezdxf  # Bibliothèque pour créer des fichiers DXF
+from datetime import datetime
+import rasterio
 
-# Reprojection function
-def reproject_tiff(input_tiff, target_crs):
-    """Reproject a TIFF file to a target CRS."""
-    with rasterio.open(input_tiff) as src:
-        transform, width, height = rasterio.warp.calculate_default_transform(
-            src.crs, target_crs, src.width, src.height, *src.bounds
+import streamlit as st
+import numpy as np
+import rasterio
+import folium
+from streamlit_folium import st_folium
+from geopy.distance import geodesic
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap  # Importation pour la carte inondée
+from folium.plugins import MeasureControl  # Importation de l'outil de mesure
+import geopandas as gpd  # Pour lire les fichiers GeoJSON
+
+# Fonction pour charger un fichier TIFF
+def charger_tiff(fichier_tiff):
+    try:
+        with rasterio.open(fichier_tiff) as src:
+            data = src.read(1)  # Lire la première bande
+            transform = src.transform
+            crs = src.crs
+            bounds = src.bounds
+            return data, transform, crs, bounds
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
+        return None, None, None, None
+
+# Fonction pour charger un fichier GeoJSON
+def charger_geojson(fichier_geojson):
+    try:
+        gdf = gpd.read_file(fichier_geojson)  # Utilisation de Geopandas pour lire le GeoJSON
+        return gdf
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
+        return None
+
+# Fonction pour calculer la taille d'un pixel
+def calculer_taille_pixel(transform):
+    pixel_width = transform[0]  # Largeur d'un pixel (dx)
+    pixel_height = -transform[4]  # Hauteur d'un pixel (dy, négatif car les Y diminuent vers le haut)
+    return pixel_width, pixel_height
+
+# Fonction pour calculer la taille réelle d'une unité (pixel) sur la carte
+def calculer_taille_unite(bounds_tiff, largeur_pixels, hauteur_pixels):
+    # Calcul de la largeur réelle (en mètres) de la carte
+    point1 = (bounds_tiff[1], bounds_tiff[0])  # Coin inférieur gauche (lat, lon)
+    point2 = (bounds_tiff[1], bounds_tiff[2])  # Coin inférieur droit (lat, lon)
+    distance_x = geodesic(point1, point2).meters  # Distance en x (longitude)
+
+    # Calcul de la hauteur réelle (en mètres) de la carte
+    point1 = (bounds_tiff[1], bounds_tiff[0])  # Coin inférieur gauche (lat, lon)
+    point2 = (bounds_tiff[3], bounds_tiff[0])  # Coin supérieur gauche (lat, lon)
+    distance_y = geodesic(point1, point2).meters  # Distance en y (latitude)
+
+    # Taille d'un pixel (en mètres)
+    taille_unite_x = distance_x / largeur_pixels
+    taille_unite_y = distance_y / hauteur_pixels
+
+    # On calcule la taille moyenne des pixels pour x et y
+    taille_unite = (taille_unite_x + taille_unite_y) / 2
+    return taille_unite
+
+# Fonction pour mesurer la distance réelle (en mètres) sur la carte
+def mesurer_distance(bounds_tiff):
+    # Mesurer la distance sur la largeur (longitude)
+    point1 = (bounds_tiff[1], bounds_tiff[0])  # Coin inférieur gauche (lat, lon)
+    point2 = (bounds_tiff[1], bounds_tiff[2])  # Coin inférieur droit (lat, lon)
+    distance_x = geodesic(point1, point2).meters  # Distance en x (longitude)
+
+    # Mesurer la distance sur la hauteur (latitude)
+    point1 = (bounds_tiff[1], bounds_tiff[0])  # Coin inférieur gauche (lat, lon)
+    point2 = (bounds_tiff[3], bounds_tiff[0])  # Coin supérieur gauche (lat, lon)
+    distance_y = geodesic(point1, point2).meters  # Distance en y (latitude)
+
+    return distance_x, distance_y
+
+# Fonction pour calculer les unités inondées
+def calculer_pixels_inondes(data, niveau_inondation):
+    inondation_mask = data <= niveau_inondation
+    nombre_pixels_inondes = np.sum(inondation_mask)
+    return nombre_pixels_inondes
+
+# Fonction pour calculer la surface inondée en m² et hectares
+def calculer_surface_inondee(nombre_pixels_inondes, taille_unite):
+    surface_pixel = taille_unite ** 2  # Surface d'un pixel en m²
+    surface_totale_m2 = nombre_pixels_inondes * surface_pixel  # Surface totale inondée en m²
+    surface_totale_hectares = surface_totale_m2 / 10000  # Conversion en hectares
+    return surface_totale_m2, surface_totale_hectares
+
+# Fonction pour générer une carte de profondeur et sauvegarder comme image temporaire
+def generer_image_profondeur(data_tiff, bounds_tiff, output_path):
+    extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
+
+    fig, ax = plt.subplots(figsize=(8, 6))
+    im = ax.imshow(data_tiff, cmap='terrain', extent=extent)
+    fig.colorbar(im, ax=ax, label="Altitude (m)")
+
+    ax.set_title("Carte de profondeur (terrain)", fontsize=14)
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+
+    plt.savefig(output_path, format='png', bbox_inches='tight')
+    plt.close(fig)
+
+# Fonction pour créer une carte Folium avec superposition
+def creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation=None, geojson_data_routes=None, geojson_data_polygon=None):
+    try:
+        lat_min, lon_min = bounds_tiff[1], bounds_tiff[0]
+        lat_max, lon_max = bounds_tiff[3], bounds_tiff[2]
+        center = [(lat_min + lat_max) / 2, (lon_min + lon_max) / 2]
+
+        m = folium.Map(location=center, zoom_start=13, control_scale=True)
+
+        depth_map_path = "temp_depth_map.png"
+        generer_image_profondeur(data_tiff, bounds_tiff, depth_map_path)
+
+        img_overlay = folium.raster_layers.ImageOverlay(
+            image=depth_map_path,
+            bounds=[[lat_min, lon_min], [lat_max, lon_max]],
+            opacity=0.7,
+            interactive=True
         )
-        kwargs = src.meta.copy()
-        kwargs.update({
-            "crs": target_crs,
-            "transform": transform,
-            "width": width,
-            "height": height,
-        })
+        img_overlay.add_to(m)
 
-        reprojected_tiff = "reprojected.tiff"
-        with rasterio.open(reprojected_tiff, "w", **kwargs) as dst:
-            for i in range(1, src.count + 1):
-                rasterio.warp.reproject(
-                    source=rasterio.band(src, i),
-                    destination=rasterio.band(dst, i),
-                    src_transform=src.transform,
-                    src_crs=src.crs,
-                    dst_transform=transform,
-                    dst_crs=target_crs,
-                    resampling=rasterio.warp.Resampling.nearest,
-                )
-    return reprojected_tiff
+        if niveau_inondation is not None:
+            inondation_mask = data_tiff <= niveau_inondation
+            zone_inondee = np.zeros_like(data_tiff, dtype=np.uint8)
+            zone_inondee[inondation_mask] = 255
 
-# Function to apply color gradient to a DEM TIFF
-def apply_color_gradient(tiff_path, output_path):
-    """Apply a color gradient to the DEM TIFF and save it as a PNG."""
-    with rasterio.open(tiff_path) as src:
-        # Read the DEM data
-        dem_data = src.read(1)
-        
-        # Create a color map using matplotlib
-        cmap = plt.get_cmap("terrain")
-        norm = plt.Normalize(vmin=dem_data.min(), vmax=dem_data.max())
-        
-        # Apply the colormap
-        colored_image = cmap(norm(dem_data))
-        
-        # Save the colored image as PNG
-        plt.imsave(output_path, colored_image)
-        plt.close()
+            flood_map_path = "temp_flood_map.png"
+            fig, ax = plt.subplots(figsize=(8, 6))
+            extent = [lon_min, lon_max, lat_min, lat_max]
+            ax.imshow(zone_inondee, cmap=ListedColormap(['none', 'magenta']), extent=extent, alpha=0.5)
+            plt.axis('off')
+            plt.savefig(flood_map_path, format='png', bbox_inches='tight', transparent=True)
+            plt.close(fig)
 
-# Overlay function for TIFF images
-def add_image_overlay(map_object, tiff_path, bounds, name):
-    """Add a TIFF image overlay to a Folium map."""
-    with rasterio.open(tiff_path) as src:
-        image = reshape_as_image(src.read())
-        folium.raster_layers.ImageOverlay(
-            image=image,
-            bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
-            name=name,
-            opacity=0.6,
-        ).add_to(map_object)
+            flood_overlay = folium.raster_layers.ImageOverlay(
+                image=flood_map_path,
+                bounds=[[lat_min, lon_min], [lat_max, lon_max]],
+                opacity=0.6,
+                interactive=True
+            )
+            flood_overlay.add_to(m)
 
-# Function to calculate bounds from GeoJSON
-def calculate_geojson_bounds(geojson_data):
-    """Calculate bounds from a GeoJSON object."""
-    geometries = [feature["geometry"] for feature in geojson_data["features"]]
-    gdf = gpd.GeoDataFrame.from_features(geojson_data)
-    return gdf.total_bounds  # Returns [minx, miny, maxx, maxy]
+        # Ajouter l'outil de mesure
+        measure_control = MeasureControl(primary_length_unit='meters', secondary_length_unit='kilometers', primary_area_unit='sqmeters', secondary_area_unit='hectares')
+        measure_control.add_to(m)
 
-# Dictionnaire des couleurs pour les types de fichiers GeoJSON
-geojson_colors = {
-    "Routes": "orange",
-    "Pistes": "brown",
-    "Plantations": "green",
-    "Bâtiments": "gray",
-    "Électricité": "yellow",
-    "Assainissements": "blue",
-    "Villages": "purple",
-    "Villes": "red",
-    "Chemin de fer": "black",
-    "Parc et réserves": "darkgreen",
-    "Cours d'eau": "lightblue",
-    "Polygonale": "pink"
-}
+        # Si des données GeoJSON de routes sont fournies, les ajouter à la carte
+        if geojson_data_routes is not None:
+            folium.GeoJson(
+                geojson_data_routes,
+                style_function=lambda feature: {
+                    'color':'orange',
+                    'weight': 2
+                }
+            ).add_to(m)
 
-# Main application
+        # Si des données GeoJSON de polygonale sont fournies, les ajouter à la carte avec style
+        if geojson_data_polygon is not None:
+            folium.GeoJson(
+                geojson_data_polygon,
+                style_function=lambda feature: {
+                    'fillColor': 'transparent',  # Remplissage transparent
+                    'color': 'white',            # Contours blancs
+                    'weight': 2,                 # Poids des contours
+                    'fillOpacity': 0            # Opacité du remplissage
+                }
+            ).add_to(m)
+
+        folium.LayerControl().add_to(m)
+        return m
+    except Exception as e:
+        st.error(f"Erreur lors de la création de la carte : {e}")
+        return None
+
+# Interface principale Streamlit
 def main():
-    st.title("DESSINER une CARTE ")
+    st.title("Analyse des zones inondées")
+    st.markdown("### Téléchargez un fichier GeoTIFF pour analyser les zones inondées.")
 
-    # Initialize session state for drawings and uploaded layers
-    if "drawings" not in st.session_state:
-        st.session_state["drawings"] = {
-            "type": "FeatureCollection",
-            "features": [],
-        }
-    if "uploaded_layers" not in st.session_state:
-        st.session_state["uploaded_layers"] = []
+    fichier_tiff = st.file_uploader("Téléchargez un fichier GeoTIFF", type=["tif"], key="file_uploader")
+    fichier_geojson_routes = st.file_uploader("Téléchargez un fichier GeoJSON (routes)", type=["geojson"], key="geojson_routes_uploader")
+    fichier_geojson_polygon = st.file_uploader("Téléchargez un fichier GeoJSON (polygonale)", type=["geojson"], key="geojson_polygon_uploader")
 
-    # Initialize map
-    fmap = folium.Map(location=[0, 0], zoom_start=2)
-    fmap.add_child(MeasureControl(position="topleft"))
-    draw = Draw(
-        position="topleft",
-        export=True,
-        draw_options={
-            "polyline": {"shapeOptions": {"color": "orange", "weight": 4, "opacity": 0.7}},
-            "polygon": {"shapeOptions": {"color": "green", "weight": 4, "opacity": 0.7}},
-            "rectangle": {"shapeOptions": {"color": "red", "weight": 4, "opacity": 0.7}},
-            "circle": {"shapeOptions": {"color": "purple", "weight": 4, "opacity": 0.7}},
-        },
-        edit_options={"edit": True},
-    )
-    fmap.add_child(draw)
+    geojson_data_routes = None
+    geojson_data_polygon = None
 
-    # Single button for TIFF upload with type selection
-    tiff_type = st.selectbox(
-        "Sélectionnez le type de fichier TIFF",
-        options=["MNT", "MNS", "Orthophoto"],
-        index=None,  # Aucune option sélectionnée par défaut
-        placeholder="Veuillez sélectionner",
-        key="tiff_selectbox"
-    )
+    if fichier_geojson_routes is not None:
+        geojson_data_routes = charger_geojson(fichier_geojson_routes)
 
-    if tiff_type:
-        uploaded_tiff = st.file_uploader(f"Téléverser un fichier TIFF ({tiff_type})", type=["tif", "tiff"], key="tiff_uploader")
+    if fichier_geojson_polygon is not None:
+        geojson_data_polygon = charger_geojson(fichier_geojson_polygon)
 
-        if uploaded_tiff:
-            tiff_path = uploaded_tiff.name
-            with open(tiff_path, "wb") as f:
-                f.write(uploaded_tiff.read())
+    if fichier_tiff is not None:
+        data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
 
-            st.write(f"Reprojection du fichier TIFF ({tiff_type})...")
-            try:
-                reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
-                with rasterio.open(reprojected_tiff) as src:
-                    bounds = src.bounds
-                    center_lat = (bounds.top + bounds.bottom) / 2
-                    center_lon = (bounds.left + bounds.right) / 2
-                    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+        if data_tiff is not None:
+            st.write(f"Dimensions : {data_tiff.shape}")
+            st.write(f"Altitude min : {data_tiff.min()}, max : {data_tiff.max()}")
 
-                    fmap.add_child(MeasureControl(position="topleft"))
-                    draw = Draw(
-                        position="topleft",
-                        export=True,
-                        draw_options={
-                            "polyline": {"shapeOptions": {"color": "orange", "weight": 4, "opacity": 0.7}},
-                            "polygon": {"shapeOptions": {"color": "green", "weight": 4, "opacity": 0.7}},
-                            "rectangle": {"shapeOptions": {"color": "red", "weight": 4, "opacity": 0.7}},
-                            "circle": {"shapeOptions": {"color": "purple", "weight": 4, "opacity": 0.7}},
-                        },
-                        edit_options={"edit": True},
-                    )
-                    fmap.add_child(draw)
+            pixel_width, pixel_height = calculer_taille_pixel(transform_tiff)
+            st.write(f"Taille d'un pixel : {pixel_width:.2f} unités en largeur x {pixel_height:.2f} unités en hauteur.")
 
-                    # Bouton pour ajouter le fichier TIFF à la liste des couches
-                    if st.button(f"Ajouter {tiff_type} à la liste de couches", key=f"add_tiff_{tiff_type}"):
-                        # Check if the layer already exists in the list
-                        layer_exists = any(
-                            layer["type"] == "TIFF" and layer["name"] == tiff_type and layer["path"] == reprojected_tiff
-                            for layer in st.session_state["uploaded_layers"]
-                        )
+            # Taille réelle d'un pixel sur la carte (en mètres)
+            taille_unite = calculer_taille_unite(bounds_tiff, data_tiff.shape[1], data_tiff.shape[0])
+            st.write(f"Taille d'une unité sur la carte : {taille_unite:.2f} m.")
 
-                        if not layer_exists:
-                            # Store the layer in the uploaded_layers list
-                            st.session_state["uploaded_layers"].append({"type": "TIFF", "name": tiff_type, "path": reprojected_tiff, "bounds": bounds})
-                            st.success(f"Couche {tiff_type} ajoutée à la liste des couches.")
-                        else:
-                            st.warning(f"La couche {tiff_type} existe déjà dans la liste.")
-            except Exception as e:
-                st.error(f"Erreur lors de la reprojection : {e}")
+            niveau_inondation = st.slider(
+                "Choisissez le niveau d'inondation",
+                float(data_tiff.min()),
+                float(data_tiff.max()),
+                float(np.percentile(data_tiff, 50)),
+                step=0.1,
+                key="niveau_inondation"
+            )
 
-    # Single button for GeoJSON upload with type selection
-    geojson_type = st.selectbox(
-        "Sélectionnez le type de fichier GeoJSON",
-        options=[
-            "Polygonale",
-            "Routes",
-            "Cours d'eau",
-            "Bâtiments",
-            "Pistes",
-            "Plantations",
-            "Électricité",
-            "Assainissements",
-            "Villages",
-            "Villes",
-            "Chemin de fer",
-            "Parc et réserves" 
-        ],
-        index=None,  # Aucune option sélectionnée par défaut
-        placeholder="Veuillez sélectionner",
-        key="geojson_selectbox"
-    )
+            if niveau_inondation:
+                nombre_pixels_inondes = calculer_pixels_inondes(data_tiff, niveau_inondation)
+                surface_totale_inondee_m2, surface_totale_inondee_ha = calculer_surface_inondee(nombre_pixels_inondes, taille_unite)
 
-    if geojson_type:
-        uploaded_geojson = st.file_uploader(f"Téléverser un fichier GeoJSON ({geojson_type})", type=["geojson"], key="geojson_uploader")
+                st.write(f"Nombre de pixels inondés : {nombre_pixels_inondes}")
+                st.write(f"Surface totale inondée : {surface_totale_inondee_m2:.2f} m².")
+                st.write(f"Surface totale inondée : {surface_totale_inondee_ha:.2f} hectares.")
 
-        if uploaded_geojson:
-            try:
-                geojson_data = json.load(uploaded_geojson)
-                # Bouton pour ajouter le fichier GeoJSON à la liste des couches
-                if st.button(f"Ajouter {geojson_type} à la liste de couches", key=f"add_geojson_{geojson_type}"):
-                    # Check if the layer already exists in the list
-                    layer_exists = any(
-                        layer["type"] == "GeoJSON" and layer["name"] == geojson_type and layer["data"] == geojson_data
-                        for layer in st.session_state["uploaded_layers"]
-                    )
-
-                    if not layer_exists:
-                        # Store the layer in the uploaded_layers list
-                        st.session_state["uploaded_layers"].append({"type": "GeoJSON", "name": geojson_type, "data": geojson_data})
-                        st.success(f"Couche {geojson_type} ajoutée à la liste des couches.")
-                    else:
-                        st.warning(f"La couche {geojson_type} existe déjà dans la liste.")
-            except Exception as e:
-                st.error(f"Erreur lors du chargement du GeoJSON : {e}")
-
-    # Utiliser un conteneur Streamlit pour créer une zone distincte
-    with st.container():
-        # Ajouter un fond coloré à la section
-        st.markdown(
-            """
-            <style>
-            div.stContainer {
-                background-color: #f0f2f6;  /* Couleur de fond légèrement plus foncée */
-                padding: 20px;
-                border-radius: 10px;
-                margin: 10px 0;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True
-        )
-
-        st.markdown("### Liste des couches téléversées")
-        
-        # Rafraîchir la liste
-        if st.button("Rafraîchir la liste", key="refresh_list"):
-            pass  # Rafraîchir la liste
-
-        if st.session_state["uploaded_layers"]:
-            for i, layer in enumerate(st.session_state["uploaded_layers"]):
-                col1, col2 = st.columns([4, 1])
-                with col1:
-                    st.write(f"{i + 1}. {layer['name']} ({layer['type']})")
-                with col2:
-                    # Bouton de suppression en rouge
-                    if st.button(f"Supprimer {layer['name']}", key=f"delete_{i}", type="primary", help="Supprimer cette couche"):
-                        st.session_state["uploaded_layers"].pop(i)
-                        st.success(f"Couche {layer['name']} supprimée.")
-        else:
-            st.write("Aucune couche téléversée pour le moment.")
-
-        # Bouton pour ajouter toutes les couches à la carte
-        if st.button("Ajouter la liste de couches à la carte", key="add_layers_button"):
-            added_layers = set()
-            all_bounds = []  # Pour stocker les limites de toutes les couches
-
-            for layer in st.session_state["uploaded_layers"]:
-                if layer["name"] not in added_layers:
-                    if layer["type"] == "TIFF":
-                        if layer["name"] in ["MNT", "MNS"]:
-                            temp_png_path = f"{layer['name'].lower()}_colored.png"
-                            apply_color_gradient(layer["path"], temp_png_path)
-                            add_image_overlay(fmap, temp_png_path, layer["bounds"], layer["name"])
-                            os.remove(temp_png_path)
-                        else:
-                            add_image_overlay(fmap, layer["path"], layer["bounds"], layer["name"])
-                        all_bounds.append([[layer["bounds"].bottom, layer["bounds"].left], [layer["bounds"].top, layer["bounds"].right]])
-                    elif layer["type"] == "GeoJSON":
-                        color = geojson_colors.get(layer["name"], "blue")
-                        folium.GeoJson(
-                            layer["data"],
-                            name=layer["name"],
-                            style_function=lambda x, color=color: {
-                                "color": color,
-                                "weight": 4,
-                                "opacity": 0.7
-                            }
-                        ).add_to(fmap)
-                        geojson_bounds = calculate_geojson_bounds(layer["data"])
-                        all_bounds.append([[geojson_bounds[1], geojson_bounds[0]], [geojson_bounds[3], geojson_bounds[2]]])
-                    added_layers.add(layer["name"])
-
-            # Ajuster la vue de la carte pour inclure toutes les limites
-            if all_bounds:
-                fmap.fit_bounds(all_bounds)
-            st.success("Toutes les couches ont été ajoutées à la carte.")
-
-    # Ajout des contrôles de calques
-    folium.LayerControl().add_to(fmap)
-
-    # Affichage de la carte
-    folium_static(fmap, width=700, height=500)
+            # Créer la carte avec les données GeoTIFF et GeoJSON
+            m = creer_carte_osm(data_tiff, bounds_tiff, niveau_inondation, geojson_data_routes, geojson_data_polygon)
+            st_folium(m, width=700, height=500, key="osm_map")
 
 if __name__ == "__main__":
     main()
@@ -318,319 +246,804 @@ if __name__ == "__main__":
 
 
 
-import rasterio
-from rasterio.warp import transform_bounds
-import geopandas as gpd
-import numpy as np
-from sklearn.cluster import DBSCAN
-import folium
-from folium.plugins import MeasureControl, Draw
+
+
+
+
+
+
+
+
+
 import streamlit as st
-from shapely.geometry import Point
-from streamlit_folium import folium_static
+import numpy as np
+import rasterio
+import matplotlib.pyplot as plt
+from matplotlib.colors import ListedColormap
+from matplotlib.patches import Patch
 
-# Fonction pour charger un fichier TIFF
-def load_tiff(file_path, target_crs="EPSG:4326"):
+# Fonction pour charger le fichier TIFF
+def charger_tiff(fichier_tiff):
     try:
-        with rasterio.open(file_path) as src:
+        with rasterio.open(fichier_tiff) as src:
             data = src.read(1)  # Lire la première bande
-            src_crs = src.crs  # CRS source
-            bounds = src.bounds  # Bornes source
-
-            # Reprojeter les bornes vers le CRS cible
-            target_bounds = transform_bounds(src_crs, target_crs, *bounds)
-
-        return data, target_bounds
+            transform = src.transform
+            crs = src.crs
+            bounds = src.bounds
+            return data, transform, crs, bounds
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
-        return None, None
+        return None, None, None, None
 
-# Fonction pour charger un fichier GeoJSON ou Shapefile et le projeter
-def load_and_reproject_shapefile(file_path, target_crs="EPSG:4326"):
-    try:
-        gdf = gpd.read_file(file_path)
-        gdf = gdf.to_crs(target_crs)  # Reprojection au CRS cible
-        return gdf
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier Shapefile/GeoJSON : {e}")
-        return None
+# Fonction pour afficher la carte de profondeur
+def afficher_carte_profondeur(data_tiff, bounds_tiff):
+    # Étendue géographique (extent)
+    extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
 
-# Calcul de hauteur relative (pour la méthode 1 : MNS - MNT)
-def calculate_heights(mns, mnt):
-    return np.maximum(0, mns - mnt)
+    # Créer la figure
+    fig, ax = plt.subplots(figsize=(8, 6))
+    im = ax.imshow(data_tiff, cmap='terrain', extent=extent)
+    cbar = fig.colorbar(im, ax=ax, label="Altitude (m)")
 
-# Fonction pour calculer le volume dans l'emprise de la polygonale (Méthode 1 : MNS - MNT)
-def calculate_volume_in_polygon(mns, mnt, bounds, polygon_gdf):
-    # Calculer les hauteurs relatives
-    heights = calculate_heights(mns, mnt)
+    # Titre et axes
+    ax.set_title("Carte de profondeur (terrain)", fontsize=14)
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    st.pyplot(fig)
 
-    # Extraire les coordonnées de la polygonale
-    polygon_mask = np.zeros_like(heights, dtype=bool)
-    height = bounds[3] - bounds[1]
-    width = bounds[2] - bounds[0]
-    img_height, img_width = heights.shape
+# Fonction pour afficher la zone inondée en magenta
+def afficher_zone_inondee(data_tiff, niveau_inondation, bounds_tiff):
+    # Étendue géographique (extent)
+    extent = [bounds_tiff[0], bounds_tiff[2], bounds_tiff[1], bounds_tiff[3]]
 
-    for _, row in polygon_gdf.iterrows():
-        polygon = row.geometry
-        for x in range(img_width):
-            for y in range(img_height):
-                lat = bounds[3] - height * (y / img_height)
-                lon = bounds[0] + width * (x / img_width)
-                if polygon.contains(Point(lon, lat)):
-                    polygon_mask[y, x] = True
+    # Créer un masque des pixels inondés
+    inondation_mask = data_tiff <= niveau_inondation
+    nb_pixels_inondes = np.sum(inondation_mask)
 
-    # Calculer le volume (somme des hauteurs dans la polygonale)
-    volume = np.sum(heights[polygon_mask])  # Volume en m³ (si les données sont en mètres)
-    return volume
+    # Créer une nouvelle couche pour la zone inondée (valeurs 1 pour inondées, 0 sinon)
+    zone_inondee = np.zeros_like(data_tiff, dtype=np.uint8)
+    zone_inondee[inondation_mask] = 1
 
-# Fonction pour calculer le volume avec MNS seul (Méthode 2 : MNS seul)
-def calculate_volume_without_mnt(mns, bounds, polygon_gdf, reference_altitude):
-    # Extraire les coordonnées de la polygonale
-    polygon_mask = np.zeros_like(mns, dtype=bool)
-    height = bounds[3] - bounds[1]
-    width = bounds[2] - bounds[0]
-    img_height, img_width = mns.shape
+    # Créer la figure
+    fig, ax = plt.subplots(figsize=(8, 6))
+    
+    # Afficher l'image de fond (altitudes)
+    im = ax.imshow(data_tiff, cmap='terrain', extent=extent)
+    cbar = fig.colorbar(im, ax=ax, label="Altitude (m)")
 
-    for _, row in polygon_gdf.iterrows():
-        polygon = row.geometry
-        for x in range(img_width):
-            for y in range(img_height):
-                lat = bounds[3] - height * (y / img_height)
-                lon = bounds[0] + width * (x / img_width)
-                if polygon.contains(Point(lon, lat)):
-                    polygon_mask[y, x] = True
-
-    # Calculer les différences par rapport à l'altitude de référence
-    diff = mns - reference_altitude
-
-    # Calculer les volumes positifs et négatifs
-    positive_volume = np.sum(diff[polygon_mask & (diff > 0)])  # Volume positif
-    negative_volume = np.sum(diff[polygon_mask & (diff < 0)])  # Volume négatif
-    real_volume = positive_volume + negative_volume  # Volume réel
-
-    return positive_volume, negative_volume, real_volume
-
-# Détection des arbres avec DBSCAN
-def detect_trees(heights, threshold, eps, min_samples):
-    tree_mask = heights > threshold
-    coords = np.column_stack(np.where(tree_mask))
-
-    clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
-    tree_clusters = clustering.labels_
-
-    return coords, tree_clusters
-
-# Calcul des centroïdes des arbres
-def calculate_cluster_centroids(coords, clusters):
-    unique_clusters = set(clusters) - {-1}
-    centroids = []
-
-    for cluster_id in unique_clusters:
-        cluster_coords = coords[clusters == cluster_id]
-        centroid = cluster_coords.mean(axis=0)
-        centroids.append((cluster_id, centroid))
-
-    return centroids
-
-# Ajout des centroïdes des arbres sur la carte
-def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_name):
-    height = bounds[3] - bounds[1]
-    width = bounds[2] - bounds[0]
-    img_height, img_width = image_shape[:2]
-
-    feature_group = folium.FeatureGroup(name=layer_name)
-    for _, centroid in centroids:
-        lat = bounds[3] - height * (centroid[0] / img_height)
-        lon = bounds[0] + width * (centroid[1] / img_width)
-
-        folium.CircleMarker(
-            location=[lat, lon],
-            radius=3,
-            color="green",
-            fill=True,
-            fill_color="green",
-            fill_opacity=0.8,
-        ).add_to(feature_group)
-
-    feature_group.add_to(map_object)
-
-# Fonction pour compter les arbres à l'intérieur de la polygonale
-def count_trees_in_polygon(centroids, bounds, image_shape, polygon_gdf):
-    height = bounds[3] - bounds[1]
-    width = bounds[2] - bounds[0]
-    img_height, img_width = image_shape[:2]
-
-    tree_count = 0
-    for _, centroid in centroids:
-        lat = bounds[3] - height * (centroid[0] / img_height)
-        lon = bounds[0] + width * (centroid[1] / img_width)
-        point = Point(lon, lat)
-        if polygon_gdf.contains(point).any():
-            tree_count += 1
-
-    return tree_count
-
-# Streamlit app
-st.title("Options d'analyse")
-
-# Boutons sous la carte
-col1, col2, col3 = st.columns(3)
-with col1:
-    if st.button("Faire une carte"):
-        st.info("Fonctionnalité 'Faire une carte' en cours de développement.")
-with col2:
-    if st.button("Calculer des volumes"):
-        st.session_state.show_volume_sidebar = True
-        st.session_state.show_tree_sidebar = False  # Désactiver l'autre sidebar
-with col3:
-    if st.button("Détecter les arbres"):
-        st.session_state.show_tree_sidebar = True
-        st.session_state.show_volume_sidebar = False  # Désactiver l'autre sidebar
-
-# Affichage des paramètres pour le calcul des volumes
-if st.session_state.get("show_volume_sidebar", False):
-    st.sidebar.title("Paramètres de calcul des volumes")
-
-    # Choix de la méthode
-    method = st.sidebar.radio(
-        "Choisissez la méthode de calcul :",
-        ("Méthode 1 : MNS - MNT", "Méthode 2 : MNS seul"),
-        key="volume_method"
+    # Superposer la couche des zones inondées en magenta
+    cmap = ListedColormap(["none", "red"])
+    ax.imshow(
+        zone_inondee,
+        cmap=cmap,
+        alpha=0.5,
+        extent=extent
     )
 
-    # Téléversement des fichiers
-    mns_file = st.sidebar.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"], key="mns_volume")
-    polygon_file = st.sidebar.file_uploader("Téléchargez un fichier de polygone (obligatoire)", type=["geojson", "shp"], key="polygon_volume")
+    # Ajouter une légende manuelle pour les zones inondées
+    legend_elements = [
+        Patch(facecolor='red', edgecolor='none', label='Zone inondée (red)')
+    ]
+    ax.legend(handles=legend_elements, loc='upper right')
 
-    if method == "Méthode 1 : MNS - MNT":
-        mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"], key="mnt_volume")
+    # Titre et axes
+    ax.set_title(f"Zone inondée pour une cote de {niveau_inondation:.2f} m", fontsize=14)
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+
+    # Afficher le nombre de pixels inondés
+    st.write(f"**Nombre de pixels inondés :** {nb_pixels_inondes}")
+    st.pyplot(fig)
+
+# Interface Streamlit
+def main():
+    st.title("Analyse des zones inondées")
+    st.markdown("### Téléchargez un fichier GeoTIFF pour analyser les zones inondées.")
+
+    # Téléversement du fichier GeoTIFF
+    fichier_tiff = st.file_uploader("Téléchargez un fichier GeoTIFF", type=["tif"])
+
+    if fichier_tiff is not None:
+        # Charger le fichier TIFF
+        data_tiff, transform_tiff, crs_tiff, bounds_tiff = charger_tiff(fichier_tiff)
+
+        if data_tiff is not None:
+            # Afficher les informations de base
+            st.write(f"Dimensions : {data_tiff.shape}")
+            st.write(f"Altitude min : {data_tiff.min()}, max : {data_tiff.max()}")
+
+            # Afficher la carte de profondeur
+            if st.checkbox("Afficher la carte de profondeur"):
+                afficher_carte_profondeur(data_tiff, bounds_tiff)
+
+            # Sélectionner le niveau d'inondation
+            niveau_inondation = st.slider(
+                "Choisissez le niveau d'inondation",
+                float(data_tiff.min()),
+                float(data_tiff.max()),
+                float(np.percentile(data_tiff, 50)),  # Par défaut, la médiane
+                step=0.1
+            )
+
+            # Bouton pour afficher la zone inondée
+            if st.button("Afficher la zone inondée"):
+                afficher_zone_inondee(data_tiff, niveau_inondation, bounds_tiff)
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Streamlit - Titre de l'application avec deux logos centrés
+col1, col2, col3 = st.columns([1, 1, 1])
+with col1:
+    st.image("POPOPO.jpg", width=150)
+with col2:
+    st.image("logo.png", width=150)
+with col3:
+    st.write("")  # Cette colonne est laissée vide pour centrer les logos
+
+st.title("Carte des zones inondées avec niveaux d'eau et surface")
+
+# Initialiser session_state pour stocker les données d'inondation
+if 'flood_data' not in st.session_state:
+    st.session_state.flood_data = {
+        'surface_bleu': None,  
+        'volume_eau': None,
+        'niveau_inondation': 0.0
+    }
+
+# Étape 1 : Sélectionner un site ou téléverser un fichier
+st.markdown("## Sélectionner un site ou téléverser un fichier GeoTIFF")
+uploaded_tiff_file = st.file_uploader("Téléversez un fichier GeoTIFF (.tif)", type=["tif"])
+
+# Charger les données depuis un fichier GeoTIFF
+def charger_tiff(fichier_tiff):
+    try:
+        with rasterio.open(fichier_tiff) as src:
+            # Lire les métadonnées et les données raster
+            data = src.read(1)  # Lire la première bande
+            transform = src.transform  # Transformation spatiale
+            crs = src.crs  # Système de coordonnées
+            return data, transform, crs
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
+        return None, None, None
+
+# Si un fichier GeoTIFF est téléversé
+if uploaded_tiff_file is not None:
+    data_tiff, transform_tiff, crs_tiff = charger_tiff(uploaded_tiff_file)
+
+    if data_tiff is not None:
+        st.write("**Informations sur le fichier GeoTIFF :**")
+        st.write(f"Dimensions : {data_tiff.shape}")
+        st.write(f"Valeurs min : {data_tiff.min()}, max : {data_tiff.max()}")
+        st.write(f"Système de coordonnées : {crs_tiff}")
+
+        # Afficher les données raster sous forme d'image
+        fig, ax = plt.subplots(figsize=(8, 6))
+        extent = (
+            transform_tiff[2],  # Min X
+            transform_tiff[2] + transform_tiff[0] * data_tiff.shape[1],  # Max X
+            transform_tiff[5] + transform_tiff[4] * data_tiff.shape[0],  # Min Y
+            transform_tiff[5]  # Max Y
+        )
+        cax = ax.imshow(data_tiff, cmap='terrain', extent=extent)
+        fig.colorbar(cax, ax=ax, label="Altitude (m)")
+        ax.set_title("Carte d'altitude (GeoTIFF)")
+        st.pyplot(fig)
+
+        # Niveau d'eau et analyse
+        st.session_state.flood_data['niveau_inondation'] = st.number_input(
+            "Entrez le niveau d'eau (mètres)", min_value=float(data_tiff.min()), max_value=float(data_tiff.max()), step=0.1
+        )
+
+        if st.button("Calculer et afficher la zone inondée"):
+            # Calculer la zone inondée
+            inondation_mask = data_tiff <= st.session_state.flood_data['niveau_inondation']
+            surface_inondee = np.sum(inondation_mask) * (transform_tiff[0] * transform_tiff[4]) / 10_000  # En hectares
+            st.session_state.flood_data['surface_bleu'] = surface_inondee
+            st.write(f"**Surface inondée :** {surface_inondee:.2f} hectares")
+
+            # Afficher la carte de l'inondation
+            fig, ax = plt.subplots(figsize=(8, 6))
+            ax.imshow(data_tiff, cmap='terrain', extent=extent)
+            ax.imshow(inondation_mask, cmap='Blues', alpha=0.5, extent=extent)
+            ax.set_title("Zone inondée (en bleu)")
+            fig.colorbar(cax, ax=ax, label="Altitude (m)")
+            st.pyplot(fig)
+
+
+st.title("Carte des zones inondées avec niveaux d'eau et surface")
+
+# Initialiser session_state pour stocker les données d'inondation
+if 'flood_data' not in st.session_state:
+    st.session_state.flood_data = {
+        'surface_bleu': None,  
+        'volume_eau': None,
+        'niveau_inondation': 0.0
+    }
+
+# Étape 1 : Sélectionner un site ou téléverser un fichier
+st.markdown("## Sélectionner un site ou téléverser un fichier")
+option_site = st.selectbox("Sélectionnez un site", ("Aucun", "AYAME 1", "AYAME 2"))
+uploaded_file = st.file_uploader("Téléversez un fichier Excel ou TXT", type=["xlsx", "txt"])
+
+# Charger les données en fonction de l'option sélectionnée
+def charger_fichier(fichier, is_uploaded=False):
+    try:
+        if is_uploaded:
+            if fichier.name.endswith('.xlsx'):
+                df = pd.read_excel(fichier)
+            elif fichier.name.endswith('.txt'):
+                df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
+        else:
+            df = pd.read_csv(fichier, sep=",", header=None, names=["X", "Y", "Z"])
+        return df
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier : {e}")
+        return None
+
+if option_site == "AYAME 1":
+    df = charger_fichier('AYAME1.txt')
+elif option_site == "AYAME 2":
+    df = charger_fichier('AYAME2.txt')
+elif uploaded_file is not None:
+    df = charger_fichier(uploaded_file, is_uploaded=True)
+else:
+    st.warning("Veuillez sélectionner un site ou téléverser un fichier pour démarrer.")
+    df = None
+
+
+
+
+uploaded_geojson_file = st.file_uploader("Téléversez un fichier GeoJSON pour les routes", type=["geojson"])
+def charger_geojson(fichier):
+    try:
+        gdf = gpd.read_file(fichier)
+        return gdf
+    except Exception as e:
+        st.error(f"Erreur lors du chargement du fichier GeoJSON : {e}")
+        return None
+
+# Charger les données du fichier GeoJSON des routes
+routes_gdf = None
+if uploaded_geojson_file is not None:
+    routes_gdf = charger_geojson(uploaded_geojson_file)
+
+# Charger et filtrer les bâtiments dans l'emprise de la carte
+try:
+    batiments_gdf = gpd.read_file("batiments2.geojson")
+    if df is not None:
+        emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
+        batiments_gdf = batiments_gdf.to_crs(epsg=32630)
+        batiments_dans_emprise = batiments_gdf[batiments_gdf.intersects(emprise)]
     else:
-        mnt_file = None
+        batiments_dans_emprise = None
+except Exception as e:
+    st.error(f"Erreur lors du chargement des bâtiments : {e}")
+    batiments_dans_emprise = None
 
-    if mns_file and polygon_file and (method == "Méthode 2 : MNS seul" or mnt_file):
-        mns, mns_bounds = load_tiff(mns_file)
-        polygons_gdf = load_and_reproject_shapefile(polygon_file)
+# Traitement des données si le fichier est chargé
+if df is not None:
+    st.markdown("---")
 
-        if mns is None or polygons_gdf is None:
-            st.sidebar.error("Erreur lors du chargement des fichiers.")
+    # Vérification du fichier : colonnes X, Y, Z
+    if 'X' not in df.columns or 'Y' not in df.columns or 'Z' not in df.columns:
+        st.error("Erreur : colonnes 'X', 'Y' et 'Z' manquantes.")
+    else:
+        st.session_state.flood_data['niveau_inondation'] = st.number_input("Entrez le niveau d'eau (mètres)", min_value=0.0, step=0.1)
+        interpolation_method = st.selectbox("Méthode d'interpolation", ['linear', 'nearest'])
+
+        X_min, X_max = df['X'].min(), df['X'].max()
+        Y_min, Y_max = df['Y'].min(), df['Y'].max()
+        resolution = st.number_input("Résolution de la grille", value=300, min_value=100, max_value=1000)
+        grid_X, grid_Y = np.mgrid[X_min:X_max:resolution*1j, Y_min:Y_max:resolution*1j]
+        grid_Z = griddata((df['X'], df['Y']), df['Z'], (grid_X, grid_Y), method=interpolation_method)
+
+        def calculer_surface_bleue(niveau_inondation):
+            return np.sum((grid_Z <= niveau_inondation)) * (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000
+
+        def calculer_volume(surface_bleue):
+            return surface_bleue * st.session_state.flood_data['niveau_inondation'] * 10000
+
+        if st.button("Afficher la carte d'inondation"):
+            surface_bleue = calculer_surface_bleue(st.session_state.flood_data['niveau_inondation'])
+            volume_eau = calculer_volume(surface_bleue)
+            st.session_state.flood_data['surface_bleu'] = surface_bleue
+            st.session_state.flood_data['volume_eau'] = volume_eau
+
+            fig, ax = plt.subplots(figsize=(8, 6))
+            ax.set_xlim(X_min, X_max)
+            ax.set_ylim(Y_min, Y_max)
+            ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+            # Ajouter des coordonnées sur les quatre côtés
+            ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
+            ax.set_xticks(np.linspace(X_min, X_max, num=5))# Coordonnées sur l'axe X
+            ax.set_yticks(np.linspace(Y_min, Y_max, num=5))# Coordonnées sur l'axe Y
+            ax.xaxis.set_tick_params(labeltop=True)# Affiche les labels sur le haut
+            ax.yaxis.set_tick_params(labelright=True)# Affiche les labels à droite
+            
+            # Ajouter les lignes pour relier les tirets (lignes horizontales et verticales)
+            # Lignes verticales (de haut en bas)
+            for x in np.linspace(X_min, X_max, num=5):
+                ax.axvline(x, color='black', linewidth=0.5, linestyle='--',alpha=0.2)
+            # Lignes horizontales (de gauche à droite)
+            for y in np.linspace(Y_min, Y_max, num=5):
+                ax.axhline(y, color='black', linewidth=0.5, linestyle='--',alpha=0.2)
+
+            # Ajouter les croisillons aux intersections avec opacité à 100%
+            # Déterminer les positions d'intersection
+            intersections_x = np.linspace(X_min, X_max, num=5)
+            intersections_y = np.linspace(Y_min, Y_max, num=5)
+            # Tracer les croisillons aux intersections avec opacité à 100%
+            for x in intersections_x:
+                for y in intersections_y:
+                    ax.plot(x, y, 'k+', markersize=7, alpha=1.0) # 'k+' : plus noire, alpha=1 pour opacité 100%
+                    
+
+
+            # Tracer la zone inondée avec les contours
+            contours_inondation = ax.contour(grid_X, grid_Y, grid_Z, levels=[st.session_state.flood_data['niveau_inondation']], colors='red', linewidths=1)
+            ax.clabel(contours_inondation, inline=True, fontsize=10, fmt='%1.1f m')
+            ax.contourf(grid_X, grid_Y, grid_Z, levels=[-np.inf, st.session_state.flood_data['niveau_inondation']], colors='#007FFF', alpha=0.5)
+
+            # Transformer les contours en polygones pour analyser les bâtiments
+            contour_paths = [Polygon(path.vertices) for collection in contours_inondation.collections for path in collection.get_paths()]
+            zone_inondee = gpd.GeoDataFrame(geometry=[MultiPolygon(contour_paths)], crs="EPSG:32630")
+
+            # Filtrer et afficher tous les bâtiments
+            if batiments_dans_emprise is not None:
+                batiments_dans_emprise.plot(ax=ax, facecolor='grey', edgecolor='black', linewidth=0.5, alpha=0.6, label="Bâtiments non inondés")
+                
+                # Séparer les bâtiments inondés
+                batiments_inondes = batiments_dans_emprise[batiments_dans_emprise.intersects(zone_inondee.unary_union)]
+                nombre_batiments_inondes = len(batiments_inondes)
+
+                # Afficher les bâtiments inondés en rouge
+                batiments_inondes.plot(ax=ax, facecolor='red', edgecolor='red', linewidth=1, alpha=0.8, label="Bâtiments inondés")
+
+                st.write(f"Nombre de bâtiments dans la zone inondée : {nombre_batiments_inondes}")
+                ax.legend()
+            else:
+                st.write("Aucun bâtiment à analyser dans cette zone.")
+
+            if routes_gdf is not None:
+                routes_gdf = routes_gdf.to_crs(epsg=32630)  # Reprojeter les données si nécessaire
+                routes_gdf.plot(ax=ax, color='orange', linewidth=2, label="Routes")
+                st.write(f"**Nombre de routes affichées :** {len(routes_gdf)}")
+
+            
+
+            
+
+            st.pyplot(fig)
+
+            # Enregistrer les contours en fichier DXF
+            doc = ezdxf.new(dxfversion='R2010')
+            msp = doc.modelspace()
+            for collection in contours_inondation.collections:
+                for path in collection.get_paths():
+                    points = path.vertices
+                    for i in range(len(points)-1):
+                        msp.add_line(points[i], points[i+1])
+
+            dxf_file = "contours_inondation.dxf"
+            doc.saveas(dxf_file)
+            carte_file = "carte_inondation.png"
+            fig.savefig(carte_file)
+
+            with open(carte_file, "rb") as carte:
+                st.download_button(label="Télécharger la carte", data=carte, file_name=carte_file, mime="image/png")
+
+            with open(dxf_file, "rb") as dxf:
+                st.download_button(label="Télécharger le fichier DXF", data=dxf, file_name=dxf_file, mime="application/dxf")
+
+            # Afficher les résultats
+            now = datetime.now()
+            st.markdown("## Résultats")
+            st.write(f"**Surface inondée :** {surface_bleue:.2f} hectares")
+            st.write(f"**Volume d'eau :** {volume_eau:.2f} m³")
+            st.write(f"**Niveau d'eau :** {st.session_state.flood_data['niveau_inondation']} m")
+            st.write(f"**Nombre de bâtiments inondés :** {nombre_batiments_inondes}")
+            st.write(f"**Date :** {now.strftime('%Y-%m-%d')}")
+            st.write(f"**Heure :** {now.strftime('%H:%M:%S')}")
+            st.write(f"**Système de projection :** EPSG:32630")
+
+# Fonction pour générer la carte de profondeur avec dégradé de couleurs
+def generate_depth_map(label_rotation_x=0, label_rotation_y=0):
+
+    # Détection des bas-fonds
+    def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
+        """
+        Détermine les bas-fonds en fonction de la profondeur Z relative.
+        Bas-fond = Z < moyenne(Z) - seuil_rel_bas_fond * std(Z)
+        """
+        moyenne_Z = np.mean(grid_Z)
+        ecart_type_Z = np.std(grid_Z)
+        seuil_bas_fond = moyenne_Z - seuil_rel_bas_fond * ecart_type_Z
+        bas_fonds = grid_Z < seuil_bas_fond
+        return bas_fonds, seuil_bas_fond
+
+    # Calcul des surfaces des bas-fonds
+    def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
+        """
+        Calcule la surface des bas-fonds en hectares.
+        """
+        resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000  # Résolution en hectares
+        surface_bas_fond = np.sum(bas_fonds) * resolution
+        return surface_bas_fond
+
+    bas_fonds, seuil_bas_fond = detecter_bas_fonds(grid_Z)
+    surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
+
+    
+    # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
+    fig, ax = plt.subplots(figsize=(8, 6))
+    ax.set_xlim(X_min, X_max)
+    ax.set_ylim(Y_min, Y_max)
+    ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+    ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
+    ax.set_xticks(np.linspace(X_min, X_max, num=5))
+    ax.set_yticks(np.linspace(Y_min, Y_max, num=5))
+    ax.xaxis.set_tick_params(labeltop=True)
+    ax.yaxis.set_tick_params(labelright=True)
+
+     # Masquer les coordonnées aux extrémités
+    xticks = ax.get_xticks()
+    yticks = ax.get_yticks()
+    ax.set_xticklabels(
+         ["" if x == X_min or x == X_max else f"{int(x)}" for x in xticks],
+        rotation=label_rotation_x,
+    )
+    ax.set_yticklabels(
+        ["" if y == Y_min or y == Y_max else f"{int(y)}" for y in yticks],
+        rotation=label_rotation_y,
+        va="center"  # Alignement vertical des étiquettes Y
+    )
+    #modifier rotation
+    for label in ax.get_xticklabels():
+        label.set_rotation(label_rotation_x)
+
+    for label in ax.get_yticklabels():
+        label.set_rotation(label_rotation_y)
+
+    
+
+    # Ajouter les contours pour la profondeur
+    depth_levels = np.linspace(grid_Z.min(), grid_Z.max(), 100)
+    cmap = plt.cm.plasma  # Couleurs allant de bleu à jaune
+    cont = ax.contourf(grid_X, grid_Y, grid_Z, levels=depth_levels, cmap=cmap)
+    cbar = plt.colorbar(cont, ax=ax)
+    cbar.set_label('Profondeur (m)', rotation=270)
+
+    # Ajouter les bas-fonds en cyan
+    ax.contourf(grid_X, grid_Y, bas_fonds, levels=[0.5, 1], colors='cyan', alpha=0.4, label='Bas-fonds')
+    
+    # Ajouter une ligne de contour autour des bas-fonds
+    contour_lines = ax.contour(
+        grid_X, grid_Y, grid_Z,
+        levels=[seuil_bas_fond],  # Niveau correspondant au seuil des bas-fonds
+        colors='black',  # Couleur des contours
+        linewidths=1.5,
+        linestyles='solid',# Épaisseur de la ligne
+    )
+    # Ajouter des labels pour les contours
+    ax.clabel(contour_lines,
+        inline=True,
+        fmt={seuil_bas_fond: f"{seuil_bas_fond:.2f} m"},  # Format du label
+        fontsize=12
+    )
+
+
+    # Ajouter des lignes pour relier les tirets
+    for x in np.linspace(X_min, X_max, num=5):
+        ax.axvline(x, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
+    for y in np.linspace(Y_min, Y_max, num=5):
+        ax.axhline(y, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
+#croisillon 
+    intersections_x = np.linspace(X_min, X_max, num=5)
+    intersections_y = np.linspace(Y_min, Y_max, num=5)
+    for x in intersections_x:
+        for y in intersections_y:
+            ax.plot(x, y, 'k+', markersize=7, alpha=1.0)
+
+    
+
+
+    # Ajouter les bâtiments
+    if batiments_dans_emprise is not None:
+        batiments_dans_emprise.plot(ax=ax, facecolor='grey', edgecolor='black', linewidth=0.5, alpha=0.6)
+
+    # Affichage de la carte de profondeur
+    st.pyplot(fig)
+    # Afficher les surfaces calculées
+    st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
+
+# Ajouter un bouton pour générer la carte de profondeur
+if st.button("Générer la carte de profondeur avec bas-fonds"):
+    generate_depth_map(label_rotation_x=0, label_rotation_y=-90)
+
+
+
+
+
+
+
+# Fonction pour charger les polygones
+def charger_polygones(uploaded_file):
+    try:
+        if uploaded_file is not None:
+            # Lire le fichier GeoJSON téléchargé
+            polygones_gdf = gpd.read_file(uploaded_file)
+            
+            # Convertir le GeoDataFrame au CRS EPSG:32630
+            polygones_gdf = polygones_gdf.to_crs(epsg=32630)
+            
+            # Créer une emprise (bounding box) basée sur les données
+            if 'X' in df.columns and 'Y' in df.columns:
+                emprise = box(df['X'].min(), df['Y'].min(), df['X'].max(), df['Y'].max())
+                polygones_dans_emprise = polygones_gdf[polygones_gdf.intersects(emprise)]  # Filtrer les polygones dans l'emprise
+            else:
+                polygones_dans_emprise = polygones_gdf  # Si pas de colonne X/Y dans df, prendre tous les polygones
         else:
-            try:
-                if method == "Méthode 1 : MNS - MNT":
-                    mnt, mnt_bounds = load_tiff(mnt_file)
-                    if mnt is None or mnt_bounds != mns_bounds:
-                        st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
-                    else:
-                        volume = calculate_volume_in_polygon(mns, mnt, mnt_bounds, polygons_gdf)
-                        st.sidebar.write(f"Volume calculé dans la polygonale : {volume:.2f} m³")
-                else:
-                    # Saisie de l'altitude de référence pour la méthode 2
-                    reference_altitude = st.sidebar.number_input(
-                        "Entrez l'altitude de référence (en mètres) :",
-                        value=0.0,
-                        step=0.1,
-                        key="reference_altitude"
-                    )
-                    positive_volume, negative_volume, real_volume = calculate_volume_without_mnt(
-                        mns, mns_bounds, polygons_gdf, reference_altitude
-                    )
-                    st.sidebar.write(f"Volume positif (au-dessus de la référence) : {positive_volume:.2f} m³")
-                    st.sidebar.write(f"Volume négatif (en dessous de la référence) : {negative_volume:.2f} m³")
-                    st.sidebar.write(f"Volume réel (différence) : {real_volume:.2f} m³")
+            polygones_dans_emprise = None
+    except Exception as e:
+        st.error(f"Erreur lors du chargement des polygones : {e}")
+        polygones_dans_emprise = None
 
-                # Afficher la carte
-                center_lat = (mns_bounds[1] + mns_bounds[3]) / 2
-                center_lon = (mns_bounds[0] + mns_bounds[2]) / 2
-                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+    return polygones_dans_emprise
 
-                # Ajouter le MNS
-                folium.raster_layers.ImageOverlay(
-                    image=mns,
-                    bounds=[[mns_bounds[1], mns_bounds[0]], [mns_bounds[3], mns_bounds[2]]],
-                    opacity=0.7,
-                    name="MNS"
-                ).add_to(fmap)
+# Fonction pour afficher les polygones
+def afficher_polygones(ax, gdf_polygones, edgecolor='white', linewidth=1.0):
+    if gdf_polygones is not None and not gdf_polygones.empty:
+        gdf_polygones.plot(ax=ax, facecolor='none', edgecolor=edgecolor, linewidth=linewidth)
+    else:
+        st.warning("Aucun polygone à afficher dans l'emprise.")
 
-                # Ajouter la polygonale
-                folium.GeoJson(
-                    polygons_gdf,
-                    name="Polygone",
-                    style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}
-                ).add_to(fmap)
+# Exemple d'appel dans l'interface Streamlit
+st.title("Affichage des Polygones et Profondeur")
 
-                # Ajouter les contrôles de carte
-                fmap.add_child(MeasureControl(position='topleft'))
-                fmap.add_child(Draw(position='topleft', export=True))
-                fmap.add_child(folium.LayerControl(position='topright'))
+# Téléchargement du fichier GeoJSON pour les polygones
+uploaded_file = st.file_uploader("Téléverser un fichier GeoJSON", type="geojson")
 
-                # Afficher la carte
-                folium_static(fmap, width=700, height=500)
 
-            except Exception as e:
-                st.sidebar.error(f"Erreur lors du calcul du volume : {e}")
 
-# Affichage des paramètres pour la détection des arbres
-if st.session_state.get("show_tree_sidebar", False):
-    st.sidebar.title("Paramètres de détection des arbres")
+def calculer_surface_bas_fonds_polygones(polygones, bas_fonds, grid_X, grid_Y):
+    try:
+        # Conversion des bas-fonds en GeoDataFrame
+        resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0])
+        bas_fonds_coords = [
+            Polygon([
+                (grid_X[i, j], grid_Y[i, j]),
+                (grid_X[i + 1, j], grid_Y[i + 1, j]),
+                (grid_X[i + 1, j + 1], grid_Y[i + 1, j + 1]),
+                (grid_X[i, j + 1], grid_Y[i, j + 1])
+            ])
+            for i in range(grid_X.shape[0] - 1)
+            for j in range(grid_X.shape[1] - 1)
+            if bas_fonds[i, j]
+        ]
+        bas_fonds_gdf = gpd.GeoDataFrame(geometry=bas_fonds_coords, crs="EPSG:32630")
 
-    # Téléversement des fichiers
-    mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"], key="mnt_tree")
-    mns_file = st.sidebar.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"], key="mns_tree")
-    polygon_file = st.sidebar.file_uploader("Téléchargez un fichier de polygone (optionnel)", type=["geojson", "shp"], key="polygon_tree")
+        # Intersection entre bas-fonds et polygones
+        intersection = gpd.overlay(polygones, bas_fonds_gdf, how="intersection")
+        
+        # Calcul de la surface totale
+        surface_totale = intersection.area.sum() / 10_000  # Convertir en hectares
+        return surface_totale
+    except Exception as e:
+        st.error(f"Erreur dans le calcul de la surface des bas-fonds : {e}")
+        return 0
 
-    if mnt_file and mns_file:
-        mnt, mnt_bounds = load_tiff(mnt_file)
-        mns, mns_bounds = load_tiff(mns_file)
 
-        if mnt is None or mns is None:
-            st.sidebar.error("Erreur lors du chargement des fichiers.")
-        elif mnt_bounds != mns_bounds:
-            st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
+# Définir la fonction detecter_bas_fonds en dehors de generate_depth_map
+def detecter_bas_fonds(grid_Z, seuil_rel_bas_fond=1.5):
+    moyenne_Z = np.mean(grid_Z)
+    ecart_type_Z = np.std(grid_Z)
+    seuil_bas_fond = moyenne_Z - seuil_rel_bas_fond * ecart_type_Z
+    bas_fonds = grid_Z < seuil_bas_fond
+    return bas_fonds, seuil_bas_fond
+
+# Définir la fonction calculer_surface_bas_fond en dehors de generate_depth_map
+def calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y):
+    resolution = (grid_X[1, 0] - grid_X[0, 0]) * (grid_Y[0, 1] - grid_Y[0, 0]) / 10000  # Résolution en hectares
+    surface_bas_fond = np.sum(bas_fonds) * resolution
+    return surface_bas_fond
+
+# Fonction pour générer la carte de profondeur
+def generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=0):
+    # Appliquer un dégradé de couleurs sur la profondeur (niveau de Z)
+    ax.set_xlim(X_min, X_max)
+    ax.set_ylim(Y_min, Y_max)
+
+    # Afficher la carte de fond OpenStreetMap en EPSG:32630
+    ctx.add_basemap(ax, crs="EPSG:32630", source=ctx.providers.OpenStreetMap.Mapnik)
+
+    ax.tick_params(axis='both', which='both', direction='in', length=6, width=1, color='black', labelsize=10)
+    ax.set_xticks(np.linspace(X_min, X_max, num=5))
+    ax.set_yticks(np.linspace(Y_min, Y_max, num=5))
+    ax.xaxis.set_tick_params(labeltop=True)
+    ax.yaxis.set_tick_params(labelright=True)
+
+    # Masquer les coordonnées aux extrémités
+    xticks = ax.get_xticks()
+    yticks = ax.get_yticks()
+    ax.set_xticklabels(
+        ["" if x == X_min or x == X_max else f"{int(x)}" for x in xticks],
+        rotation=label_rotation_x,
+    )
+    ax.set_yticklabels(
+        ["" if y == Y_min or y == Y_max else f"{int(y)}" for y in yticks],
+        rotation=label_rotation_y,
+        va="center"  # Alignement vertical des étiquettes Y
+    )
+
+    # Modifier rotation
+    for label in ax.get_xticklabels():
+        label.set_rotation(label_rotation_x)
+
+    for label in ax.get_yticklabels():
+        label.set_rotation(label_rotation_y)
+
+    # Ajouter les contours pour la profondeur et Barre verticale
+    depth_levels = np.linspace(grid_Z.min(), grid_Z.max(), 100)
+    cmap = plt.cm.plasma  # Couleurs allant de bleu à jaune
+    cont = ax.contourf(grid_X, grid_Y, grid_Z, levels=depth_levels, cmap=cmap)
+    cbar = plt.colorbar(cont, ax=ax)
+    cbar.set_label('Profondeur (m)', rotation=270, labelpad=20)
+
+    # Ajouter les bas-fonds en cyan
+    bas_fonds, seuil_bas_fond = detecter_bas_fonds(grid_Z)  # Appel à la fonction externe
+    ax.contourf(grid_X, grid_Y, bas_fonds, levels=[0.5, 1], colors='cyan', alpha=0.4, label='Bas-fonds')
+
+    # Ajouter une ligne de contour autour des bas-fonds
+    contour_lines = ax.contour(
+        grid_X, grid_Y, grid_Z,
+        levels=[seuil_bas_fond],  # Niveau correspondant au seuil des bas-fonds
+        colors='black',  # Couleur des contours
+        linewidths=1.5,
+        linestyles='solid',
+    )
+    intersections_x = np.linspace(X_min, X_max, num=5)
+    intersections_y = np.linspace(Y_min, Y_max, num=5)
+    for x in intersections_x:
+        for y in intersections_y:
+            ax.plot(x, y, 'k+', markersize=7, alpha=1.0)
+
+    # Ajouter des labels pour les contours
+    ax.clabel(contour_lines, inline=True, fmt={seuil_bas_fond: f"{seuil_bas_fond:.2f} m"}, fontsize=12, colors='white')
+
+    # Ajouter des lignes pour relier les tirets
+    for x in np.linspace(X_min, X_max, num=5):
+        ax.axvline(x, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
+    for y in np.linspace(Y_min, Y_max, num=5):
+        ax.axhline(y, color='black', linewidth=0.5, linestyle='--', alpha=0.2)
+
+    # Affichage de la carte de profondeur
+    surface_bas_fond = calculer_surface_bas_fond(bas_fonds, grid_X, grid_Y)
+    st.write(f"**Surface des bas-fonds** : {surface_bas_fond:.2f} hectares")
+    # Afficher la surface des bas-fonds dans les polygones
+    st.write(f"**Surface des bas-fonds dans les polygones** : {surface_bas_fond_polygones:.2f} hectares")
+
+    
+    # Ajouter des labels sous l'emprise de la carte de profondeur
+    label_y_position = Y_min - (Y_max - Y_min) * 0.10
+    ax.text(
+        X_min + (X_max - X_min) * 0,  # Position horizontale (10% de la largeur)
+        label_y_position,
+        f"Surface des bas-fonds :",
+        fontsize=12,
+        color="black",
+        ha="left",  # Aligné à gauche
+        va="top",# Aligné en haut
+        fontweight='bold',
+    )
+    ax.text(
+        X_min + (X_max - X_min) * 0.37,  # Position horizontale (10% de la largeur)
+        label_y_position - (Y_max - Y_min) * 0,  # Légèrement plus bas
+        f"{surface_bas_fond:.2f} hectares",
+        fontsize=12,
+        color="black",
+        ha="left",  # Aligné à gauche
+        va="top",   # Aligné en haut
+    )
+    
+    ax.text(
+        X_min + (X_max - X_min) * 0,  # Position horizontale (10% de la largeur)
+        label_y_position - (Y_max - Y_min) * 0.10,  # Légèrement plus bas
+        f"Surface des bas-fonds dans les polygones :",
+        fontsize=12,
+        color="black",
+        ha="left",  # Aligné à gauche
+        va="top",
+        fontweight='bold',# Aligné en haut
+    )
+    ax.text(
+        X_min + (X_max - X_min) * 0.67,  # Position horizontale (10% de la largeur)
+        label_y_position - (Y_max - Y_min) * 0.10,  # Légèrement plus bas
+       f"{surface_bas_fond_polygones:.2f} hectares",
+        fontsize=12,
+        color="black",
+        ha="left",  # Aligné à gauche
+        va="top",# Aligné en haut
+    )
+    ax.text(
+        X_min + (X_max - X_min) * 0,  # Position horizontale (10% de la largeur)
+        label_y_position - (Y_max - Y_min) * 0.20,  # Légèrement plus bas
+        f"Cote du bafond :",
+        fontsize=12,
+        color="black",
+        ha="left",  # Aligné à gauche
+        va="top",
+        fontweight='bold',# Aligné en haut
+    )
+    ax.text(
+        X_min + (X_max - X_min) * 0.26,  # Position horizontale (10% de la largeur)
+        label_y_position - (Y_max - Y_min) * 0.20,  # Légèrement plus bas
+        f"{seuil_bas_fond:.2f} m",
+        fontsize=12,
+        color="black",
+        ha="left",  # Aligné à gauche
+        va="top",# Aligné en haut
+    )
+    
+
+
+# Ajouter les polygones sur la carte
+if st.button("Afficher les polygones"):
+    # Charger les polygones
+    polygones_dans_emprise = charger_polygones(uploaded_file)
+
+    # Si des polygones sont chargés, utiliser leur emprise pour ajuster les limites
+    if polygones_dans_emprise is not None:
+        # Calculer les limites du polygone
+        X_min_polygone, Y_min_polygone, X_max_polygone, Y_max_polygone = polygones_dans_emprise.total_bounds
+        
+        # Calculer les limites de la carte de profondeur
+        X_min_depth, Y_min_depth, X_max_depth, Y_max_depth = grid_X.min(), grid_Y.min(), grid_X.max(), grid_Y.max()
+
+        # Vérifier si l'emprise de la carte de profondeur couvre celle des polygones
+        if (X_min_depth <= X_min_polygone and X_max_depth >= X_max_polygone and
+            Y_min_depth <= Y_min_polygone and Y_max_depth >= Y_max_polygone):
+            X_min, Y_min, X_max, Y_max = X_min_depth, Y_min_depth, X_max_depth, Y_max_depth
         else:
-            heights = calculate_heights(mns, mnt)
+            marge = 0.1
+            X_range = X_max_polygone - X_min_polygone
+            Y_range = Y_max_polygone - Y_min_polygone
+            
+            X_min = min(X_min_depth, X_min_polygone - X_range * marge)
+            Y_min = min(Y_min_depth, Y_min_polygone - Y_range * marge)
+            X_max = max(X_max_depth, X_max_polygone + X_range * marge)
+            Y_max = max(Y_max_depth, Y_max_polygone + Y_range * marge)
 
-            # Paramètres de détection
-            height_threshold = st.sidebar.slider("Seuil de hauteur", 0.1, 20.0, 2.0, 0.1, key="height_threshold")
-            eps = st.sidebar.slider("Rayon de voisinage", 0.1, 10.0, 2.0, 0.1, key="eps")
-            min_samples = st.sidebar.slider("Min. points pour un cluster", 1, 10, 5, 1, key="min_samples")
+        # Calculer les bas-fonds
+        bas_fonds, _ = detecter_bas_fonds(grid_Z)
 
-            # Détection et visualisation
-            if st.sidebar.button("Lancer la détection"):
-                coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
-                num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
-                st.sidebar.write(f"Nombre d'arbres détectés : {num_trees}")
+        # Calculer la surface des bas-fonds à l'intérieur des polygones
+        surface_bas_fond_polygones = calculer_surface_bas_fonds_polygones(
+            polygones_dans_emprise, bas_fonds, grid_X, grid_Y
+        )
 
-                centroids = calculate_cluster_centroids(coords, tree_clusters)
+        # Affichage de la carte
+        fig, ax = plt.subplots(figsize=(10, 10))
+        generate_depth_map(ax, grid_Z, grid_X, grid_Y, X_min, X_max, Y_min, Y_max, label_rotation_x=0, label_rotation_y=-90)
+        afficher_polygones(ax, polygones_dans_emprise)
+        st.pyplot(fig)
 
-                # Mise à jour de la carte
-                center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
-                center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
-                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-
-                folium.raster_layers.ImageOverlay(
-                    image=mnt,
-                    bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
-                    opacity=0.5,
-                    name="MNT"
-                ).add_to(fmap)
-
-                add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
-
-                # Ajout des polygones (optionnel)
-                if polygon_file:
-                    polygons_gdf = load_and_reproject_shapefile(polygon_file)
-                    folium.GeoJson(
-                        polygons_gdf,
-                        name="Polygones",
-                        style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}
-                    ).add_to(fmap)
-
-                    # Compter les arbres à l'intérieur de la polygonale
-                    tree_count_in_polygon = count_trees_in_polygon(centroids, mnt_bounds, mnt.shape, polygons_gdf)
-                    st.sidebar.write(f"Nombre d'arbres dans la polygonale : {tree_count_in_polygon}")
-
-                fmap.add_child(MeasureControl(position='topleft'))
-                fmap.add_child(Draw(position='topleft', export=True))
-                fmap.add_child(folium.LayerControl(position='topright'))
-
-                # Afficher la carte
-                folium_static(fmap, width=700, height=500)
+        
+        
