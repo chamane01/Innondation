@@ -309,31 +309,110 @@ if __name__ == "__main__":
 
 
 
-# Fonction pour charger un fichier TIFF
-def load_tiff(file_path, target_crs="EPSG:4326"):
-    try:
-        with rasterio.open(file_path) as src:
-            data = src.read(1)  # Lire la première bande
-            src_crs = src.crs  # CRS source
-            bounds = src.bounds  # Bornes source
+import streamlit as st
+import rasterio
+import rasterio.warp
+import folium
+from folium import plugins
+from folium.plugins import MeasureControl, Draw
+from rasterio.plot import reshape_as_image
+from PIL import Image
+from streamlit_folium import folium_static
+from rasterio.warp import transform_bounds
+import numpy as np
+from sklearn.cluster import DBSCAN
+import geopandas as gpd
+from shapely.geometry import Polygon, Point, LineString
+from folium import IFrame
+from streamlit_folium import st_folium
+import json
+from io import BytesIO
+from rasterio.enums import Resampling
+from rasterio.warp import calculate_default_transform, reproject
+import matplotlib.pyplot as plt
+import os
 
-            # Reprojeter les bornes vers le CRS cible
-            target_bounds = transform_bounds(src_crs, target_crs, *bounds)
+# Reprojection function
+def reproject_tiff(input_tiff, target_crs):
+    """Reproject a TIFF file to a target CRS."""
+    with rasterio.open(input_tiff) as src:
+        transform, width, height = rasterio.warp.calculate_default_transform(
+            src.crs, target_crs, src.width, src.height, *src.bounds
+        )
+        kwargs = src.meta.copy()
+        kwargs.update({
+            "crs": target_crs,
+            "transform": transform,
+            "width": width,
+            "height": height,
+        })
 
-        return data, target_bounds
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
-        return None, None
+        reprojected_tiff = "reprojected.tiff"
+        with rasterio.open(reprojected_tiff, "w", **kwargs) as dst:
+            for i in range(1, src.count + 1):
+                rasterio.warp.reproject(
+                    source=rasterio.band(src, i),
+                    destination=rasterio.band(dst, i),
+                    src_transform=src.transform,
+                    src_crs=src.crs,
+                    dst_transform=transform,
+                    dst_crs=target_crs,
+                    resampling=rasterio.warp.Resampling.nearest,
+                )
+    return reprojected_tiff
 
-# Fonction pour charger un fichier GeoJSON ou Shapefile et le projeter
-def load_and_reproject_shapefile(file_path, target_crs="EPSG:4326"):
-    try:
-        gdf = gpd.read_file(file_path)
-        gdf = gdf.to_crs(target_crs)  # Reprojection au CRS cible
-        return gdf
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier Shapefile/GeoJSON : {e}")
-        return None
+# Function to apply color gradient to a DEM TIFF
+def apply_color_gradient(tiff_path, output_path):
+    """Apply a color gradient to the DEM TIFF and save it as a PNG."""
+    with rasterio.open(tiff_path) as src:
+        # Read the DEM data
+        dem_data = src.read(1)
+        
+        # Create a color map using matplotlib
+        cmap = plt.get_cmap("terrain")
+        norm = plt.Normalize(vmin=dem_data.min(), vmax=dem_data.max())
+        
+        # Apply the colormap
+        colored_image = cmap(norm(dem_data))
+        
+        # Save the colored image as PNG
+        plt.imsave(output_path, colored_image)
+        plt.close()
+
+# Overlay function for TIFF images
+def add_image_overlay(map_object, tiff_path, bounds, name):
+    """Add a TIFF image overlay to a Folium map."""
+    with rasterio.open(tiff_path) as src:
+        image = reshape_as_image(src.read())
+        folium.raster_layers.ImageOverlay(
+            image=image,
+            bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
+            name=name,
+            opacity=0.6,
+        ).add_to(map_object)
+
+# Function to calculate bounds from GeoJSON
+def calculate_geojson_bounds(geojson_data):
+    """Calculate bounds from a GeoJSON object."""
+    geometries = [feature["geometry"] for feature in geojson_data["features"]]
+    gdf = gpd.GeoDataFrame.from_features(geojson_data)
+    return gdf.total_bounds  # Returns [minx, miny, maxx, maxy]
+
+# Dictionnaire des couleurs pour les types de fichiers GeoJSON
+geojson_colors = {
+    "Routes": "orange",
+    "Pistes": "brown",
+    "Plantations": "green",
+    "Bâtiments": "gray",
+    "Électricité": "yellow",
+    "Assainissements": "blue",
+    "Villages": "purple",
+    "Villes": "red",
+    "Chemin de fer": "black",
+    "Parc et réserves": "darkgreen",
+    "Cours d'eau": "lightblue",
+    "Polygonale": "pink"
+}
 
 # Calcul de hauteur relative (pour la méthode 1 : MNS - MNT)
 def calculate_heights(mns, mnt):
@@ -450,167 +529,218 @@ def count_trees_in_polygon(centroids, bounds, image_shape, polygon_gdf):
 
     return tree_count
 
-# Streamlit app
-st.title("Application de cartographie et d'analyse")
+# Main application
+def main():
+    st.title("Application de cartographie et d'analyse")
 
-# Boutons sous la carte
-col1, col2, col3 = st.columns(3)
-with col1:
-    if st.button("Faire une carte"):
-        st.info("Fonctionnalité 'Faire une carte' en cours de développement.")
-with col2:
-    if st.button("Calculer des volumes"):
-        st.session_state.show_volume_sidebar = True
-        st.session_state.show_tree_sidebar = False  # Désactiver l'autre sidebar
-with col3:
-    if st.button("Détecter les arbres"):
-        st.session_state.show_tree_sidebar = True
-        st.session_state.show_volume_sidebar = False  # Désactiver l'autre sidebar
+    # Initialize session state for drawings and uploaded layers
+    if "drawings" not in st.session_state:
+        st.session_state["drawings"] = {
+            "type": "FeatureCollection",
+            "features": [],
+        }
+    if "uploaded_layers" not in st.session_state:
+        st.session_state["uploaded_layers"] = []
 
-# Affichage des paramètres pour le calcul des volumes
-if st.session_state.get("show_volume_sidebar", False):
-    st.sidebar.title("Paramètres de calcul des volumes")
-
-    # Choix de la méthode
-    method = st.sidebar.radio(
-        "Choisissez la méthode de calcul :",
-        ("Méthode 1 : MNS - MNT", "Méthode 2 : MNS seul"),
-        key="volume_method"
+    # Initialize map
+    fmap = folium.Map(location=[0, 0], zoom_start=2)
+    fmap.add_child(MeasureControl(position="topleft"))
+    draw = Draw(
+        position="topleft",
+        export=True,
+        draw_options={
+            "polyline": {"shapeOptions": {"color": "orange", "weight": 4, "opacity": 0.7}},
+            "polygon": {"shapeOptions": {"color": "green", "weight": 4, "opacity": 0.7}},
+            "rectangle": {"shapeOptions": {"color": "red", "weight": 4, "opacity": 0.7}},
+            "circle": {"shapeOptions": {"color": "purple", "weight": 4, "opacity": 0.7}},
+        },
+        edit_options={"edit": True},
     )
+    fmap.add_child(draw)
 
-    # Téléversement des fichiers
-    mns_file = st.sidebar.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"], key="mns_volume")
-    polygon_file = st.sidebar.file_uploader("Téléchargez un fichier de polygone (obligatoire)", type=["geojson", "shp"], key="polygon_volume")
+    # Section pour afficher la liste des couches téléversées
+    st.markdown("### Liste des couches téléversées")
+    st.markdown("Voici la liste des couches que vous avez ajoutées. Vous pouvez les supprimer ou les ajouter à la carte.")
 
-    if method == "Méthode 1 : MNS - MNT":
-        mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"], key="mnt_volume")
+    col1, col2 = st.columns([4, 1])
+    with col1:
+        st.subheader("Liste des couches")
+    with col2:
+        if st.button("Rafraîchir la liste", key="refresh_list"):
+            # No need to call st.experimental_rerun(), Streamlit will automatically re-run the script
+            pass
+
+    if st.session_state["uploaded_layers"]:
+        for i, layer in enumerate(st.session_state["uploaded_layers"]):
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.write(f"{i + 1}. {layer['name']} ({layer['type']})")
+            with col2:
+                if st.button(f"Supprimer {layer['name']}", key=f"delete_{i}"):
+                    # Remove the layer from the list
+                    st.session_state["uploaded_layers"].pop(i)
+                    st.success(f"Couche {layer['name']} supprimée.")
+                    # Streamlit will automatically re-run the script
     else:
-        mnt_file = None
+        st.write("Aucune couche téléversée pour le moment.")
 
-    if mns_file and polygon_file and (method == "Méthode 2 : MNS seul" or mnt_file):
-        mns, mns_bounds = load_tiff(mns_file)
-        polygons_gdf = load_and_reproject_shapefile(polygon_file)
+    # Espace entre les sections
+    st.markdown("---")
 
-        if mns is None or polygons_gdf is None:
-            st.sidebar.error("Erreur lors du chargement des fichiers.")
-        else:
-            try:
-                if method == "Méthode 1 : MNS - MNT":
-                    mnt, mnt_bounds = load_tiff(mnt_file)
-                    if mnt is None or mnt_bounds != mns_bounds:
-                        st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
+    # Boutons pour les analyses
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("Calculer des volumes"):
+            st.session_state.show_volume_sidebar = True
+            st.session_state.show_tree_sidebar = False
+    with col2:
+        if st.button("Détecter les arbres"):
+            st.session_state.show_tree_sidebar = True
+            st.session_state.show_volume_sidebar = False
+
+    # Affichage des paramètres pour le calcul des volumes
+    if st.session_state.get("show_volume_sidebar", False):
+        st.sidebar.title("Paramètres de calcul des volumes")
+
+        # Choix de la méthode
+        method = st.sidebar.radio(
+            "Choisissez la méthode de calcul :",
+            ("Méthode 1 : MNS - MNT", "Méthode 2 : MNS seul"),
+            key="volume_method"
+        )
+
+        # Récupérer les fichiers nécessaires depuis la liste des couches
+        mns_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["type"] == "TIFF" and layer["name"] == "MNS"), None)
+        mnt_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["type"] == "TIFF" and layer["name"] == "MNT"), None)
+        polygon_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["type"] == "GeoJSON" and layer["name"] == "Polygonale"), None)
+
+        if mns_layer and polygon_layer and (method == "Méthode 2 : MNS seul" or mnt_layer):
+            mns, mns_bounds = load_tiff(mns_layer["path"])
+            polygons_gdf = gpd.GeoDataFrame.from_features(polygon_layer["data"])
+
+            if mns is None or polygons_gdf is None:
+                st.sidebar.error("Erreur lors du chargement des fichiers.")
+            else:
+                try:
+                    if method == "Méthode 1 : MNS - MNT":
+                        mnt, mnt_bounds = load_tiff(mnt_layer["path"])
+                        if mnt is None or mnt_bounds != mns_bounds:
+                            st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
+                        else:
+                            volume = calculate_volume_in_polygon(mns, mnt, mnt_bounds, polygons_gdf)
+                            st.sidebar.write(f"Volume calculé dans la polygonale : {volume:.2f} m³")
                     else:
-                        volume = calculate_volume_in_polygon(mns, mnt, mnt_bounds, polygons_gdf)
-                        st.sidebar.write(f"Volume calculé dans la polygonale : {volume:.2f} m³")
-                else:
-                    # Saisie de l'altitude de référence pour la méthode 2
-                    reference_altitude = st.sidebar.number_input(
-                        "Entrez l'altitude de référence (en mètres) :",
-                        value=0.0,
-                        step=0.1,
-                        key="reference_altitude"
-                    )
-                    positive_volume, negative_volume, real_volume = calculate_volume_without_mnt(
-                        mns, mns_bounds, polygons_gdf, reference_altitude
-                    )
-                    st.sidebar.write(f"Volume positif (au-dessus de la référence) : {positive_volume:.2f} m³")
-                    st.sidebar.write(f"Volume négatif (en dessous de la référence) : {negative_volume:.2f} m³")
-                    st.sidebar.write(f"Volume réel (différence) : {real_volume:.2f} m³")
+                        # Saisie de l'altitude de référence pour la méthode 2
+                        reference_altitude = st.sidebar.number_input(
+                            "Entrez l'altitude de référence (en mètres) :",
+                            value=0.0,
+                            step=0.1,
+                            key="reference_altitude"
+                        )
+                        positive_volume, negative_volume, real_volume = calculate_volume_without_mnt(
+                            mns, mns_bounds, polygons_gdf, reference_altitude
+                        )
+                        st.sidebar.write(f"Volume positif (au-dessus de la référence) : {positive_volume:.2f} m³")
+                        st.sidebar.write(f"Volume négatif (en dessous de la référence) : {negative_volume:.2f} m³")
+                        st.sidebar.write(f"Volume réel (différence) : {real_volume:.2f} m³")
 
-                # Afficher la carte
-                center_lat = (mns_bounds[1] + mns_bounds[3]) / 2
-                center_lon = (mns_bounds[0] + mns_bounds[2]) / 2
-                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+                    # Afficher la carte
+                    center_lat = (mns_bounds[1] + mns_bounds[3]) / 2
+                    center_lon = (mns_bounds[0] + mns_bounds[2]) / 2
+                    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-                # Ajouter le MNS
-                folium.raster_layers.ImageOverlay(
-                    image=mns,
-                    bounds=[[mns_bounds[1], mns_bounds[0]], [mns_bounds[3], mns_bounds[2]]],
-                    opacity=0.7,
-                    name="MNS"
-                ).add_to(fmap)
+                    # Ajouter le MNS
+                    folium.raster_layers.ImageOverlay(
+                        image=mns,
+                        bounds=[[mns_bounds[1], mns_bounds[0]], [mns_bounds[3], mns_bounds[2]]],
+                        opacity=0.7,
+                        name="MNS"
+                    ).add_to(fmap)
 
-                # Ajouter la polygonale
-                folium.GeoJson(
-                    polygons_gdf,
-                    name="Polygone",
-                    style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}
-                ).add_to(fmap)
-
-                # Ajouter les contrôles de carte
-                fmap.add_child(MeasureControl(position='topleft'))
-                fmap.add_child(Draw(position='topleft', export=True))
-                fmap.add_child(folium.LayerControl(position='topright'))
-
-                # Afficher la carte
-                folium_static(fmap, width=700, height=500)
-
-            except Exception as e:
-                st.sidebar.error(f"Erreur lors du calcul du volume : {e}")
-
-# Affichage des paramètres pour la détection des arbres
-if st.session_state.get("show_tree_sidebar", False):
-    st.sidebar.title("Paramètres de détection des arbres")
-
-    # Téléversement des fichiers
-    mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"], key="mnt_tree")
-    mns_file = st.sidebar.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"], key="mns_tree")
-    polygon_file = st.sidebar.file_uploader("Téléchargez un fichier de polygone (optionnel)", type=["geojson", "shp"], key="polygon_tree")
-
-    if mnt_file and mns_file:
-        mnt, mnt_bounds = load_tiff(mnt_file)
-        mns, mns_bounds = load_tiff(mns_file)
-
-        if mnt is None or mns is None:
-            st.sidebar.error("Erreur lors du chargement des fichiers.")
-        elif mnt_bounds != mns_bounds:
-            st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
-        else:
-            heights = calculate_heights(mns, mnt)
-
-            # Paramètres de détection
-            height_threshold = st.sidebar.slider("Seuil de hauteur", 0.1, 20.0, 2.0, 0.1, key="height_threshold")
-            eps = st.sidebar.slider("Rayon de voisinage", 0.1, 10.0, 2.0, 0.1, key="eps")
-            min_samples = st.sidebar.slider("Min. points pour un cluster", 1, 10, 5, 1, key="min_samples")
-
-            # Détection et visualisation
-            if st.sidebar.button("Lancer la détection"):
-                coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
-                num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
-                st.sidebar.write(f"Nombre d'arbres détectés : {num_trees}")
-
-                centroids = calculate_cluster_centroids(coords, tree_clusters)
-
-                # Mise à jour de la carte
-                center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
-                center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
-                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-
-                folium.raster_layers.ImageOverlay(
-                    image=mnt,
-                    bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
-                    opacity=0.5,
-                    name="MNT"
-                ).add_to(fmap)
-
-                add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
-
-                # Ajout des polygones (optionnel)
-                if polygon_file:
-                    polygons_gdf = load_and_reproject_shapefile(polygon_file)
+                    # Ajouter la polygonale
                     folium.GeoJson(
                         polygons_gdf,
-                        name="Polygones",
+                        name="Polygone",
                         style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}
                     ).add_to(fmap)
 
-                    # Compter les arbres à l'intérieur de la polygonale
-                    tree_count_in_polygon = count_trees_in_polygon(centroids, mnt_bounds, mnt.shape, polygons_gdf)
-                    st.sidebar.write(f"Nombre d'arbres dans la polygonale : {tree_count_in_polygon}")
+                    # Ajouter les contrôles de carte
+                    fmap.add_child(MeasureControl(position='topleft'))
+                    fmap.add_child(Draw(position='topleft', export=True))
+                    fmap.add_child(folium.LayerControl(position='topright'))
 
-                fmap.add_child(MeasureControl(position='topleft'))
-                fmap.add_child(Draw(position='topleft', export=True))
-                fmap.add_child(folium.LayerControl(position='topright'))
+                    # Afficher la carte
+                    folium_static(fmap, width=700, height=500)
 
-                # Afficher la carte
-                folium_static(fmap, width=700, height=500)
+                except Exception as e:
+                    st.sidebar.error(f"Erreur lors du calcul du volume : {e}")
+
+    # Affichage des paramètres pour la détection des arbres
+    if st.session_state.get("show_tree_sidebar", False):
+        st.sidebar.title("Paramètres de détection des arbres")
+
+        # Récupérer les fichiers nécessaires depuis la liste des couches
+        mns_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["type"] == "TIFF" and layer["name"] == "MNS"), None)
+        mnt_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["type"] == "TIFF" and layer["name"] == "MNT"), None)
+        polygon_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["type"] == "GeoJSON" and layer["name"] == "Polygonale"), None)
+
+        if mns_layer and mnt_layer:
+            mns, mns_bounds = load_tiff(mns_layer["path"])
+            mnt, mnt_bounds = load_tiff(mnt_layer["path"])
+
+            if mns is None or mnt is None:
+                st.sidebar.error("Erreur lors du chargement des fichiers.")
+            elif mnt_bounds != mns_bounds:
+                st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
+            else:
+                heights = calculate_heights(mns, mnt)
+
+                # Paramètres de détection
+                height_threshold = st.sidebar.slider("Seuil de hauteur", 0.1, 20.0, 2.0, 0.1, key="height_threshold")
+                eps = st.sidebar.slider("Rayon de voisinage", 0.1, 10.0, 2.0, 0.1, key="eps")
+                min_samples = st.sidebar.slider("Min. points pour un cluster", 1, 10, 5, 1, key="min_samples")
+
+                # Détection et visualisation
+                if st.sidebar.button("Lancer la détection"):
+                    coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
+                    num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
+                    st.sidebar.write(f"Nombre d'arbres détectés : {num_trees}")
+
+                    centroids = calculate_cluster_centroids(coords, tree_clusters)
+
+                    # Mise à jour de la carte
+                    center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
+                    center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
+                    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+
+                    folium.raster_layers.ImageOverlay(
+                        image=mnt,
+                        bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
+                        opacity=0.5,
+                        name="MNT"
+                    ).add_to(fmap)
+
+                    add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
+
+                    # Ajout des polygones (optionnel)
+                    if polygon_layer:
+                        polygons_gdf = gpd.GeoDataFrame.from_features(polygon_layer["data"])
+                        folium.GeoJson(
+                            polygons_gdf,
+                            name="Polygones",
+                            style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}
+                        ).add_to(fmap)
+
+                        # Compter les arbres à l'intérieur de la polygonale
+                        tree_count_in_polygon = count_trees_in_polygon(centroids, mnt_bounds, mnt.shape, polygons_gdf)
+                        st.sidebar.write(f"Nombre d'arbres dans la polygonale : {tree_count_in_polygon}")
+
+                    fmap.add_child(MeasureControl(position='topleft'))
+                    fmap.add_child(Draw(position='topleft', export=True))
+                    fmap.add_child(folium.LayerControl(position='topright'))
+
+                    # Afficher la carte
+                    folium_static(fmap, width=700, height=500)
+
+if __name__ == "__main__":
+    main()
