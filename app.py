@@ -21,9 +21,6 @@ from rasterio.warp import calculate_default_transform, reproject
 import matplotlib.pyplot as plt
 import os
 
-
-
-
 # Reprojection function
 def reproject_tiff(input_tiff, target_crs):
     """Reproject a TIFF file to a target CRS."""
@@ -52,6 +49,7 @@ def reproject_tiff(input_tiff, target_crs):
                     resampling=rasterio.warp.Resampling.nearest,
                 )
     return reprojected_tiff
+
 # Function to apply color gradient to a DEM TIFF
 def apply_color_gradient(tiff_path, output_path):
     """Apply a color gradient to the DEM TIFF and save it as a PNG."""
@@ -70,7 +68,6 @@ def apply_color_gradient(tiff_path, output_path):
         plt.imsave(output_path, colored_image)
         plt.close()
 
-
 # Overlay function for TIFF images
 def add_image_overlay(map_object, tiff_path, bounds, name):
     """Add a TIFF image overlay to a Folium map."""
@@ -83,17 +80,13 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
             opacity=0.6,
         ).add_to(map_object)
 
-
 # Main application
 def main():
     st.title("DESSINER une CARTE ")
 
-    # Initialize session state for drawings
-    if "drawings" not in st.session_state:
-        st.session_state["drawings"] = {
-            "type": "FeatureCollection",
-            "features": [],
-        }
+    # Initialize session state for layers
+    if "layers" not in st.session_state:
+        st.session_state["layers"] = []
 
     # Initialize map
     fmap = folium.Map(location=[0, 0], zoom_start=2)
@@ -102,7 +95,7 @@ def main():
         position="topleft",
         export=True,
         draw_options={
-            "polyline": {"shapeOptions": {"color": "orange", "weight": 4, "opacity": 0.7}},  # Change color to orange
+            "polyline": {"shapeOptions": {"color": "orange", "weight": 4, "opacity": 0.7}},
             "polygon": {"shapeOptions": {"color": "green", "weight": 4, "opacity": 0.7}},
             "rectangle": {"shapeOptions": {"color": "red", "weight": 4, "opacity": 0.7}},
             "circle": {"shapeOptions": {"color": "purple", "weight": 4, "opacity": 0.7}},
@@ -111,129 +104,66 @@ def main():
     )
     fmap.add_child(draw)
 
-    # Téléversement d'une orthophoto (TIFF)
-    uploaded_tiff = st.file_uploader("Téléverser une orthophoto (TIFF)", type=["tif", "tiff"])
+    # Téléversement des fichiers TIFF
+    uploaded_tiff = st.file_uploader("Téléverser un fichier TIFF", type=["tif", "tiff"], accept_multiple_files=True)
     if uploaded_tiff:
-        tiff_path = uploaded_tiff.name
-        with open(tiff_path, "wb") as f:
-            f.write(uploaded_tiff.read())
+        for file in uploaded_tiff:
+            tiff_path = file.name
+            with open(tiff_path, "wb") as f:
+                f.write(file.read())
 
-        st.write("Reprojection du fichier TIFF...")
-        try:
-            reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
-            with rasterio.open(reprojected_tiff) as src:
-                bounds = src.bounds
-                center_lat = (bounds.top + bounds.bottom) / 2
-                center_lon = (bounds.left + bounds.right) / 2
-                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+            st.write(f"Reprojection du fichier TIFF {tiff_path}...")
+            try:
+                reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
+                with rasterio.open(reprojected_tiff) as src:
+                    bounds = src.bounds
+                    center_lat = (bounds.top + bounds.bottom) / 2
+                    center_lon = (bounds.left + bounds.right) / 2
+                    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-                fmap.add_child(MeasureControl(position="topleft"))
-                draw = Draw(
-                    position="topleft",
-                    export=True,
-                    draw_options={
-                        "polyline": {"shapeOptions": {"color": "orange", "weight": 4, "opacity": 0.7}},
-                        "polygon": {"shapeOptions": {"color": "green", "weight": 4, "opacity": 0.7}},
-                        "rectangle": {"shapeOptions": {"color": "red", "weight": 4, "opacity": 0.7}},
-                        "circle": {"shapeOptions": {"color": "purple", "weight": 4, "opacity": 0.7}},
-                    },
-                    edit_options={"edit": True},
-                )
-                fmap.add_child(draw)
-                add_image_overlay(fmap, reprojected_tiff, bounds, "Orthophoto")
-        except Exception as e:
-            st.error(f"Erreur lors de la reprojection : {e}")
+                    fmap.add_child(MeasureControl(position="topleft"))
+                    draw = Draw(
+                        position="topleft",
+                        export=True,
+                        draw_options={
+                            "polyline": {"shapeOptions": {"color": "orange", "weight": 4, "opacity": 0.7}},
+                            "polygon": {"shapeOptions": {"color": "green", "weight": 4, "opacity": 0.7}},
+                            "rectangle": {"shapeOptions": {"color": "red", "weight": 4, "opacity": 0.7}},
+                            "circle": {"shapeOptions": {"color": "purple", "weight": 4, "opacity": 0.7}},
+                        },
+                        edit_options={"edit": True},
+                    )
+                    fmap.add_child(draw)
+                    add_image_overlay(fmap, reprojected_tiff, bounds, "Orthophoto")
+                    st.session_state["layers"].append(("TIFF", reprojected_tiff, bounds))
+            except Exception as e:
+                st.error(f"Erreur lors de la reprojection : {e}")
 
-    # Téléversement du fichier MNT (Modèle Numérique de Terrain)
-    uploaded_mnt = st.file_uploader("Téléverser un fichier MNT (TIFF)", type=["tif", "tiff"])
-    if uploaded_mnt:
-        mnt_path = uploaded_mnt.name
-        with open(mnt_path, "wb") as f:
-            f.write(uploaded_mnt.read())
+    # Téléversement des fichiers GeoJSON
+    uploaded_geojson = st.file_uploader("Téléverser un fichier GeoJSON", type=["geojson"], accept_multiple_files=True)
+    if uploaded_geojson:
+        for file in uploaded_geojson:
+            try:
+                geojson_data = json.load(file)
+                st.session_state["layers"].append(("GeoJSON", geojson_data))
+            except Exception as e:
+                st.error(f"Erreur lors du chargement du GeoJSON : {e}")
 
-        st.write("Reprojection du fichier MNT...")
-        try:
-            reprojected_mnt = reproject_tiff(mnt_path, "EPSG:4326")
-            
-            # Create a temporary PNG file for the colorized DEM
-            temp_png_path = "mnt_colored.png"
-            apply_color_gradient(reprojected_mnt, temp_png_path)
-            
-            with rasterio.open(reprojected_mnt) as src:
-                bounds = src.bounds
-                center_lat = (bounds.top + bounds.bottom) / 2
-                center_lon = (bounds.left + bounds.right) / 2
-                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-                add_image_overlay(fmap, temp_png_path, bounds, "MNT")
-                
-            # Remove the temporary PNG file
-            os.remove(temp_png_path)
-        except Exception as e:
-            st.error(f"Erreur lors de la reprojection du MNT : {e}")
-
-    # Téléversement du fichier MNS (Modèle Numérique de Surface)
-    uploaded_mns = st.file_uploader("Téléverser un fichier MNS (TIFF)", type=["tif", "tiff"])
-    if uploaded_mns:
-        mns_path = uploaded_mns.name
-        with open(mns_path, "wb") as f:
-            f.write(uploaded_mns.read())
-
-        st.write("Reprojection du fichier MNS...")
-        try:
-            reprojected_mns = reproject_tiff(mns_path, "EPSG:4326")
-            
-            # Create a temporary PNG file for the colorized MNS
-            temp_png_path = "mns_colored.png"
-            apply_color_gradient(reprojected_mns, temp_png_path)
-            
-            with rasterio.open(reprojected_mns) as src:
-                bounds = src.bounds
-                center_lat = (bounds.top + bounds.bottom) / 2
-                center_lon = (bounds.left + bounds.right) / 2
-                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-                add_image_overlay(fmap, temp_png_path, bounds, "MNS")
-                
-            # Remove the temporary PNG file
-            os.remove(temp_png_path)
-        except Exception as e:
-            st.error(f"Erreur lors de la reprojection du MNS : {e}")
-
-
-    # Téléversement d'un fichier GeoJSON pour les routes
-    geojson_file = st.file_uploader("Téléverser un fichier GeoJSON de routes", type=["geojson"])
-    if geojson_file:
-        try:
-            geojson_data = json.load(geojson_file)
-            folium.GeoJson(
-                geojson_data,
-                name="Routes",
-                style_function=lambda x: {
-                    "color": "orange",  # Change color to orange
-                    "weight": 4,
-                    "opacity": 0.7
-                }
-            ).add_to(fmap)
-        except Exception as e:
-            st.error(f"Erreur lors du chargement du GeoJSON : {e}")
-
-    # Téléversement d'un fichier GeoJSON pour la polygonale
-    geojson_polygon = st.file_uploader("Téléverser un fichier GeoJSON de polygonale", type=["geojson"])
-    if geojson_polygon:
-        try:
-            polygon_data = json.load(geojson_polygon)
-            folium.GeoJson(
-                polygon_data,
-                name="Polygonale",
-                style_function=lambda x: {
-                    "color": "red",  # Border color red
-                    "weight": 2,
-                    "opacity": 1,
-                    "fillColor": "transparent",  # Transparent fill color
-                    "fillOpacity": 0.1
-                }
-            ).add_to(fmap)
-        except Exception as e:
-            st.error(f"Erreur lors du chargement du fichier polygonal : {e}")
+    # Bouton pour ajouter les couches à la carte
+    if st.button("Ajouter couches"):
+        for layer in st.session_state["layers"]:
+            if layer[0] == "TIFF":
+                add_image_overlay(fmap, layer[1], layer[2], "Couche TIFF")
+            elif layer[0] == "GeoJSON":
+                folium.GeoJson(
+                    layer[1],
+                    name="Couche GeoJSON",
+                    style_function=lambda x: {
+                        "color": "orange",
+                        "weight": 4,
+                        "opacity": 0.7
+                    }
+                ).add_to(fmap)
 
     # Ajout des contrôles de calques
     folium.LayerControl().add_to(fmap)
@@ -241,9 +171,11 @@ def main():
     # Affichage de la carte
     folium_static(fmap, width=700, height=500)
 
-
 if __name__ == "__main__":
     main()
+
+
+
 # Fonction pour charger un fichier TIFF
 def load_tiff(file_path, target_crs="EPSG:4326"):
     try:
