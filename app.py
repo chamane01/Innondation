@@ -193,18 +193,18 @@ def main():
     geojson_type = st.selectbox(
         "Sélectionnez le type de fichier GeoJSON",
         options=[
+            "Polygonale",
             "Routes",
+            "Cours d'eau",
+            "Bâtiments",
             "Pistes",
             "Plantations",
-            "Bâtiments",
             "Électricité",
             "Assainissements",
             "Villages",
             "Villes",
             "Chemin de fer",
-            "Parc et réserves",
-            "Cours d'eau",
-            "Polygonale"
+            "Parc et réserves" 
         ],
         index=None,  # Aucune option sélectionnée par défaut
         placeholder="Veuillez sélectionner",
