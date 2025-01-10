@@ -239,10 +239,14 @@ def main():
         """
         <style>
         .custom-container {
-            background-color: #f0f2f6;  /* Couleur de fond légèrement plus foncée */
+            background-color: #2e2e2e;  /* Couleur de fond plus foncée (fonctionne en mode nocturne) */
             padding: 20px;
             border-radius: 10px;
             margin: 10px 0;
+            color: #ffffff;  /* Texte en blanc pour contraster avec le fond foncé */
+        }
+        .custom-container button {
+            color: #000000;  /* Texte des boutons en noir */
         }
         </style>
         """,
