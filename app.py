@@ -448,6 +448,8 @@ def main():
 
   # ... (le reste du code reste inchangé jusqu'à la partie des boutons d'analyse)
 
+  # ... (le reste du code reste inchangé jusqu'à la partie des boutons d'analyse)
+
     # Boutons pour les analyses
     col1, col2, col3 = st.columns(3)
     with col1:
