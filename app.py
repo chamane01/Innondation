@@ -234,14 +234,14 @@ def main():
             except Exception as e:
                 st.error(f"Erreur lors du chargement du GeoJSON : {e}")
 
-    # Display the list of uploaded layers with delete buttons
+    # Ajouter un style CSS pour la zone avec un fond légèrement plus foncé
     st.markdown(
         """
         <style>
-        .uploaded-layers-box {
-            border: 2px solid #4CAF50;
+        .custom-container {
+            background-color: #f0f2f6;  /* Couleur de fond légèrement plus foncée */
+            padding: 20px;
             border-radius: 10px;
-            padding: 10px;
             margin: 10px 0;
         }
         </style>
@@ -249,14 +249,16 @@ def main():
         unsafe_allow_html=True
     )
 
-    st.markdown('<div class="uploaded-layers-box">', unsafe_allow_html=True)
+    # Encadrer la section concernée dans une div avec le style personnalisé
+    st.markdown('<div class="custom-container">', unsafe_allow_html=True)
+
+    # Display the list of uploaded layers with delete buttons
     col1, col2 = st.columns([4, 1])
     with col1:
         st.subheader("Liste des couches téléversées")
     with col2:
         if st.button("Rafraîchir la liste", key="refresh_list"):
-            # No need to call st.experimental_rerun(), Streamlit will automatically re-run the script
-            pass
+            pass  # Rafraîchir la liste
 
     if st.session_state["uploaded_layers"]:
         for i, layer in enumerate(st.session_state["uploaded_layers"]):
@@ -265,19 +267,15 @@ def main():
                 st.write(f"{i + 1}. {layer['name']} ({layer['type']})")
             with col2:
                 if st.button(f"Supprimer {layer['name']}", key=f"delete_{i}"):
-                    # Remove the layer from the list
                     st.session_state["uploaded_layers"].pop(i)
                     st.success(f"Couche {layer['name']} supprimée.")
-                    # Streamlit will automatically re-run the script
     else:
         st.write("Aucune couche téléversée pour le moment.")
-    st.markdown('</div>', unsafe_allow_html=True)
 
     # Button to add all uploaded layers to the map
     if st.button("Ajouter la liste de couches à la carte", key="add_layers_button"):
-        # Use a set to track added layers and avoid duplicates
         added_layers = set()
-        all_bounds = []  # To store bounds of all layers
+        all_bounds = []  # Pour stocker les limites de toutes les couches
 
         for layer in st.session_state["uploaded_layers"]:
             if layer["name"] not in added_layers:
@@ -289,11 +287,9 @@ def main():
                         os.remove(temp_png_path)
                     else:
                         add_image_overlay(fmap, layer["path"], layer["bounds"], layer["name"])
-                    # Add bounds to the list
                     all_bounds.append([[layer["bounds"].bottom, layer["bounds"].left], [layer["bounds"].top, layer["bounds"].right]])
                 elif layer["type"] == "GeoJSON":
-                    # Get the color for the GeoJSON layer
-                    color = geojson_colors.get(layer["name"], "blue")  # Default to blue if not found
+                    color = geojson_colors.get(layer["name"], "blue")
                     folium.GeoJson(
                         layer["data"],
                         name=layer["name"],
@@ -303,15 +299,17 @@ def main():
                             "opacity": 0.7
                         }
                     ).add_to(fmap)
-                    # Calculate bounds for GeoJSON and add to the list
                     geojson_bounds = calculate_geojson_bounds(layer["data"])
                     all_bounds.append([[geojson_bounds[1], geojson_bounds[0]], [geojson_bounds[3], geojson_bounds[2]]])
                 added_layers.add(layer["name"])
 
-        # Adjust the map view to fit all bounds
+        # Ajuster la vue de la carte pour inclure toutes les limites
         if all_bounds:
             fmap.fit_bounds(all_bounds)
         st.success("Toutes les couches ont été ajoutées à la carte.")
+
+    # Fermer la div personnalisée
+    st.markdown('</div>', unsafe_allow_html=True)
 
     # Ajout des contrôles de calques
     folium.LayerControl().add_to(fmap)
@@ -321,7 +319,6 @@ def main():
 
 if __name__ == "__main__":
     main()
-
 
 import rasterio
 from rasterio.warp import transform_bounds
