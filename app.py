@@ -444,6 +444,17 @@ def main():
     # Affichage de la carte
     folium_static(fmap, width=700, height=500)
 
+
+
+
+
+
+
+
+
+
+    
+
    # ... (le reste du code reste inchangé jusqu'à la partie des boutons d'analyse)
 
   # ... (le reste du code reste inchangé jusqu'à la partie des boutons d'analyse)
