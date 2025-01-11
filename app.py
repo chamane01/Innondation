@@ -186,13 +186,22 @@ def calculate_volume_without_mnt(mns, bounds, polygon_gdf, reference_altitude):
 
 # Détection des arbres avec DBSCAN
 def detect_trees(heights, threshold, eps, min_samples):
-    tree_mask = heights > threshold
-    coords = np.column_stack(np.where(tree_mask))
+    try:
+        tree_mask = heights > threshold
+        coords = np.column_stack(np.where(tree_mask))
 
-    clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
-    tree_clusters = clustering.labels_
+        # Vérifier si des points ont été détectés
+        if len(coords) == 0:
+            st.error("Aucun arbre détecté avec le seuil actuel. Essayez de réduire le seuil de hauteur.")
+            return None, None
 
-    return coords, tree_clusters
+        clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
+        tree_clusters = clustering.labels_
+
+        return coords, tree_clusters
+    except Exception as e:
+        st.error(f"Erreur lors de la détection des arbres : {e}")
+        return None, None
 
 # Calcul des centroïdes des arbres
 def calculate_cluster_centroids(coords, clusters):
@@ -453,29 +462,6 @@ def main():
     # Affichage de la carte
     folium_static(fmap, width=700, height=500)
 
-   # ... (le reste du code reste inchangé jusqu'à la fonction detect_trees)
-
-# Détection des arbres avec DBSCAN
-def detect_trees(heights, threshold, eps, min_samples):
-    try:
-        tree_mask = heights > threshold
-        coords = np.column_stack(np.where(tree_mask))
-
-        # Vérifier si des points ont été détectés
-        if len(coords) == 0:
-            st.error("Aucun arbre détecté avec le seuil actuel. Essayez de réduire le seuil de hauteur.")
-            return None, None
-
-        clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
-        tree_clusters = clustering.labels_
-
-        return coords, tree_clusters
-    except Exception as e:
-        st.error(f"Erreur lors de la détection des arbres : {e}")
-        return None, None
-
-# ... (le reste du code reste inchangé jusqu'à la section des boutons sous la carte)
-
     # Boutons sous la carte
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -624,4 +610,5 @@ def detect_trees(heights, threshold, eps, min_samples):
                         # Afficher la carte
                         folium_static(fmap, width=700, height=500)
 
-# ... (le reste du code reste inchangé)
+if __name__ == "__main__":
+    main()
