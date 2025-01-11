@@ -135,68 +135,90 @@ def calculate_heights(mns, mnt):
 
 # Fonction pour calculer le volume dans l'emprise de la polygonale (Méthode 1 : MNS - MNT)
 def calculate_volume_in_polygon(mns, mnt, bounds, polygon_gdf):
-    # Calculer les hauteurs relatives
-    heights = calculate_heights(mns, mnt)
+    try:
+        # Calculer les hauteurs relatives
+        heights = calculate_heights(mns, mnt)
 
-    # Extraire les coordonnées de la polygonale
-    polygon_mask = np.zeros_like(heights, dtype=bool)
-    height = bounds[3] - bounds[1]
-    width = bounds[2] - bounds[0]
-    img_height, img_width = heights.shape
+        # Extraire les coordonnées de la polygonale
+        polygon_mask = np.zeros_like(heights, dtype=bool)
+        height = bounds[3] - bounds[1]
+        width = bounds[2] - bounds[0]
+        img_height, img_width = heights.shape
 
-    for _, row in polygon_gdf.iterrows():
-        polygon = row.geometry
-        for x in range(img_width):
-            for y in range(img_height):
-                lat = bounds[3] - height * (y / img_height)
-                lon = bounds[0] + width * (x / img_width)
-                if polygon.contains(Point(lon, lat)):
-                    polygon_mask[y, x] = True
+        for _, row in polygon_gdf.iterrows():
+            polygon = row.geometry
+            for x in range(img_width):
+                for y in range(img_height):
+                    lat = bounds[3] - height * (y / img_height)
+                    lon = bounds[0] + width * (x / img_width)
+                    if polygon.contains(Point(lon, lat)):
+                        polygon_mask[y, x] = True
 
-    # Calculer le volume (somme des hauteurs dans la polygonale)
-    volume = np.sum(heights[polygon_mask])  # Volume en m³ (si les données sont en mètres)
-    return volume
+        # Calculer le volume (somme des hauteurs dans la polygonale)
+        volume = np.sum(heights[polygon_mask])  # Volume en m³ (si les données sont en mètres)
+        return volume
+    except Exception as e:
+        st.error(f"Erreur lors du calcul du volume : {e}")
+        return None
 
 # Fonction pour calculer le volume avec MNS seul (Méthode 2 : MNS seul)
 def calculate_volume_without_mnt(mns, bounds, polygon_gdf, reference_altitude):
-    # Extraire les coordonnées de la polygonale
-    polygon_mask = np.zeros_like(mns, dtype=bool)
-    height = bounds[3] - bounds[1]
-    width = bounds[2] - bounds[0]
-    img_height, img_width = mns.shape
+    try:
+        # Extraire les coordonnées de la polygonale
+        polygon_mask = np.zeros_like(mns, dtype=bool)
+        height = bounds[3] - bounds[1]
+        width = bounds[2] - bounds[0]
+        img_height, img_width = mns.shape
 
-    for _, row in polygon_gdf.iterrows():
-        polygon = row.geometry
-        for x in range(img_width):
-            for y in range(img_height):
-                lat = bounds[3] - height * (y / img_height)
-                lon = bounds[0] + width * (x / img_width)
-                if polygon.contains(Point(lon, lat)):
-                    polygon_mask[y, x] = True
+        for _, row in polygon_gdf.iterrows():
+            polygon = row.geometry
+            for x in range(img_width):
+                for y in range(img_height):
+                    lat = bounds[3] - height * (y / img_height)
+                    lon = bounds[0] + width * (x / img_width)
+                    if polygon.contains(Point(lon, lat)):
+                        polygon_mask[y, x] = True
 
-    # Calculer les différences par rapport à l'altitude de référence
-    diff = mns - reference_altitude
+        # Calculer les différences par rapport à l'altitude de référence
+        diff = mns - reference_altitude
 
-    # Calculer les volumes positifs et négatifs
-    positive_volume = np.sum(diff[polygon_mask & (diff > 0)])  # Volume positif
-    negative_volume = np.sum(diff[polygon_mask & (diff < 0)])  # Volume négatif
-    real_volume = positive_volume + negative_volume  # Volume réel
+        # Calculer les volumes positifs et négatifs
+        positive_volume = np.sum(diff[polygon_mask & (diff > 0)])  # Volume positif
+        negative_volume = np.sum(diff[polygon_mask & (diff < 0)])  # Volume négatif
+        real_volume = positive_volume + negative_volume  # Volume réel
 
-    return positive_volume, negative_volume, real_volume
+        return positive_volume, negative_volume, real_volume
+    except Exception as e:
+        st.error(f"Erreur lors du calcul du volume : {e}")
+        return None, None, None
 
 # Détection des arbres avec DBSCAN
 def detect_trees(heights, threshold, eps, min_samples):
     try:
+        # Afficher les statistiques des hauteurs pour le débogage
+        st.sidebar.write(f"Hauteur minimale : {np.min(heights):.2f} m")
+        st.sidebar.write(f"Hauteur maximale : {np.max(heights):.2f} m")
+        st.sidebar.write(f"Hauteur moyenne : {np.mean(heights):.2f} m")
+
+        # Appliquer le seuil de hauteur
         tree_mask = heights > threshold
-        coords = np.column_stack(np.where(tree_mask))
+        st.sidebar.write(f"Nombre de pixels au-dessus du seuil : {np.sum(tree_mask)}")
 
         # Vérifier si des points ont été détectés
-        if len(coords) == 0:
+        if np.sum(tree_mask) == 0:
             st.error("Aucun arbre détecté avec le seuil actuel. Essayez de réduire le seuil de hauteur.")
             return None, None
 
+        # Extraire les coordonnées des points au-dessus du seuil
+        coords = np.column_stack(np.where(tree_mask))
+
+        # Appliquer DBSCAN
         clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
         tree_clusters = clustering.labels_
+
+        # Afficher le nombre de clusters détectés
+        num_clusters = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
+        st.sidebar.write(f"Nombre de clusters détectés : {num_clusters}")
 
         return coords, tree_clusters
     except Exception as e:
@@ -508,7 +530,8 @@ def main():
                 else:
                     try:
                         volume = calculate_volume_in_polygon(mns, mnt, mnt_bounds, polygons_gdf)
-                        st.sidebar.write(f"Volume calculé dans la polygonale : {volume:.2f} m³")
+                        if volume is not None:
+                            st.sidebar.write(f"Volume calculé dans la polygonale : {volume:.2f} m³")
                     except Exception as e:
                         st.sidebar.error(f"Erreur lors du calcul du volume : {e}")
         elif method == "Méthode 2 : MNS seul":
@@ -532,9 +555,10 @@ def main():
                         positive_volume, negative_volume, real_volume = calculate_volume_without_mnt(
                             mns, mns_bounds, polygons_gdf, reference_altitude
                         )
-                        st.sidebar.write(f"Volume positif (au-dessus de la référence) : {positive_volume:.2f} m³")
-                        st.sidebar.write(f"Volume négatif (en dessous de la référence) : {negative_volume:.2f} m³")
-                        st.sidebar.write(f"Volume réel (différence) : {real_volume:.2f} m³")
+                        if positive_volume is not None and negative_volume is not None and real_volume is not None:
+                            st.sidebar.write(f"Volume positif (au-dessus de la référence) : {positive_volume:.2f} m³")
+                            st.sidebar.write(f"Volume négatif (en dessous de la référence) : {negative_volume:.2f} m³")
+                            st.sidebar.write(f"Volume réel (différence) : {real_volume:.2f} m³")
                     except Exception as e:
                         st.sidebar.error(f"Erreur lors du calcul du volume : {e}")
 
@@ -551,6 +575,7 @@ def main():
         if not mnt_layer or not mns_layer:
             st.sidebar.error("Les couches MNT et MNS sont nécessaires pour la détection des arbres.")
         else:
+            # Charger les fichiers MNT et MNS
             mnt, mnt_bounds = load_tiff(mnt_layer["path"])
             mns, mns_bounds = load_tiff(mns_layer["path"])
 
@@ -559,7 +584,14 @@ def main():
             elif mnt_bounds != mns_bounds:
                 st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
             else:
+                # Calculer les hauteurs relatives
                 heights = calculate_heights(mns, mnt)
+
+                # Afficher les statistiques des hauteurs
+                st.sidebar.write("Statistiques des hauteurs :")
+                st.sidebar.write(f"Hauteur minimale : {np.min(heights):.2f} m")
+                st.sidebar.write(f"Hauteur maximale : {np.max(heights):.2f} m")
+                st.sidebar.write(f"Hauteur moyenne : {np.mean(heights):.2f} m")
 
                 # Paramètres de détection
                 height_threshold = st.sidebar.slider("Seuil de hauteur", 0.1, 20.0, 2.0, 0.1, key="height_threshold")
