@@ -131,13 +131,39 @@ def load_and_reproject_shapefile(file_path, target_crs="EPSG:4326"):
 
 # Calcul de hauteur relative (pour la méthode 1 : MNS - MNT)
 def calculate_heights(mns, mnt):
-    return np.maximum(0, mns - mnt)
+    """Calcule les hauteurs relatives (MNS - MNT) en ignorant les valeurs invalides."""
+    try:
+        # Vérifier si les données sont valides
+        if mns is None or mnt is None:
+            st.error("Les fichiers MNS ou MNT ne sont pas valides.")
+            return None
+
+        # Ignorer les valeurs invalides (nodata)
+        mns_valid = np.where(mns != mns.min(), mns, np.nan)  # Ignorer les valeurs nodata
+        mnt_valid = np.where(mnt != mnt.min(), mnt, np.nan)  # Ignorer les valeurs nodata
+
+        # Calculer les hauteurs relatives
+        heights = np.maximum(0, mns_valid - mnt_valid)
+
+        # Afficher les statistiques des hauteurs pour le débogage
+        st.sidebar.write("Statistiques des hauteurs (MNS - MNT) :")
+        st.sidebar.write(f"Hauteur minimale : {np.nanmin(heights):.2f} m")
+        st.sidebar.write(f"Hauteur maximale : {np.nanmax(heights):.2f} m")
+        st.sidebar.write(f"Hauteur moyenne : {np.nanmean(heights):.2f} m")
+
+        return heights
+    except Exception as e:
+        st.error(f"Erreur lors du calcul des hauteurs : {e}")
+        return None
 
 # Fonction pour calculer le volume dans l'emprise de la polygonale (Méthode 1 : MNS - MNT)
 def calculate_volume_in_polygon(mns, mnt, bounds, polygon_gdf):
     try:
         # Calculer les hauteurs relatives
         heights = calculate_heights(mns, mnt)
+
+        if heights is None:
+            return None
 
         # Extraire les coordonnées de la polygonale
         polygon_mask = np.zeros_like(heights, dtype=bool)
@@ -196,9 +222,9 @@ def calculate_volume_without_mnt(mns, bounds, polygon_gdf, reference_altitude):
 def detect_trees(heights, threshold, eps, min_samples):
     try:
         # Afficher les statistiques des hauteurs pour le débogage
-        st.sidebar.write(f"Hauteur minimale : {np.min(heights):.2f} m")
-        st.sidebar.write(f"Hauteur maximale : {np.max(heights):.2f} m")
-        st.sidebar.write(f"Hauteur moyenne : {np.mean(heights):.2f} m")
+        st.sidebar.write(f"Hauteur minimale : {np.nanmin(heights):.2f} m")
+        st.sidebar.write(f"Hauteur maximale : {np.nanmax(heights):.2f} m")
+        st.sidebar.write(f"Hauteur moyenne : {np.nanmean(heights):.2f} m")
 
         # Appliquer le seuil de hauteur
         tree_mask = heights > threshold
@@ -584,63 +610,67 @@ def main():
             elif mnt_bounds != mns_bounds:
                 st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
             else:
+                # Afficher les valeurs brutes des fichiers MNT et MNS pour le débogage
+                st.sidebar.write("Statistiques des fichiers bruts :")
+                st.sidebar.write(f"MNT - Valeur minimale : {np.min(mnt):.2f} m")
+                st.sidebar.write(f"MNT - Valeur maximale : {np.max(mnt):.2f} m")
+                st.sidebar.write(f"MNT - Valeur moyenne : {np.mean(mnt):.2f} m")
+                st.sidebar.write(f"MNS - Valeur minimale : {np.min(mns):.2f} m")
+                st.sidebar.write(f"MNS - Valeur maximale : {np.max(mns):.2f} m")
+                st.sidebar.write(f"MNS - Valeur moyenne : {np.mean(mns):.2f} m")
+
                 # Calculer les hauteurs relatives
                 heights = calculate_heights(mns, mnt)
 
-                # Afficher les statistiques des hauteurs
-                st.sidebar.write("Statistiques des hauteurs :")
-                st.sidebar.write(f"Hauteur minimale : {np.min(heights):.2f} m")
-                st.sidebar.write(f"Hauteur maximale : {np.max(heights):.2f} m")
-                st.sidebar.write(f"Hauteur moyenne : {np.mean(heights):.2f} m")
+                if heights is not None:
+                    # Paramètres de détection
+                    height_threshold = st.sidebar.slider("Seuil de hauteur", 0.1, 20.0, 2.0, 0.1, key="height_threshold")
+                    eps = st.sidebar.slider("Rayon de voisinage", 0.1, 10.0, 2.0, 0.1, key="eps")
+                    min_samples = st.sidebar.slider("Min. points pour un cluster", 1, 10, 5, 1, key="min_samples")
 
-                # Paramètres de détection
-                height_threshold = st.sidebar.slider("Seuil de hauteur", 0.1, 20.0, 2.0, 0.1, key="height_threshold")
-                eps = st.sidebar.slider("Rayon de voisinage", 0.1, 10.0, 2.0, 0.1, key="eps")
-                min_samples = st.sidebar.slider("Min. points pour un cluster", 1, 10, 5, 1, key="min_samples")
+                    # Détection et visualisation
+                    if st.sidebar.button("Lancer la détection"):
+                        coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
 
-                # Détection et visualisation
-                if st.sidebar.button("Lancer la détection"):
-                    coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
+                        if coords is not None and tree_clusters is not None:
+                            num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
+                            st.sidebar.write(f"Nombre d'arbres détectés : {num_trees}")
 
-                    if coords is not None and tree_clusters is not None:
-                        num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
-                        st.sidebar.write(f"Nombre d'arbres détectés : {num_trees}")
+                            centroids = calculate_cluster_centroids(coords, tree_clusters)
 
-                        centroids = calculate_cluster_centroids(coords, tree_clusters)
+                            # Mise à jour de la carte
+                            center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
+                            center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
+                            fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-                        # Mise à jour de la carte
-                        center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
-                        center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
-                        fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-
-                        folium.raster_layers.ImageOverlay(
-                            image=mnt,
-                            bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
-                            opacity=0.5,
-                            name="MNT"
-                        ).add_to(fmap)
-
-                        add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
-
-                        # Ajout des polygones (optionnel)
-                        if polygon_layer:
-                            polygons_gdf = gpd.GeoDataFrame.from_features(polygon_layer["data"])
-                            folium.GeoJson(
-                                polygons_gdf,
-                                name="Polygones",
-                                style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}
+                            folium.raster_layers.ImageOverlay(
+                                image=mnt,
+                                bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
+                                opacity=0.5,
+                                name="MNT"
                             ).add_to(fmap)
 
-                            # Compter les arbres à l'intérieur de la polygonale
-                            tree_count_in_polygon = count_trees_in_polygon(centroids, mnt_bounds, mnt.shape, polygons_gdf)
-                            st.sidebar.write(f"Nombre d'arbres dans la polygonale : {tree_count_in_polygon}")
+                            add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
 
-                        fmap.add_child(MeasureControl(position='topleft'))
-                        fmap.add_child(Draw(position='topleft', export=True))
-                        fmap.add_child(folium.LayerControl(position='topright'))
+                            # Ajout des polygones (optionnel)
+                            if polygon_layer:
+                                polygons_gdf = gpd.GeoDataFrame.from_features(polygon_layer["data"])
+                                folium.GeoJson(
+                                    polygons_gdf,
+                                    name="Polygones",
+                                    style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}
+                                ).add_to(fmap)
 
-                        # Afficher la carte
-                        folium_static(fmap, width=700, height=500)
+                                # Compter les arbres à l'intérieur de la polygonale
+                                tree_count_in_polygon = count_trees_in_polygon(centroids, mnt_bounds, mnt.shape, polygons_gdf)
+                                st.sidebar.write(f"Nombre d'arbres dans la polygonale : {tree_count_in_polygon}")
+
+                            fmap.add_child(MeasureControl(position='topleft'))
+                            fmap.add_child(Draw(position='topleft', export=True))
+                            fmap.add_child(folium.LayerControl(position='topright'))
+
+                            # Afficher la carte
+                            folium_static(fmap, width=700, height=500)
 
 if __name__ == "__main__":
     main()
