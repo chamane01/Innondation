@@ -138,12 +138,8 @@ def calculate_heights(mns, mnt):
             st.error("Les fichiers MNS ou MNT ne sont pas valides.")
             return None
 
-        # Ignorer les valeurs invalides (nodata)
-        mns_valid = np.where(mns != mns.min(), mns, np.nan)  # Ignorer les valeurs nodata
-        mnt_valid = np.where(mnt != mnt.min(), mnt, np.nan)  # Ignorer les valeurs nodata
-
         # Calculer les hauteurs relatives
-        heights = np.maximum(0, mns_valid - mnt_valid)
+        heights = np.maximum(0, mns - mnt)
 
         # Afficher les statistiques des hauteurs pour le débogage
         st.sidebar.write("Statistiques des hauteurs (MNS - MNT) :")
