@@ -478,25 +478,21 @@ def main():
             key="volume_method"
         )
 
-        # Téléversement des fichiers
-        mns_file = st.sidebar.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"], key="mns_volume")
-        polygon_file = st.sidebar.file_uploader("Téléchargez un fichier de polygone (obligatoire)", type=["geojson", "shp"], key="polygon_volume")
+        # Utiliser les couches existantes
+        mns_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "MNS"), None)
+        mnt_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "MNT"), None)
+        polygon_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "Polygonale"), None)
 
-        if method == "Méthode 1 : MNS - MNT":
-            mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"], key="mnt_volume")
-        else:
-            mnt_file = None
-
-        if mns_file and polygon_file and (method == "Méthode 2 : MNS seul" or mnt_file):
-            mns, mns_bounds = load_tiff(mns_file)
-            polygons_gdf = load_and_reproject_shapefile(polygon_file)
+        if mns_layer and polygon_layer and (method == "Méthode 2 : MNS seul" or mnt_layer):
+            mns, mns_bounds = load_tiff(mns_layer["path"])
+            polygons_gdf = gpd.GeoDataFrame.from_features(polygon_layer["data"])
 
             if mns is None or polygons_gdf is None:
                 st.sidebar.error("Erreur lors du chargement des fichiers.")
             else:
                 try:
                     if method == "Méthode 1 : MNS - MNT":
-                        mnt, mnt_bounds = load_tiff(mnt_file)
+                        mnt, mnt_bounds = load_tiff(mnt_layer["path"])
                         if mnt is None or mnt_bounds != mns_bounds:
                             st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
                         else:
@@ -552,14 +548,14 @@ def main():
     if st.session_state.get("show_tree_sidebar", False):
         st.sidebar.title("Paramètres de détection des arbres")
 
-        # Téléversement des fichiers
-        mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"], key="mnt_tree")
-        mns_file = st.sidebar.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"], key="mns_tree")
-        polygon_file = st.sidebar.file_uploader("Téléchargez un fichier de polygone (optionnel)", type=["geojson", "shp"], key="polygon_tree")
+        # Utiliser les couches existantes
+        mnt_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "MNT"), None)
+        mns_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "MNS"), None)
+        polygon_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "Polygonale"), None)
 
-        if mnt_file and mns_file:
-            mnt, mnt_bounds = load_tiff(mnt_file)
-            mns, mns_bounds = load_tiff(mns_file)
+        if mnt_layer and mns_layer:
+            mnt, mnt_bounds = load_tiff(mnt_layer["path"])
+            mns, mns_bounds = load_tiff(mns_layer["path"])
 
             if mnt is None or mns is None:
                 st.sidebar.error("Erreur lors du chargement des fichiers.")
@@ -596,8 +592,8 @@ def main():
                     add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
 
                     # Ajout des polygones (optionnel)
-                    if polygon_file:
-                        polygons_gdf = load_and_reproject_shapefile(polygon_file)
+                    if polygon_layer:
+                        polygons_gdf = gpd.GeoDataFrame.from_features(polygon_layer["data"])
                         folium.GeoJson(
                             polygons_gdf,
                             name="Polygones",
