@@ -453,6 +453,29 @@ def main():
     # Affichage de la carte
     folium_static(fmap, width=700, height=500)
 
+   # ... (le reste du code reste inchangé jusqu'à la fonction detect_trees)
+
+# Détection des arbres avec DBSCAN
+def detect_trees(heights, threshold, eps, min_samples):
+    try:
+        tree_mask = heights > threshold
+        coords = np.column_stack(np.where(tree_mask))
+
+        # Vérifier si des points ont été détectés
+        if len(coords) == 0:
+            st.error("Aucun arbre détecté avec le seuil actuel. Essayez de réduire le seuil de hauteur.")
+            return None, None
+
+        clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
+        tree_clusters = clustering.labels_
+
+        return coords, tree_clusters
+    except Exception as e:
+        st.error(f"Erreur lors de la détection des arbres : {e}")
+        return None, None
+
+# ... (le reste du code reste inchangé jusqu'à la section des boutons sous la carte)
+
     # Boutons sous la carte
     col1, col2, col3 = st.columns(3)
     with col1:
@@ -483,22 +506,36 @@ def main():
         mnt_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "MNT"), None)
         polygon_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "Polygonale"), None)
 
-        if mns_layer and polygon_layer and (method == "Méthode 2 : MNS seul" or mnt_layer):
-            mns, mns_bounds = load_tiff(mns_layer["path"])
-            polygons_gdf = gpd.GeoDataFrame.from_features(polygon_layer["data"])
-
-            if mns is None or polygons_gdf is None:
-                st.sidebar.error("Erreur lors du chargement des fichiers.")
+        # Vérifier si les couches nécessaires sont disponibles
+        if method == "Méthode 1 : MNS - MNT":
+            if not mns_layer or not mnt_layer or not polygon_layer:
+                st.sidebar.error("Les couches MNS, MNT et Polygonale sont nécessaires pour cette méthode.")
             else:
-                try:
-                    if method == "Méthode 1 : MNS - MNT":
-                        mnt, mnt_bounds = load_tiff(mnt_layer["path"])
-                        if mnt is None or mnt_bounds != mns_bounds:
-                            st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
-                        else:
-                            volume = calculate_volume_in_polygon(mns, mnt, mnt_bounds, polygons_gdf)
-                            st.sidebar.write(f"Volume calculé dans la polygonale : {volume:.2f} m³")
-                    else:
+                mns, mns_bounds = load_tiff(mns_layer["path"])
+                mnt, mnt_bounds = load_tiff(mnt_layer["path"])
+                polygons_gdf = gpd.GeoDataFrame.from_features(polygon_layer["data"])
+
+                if mns is None or mnt is None or polygons_gdf is None:
+                    st.sidebar.error("Erreur lors du chargement des fichiers.")
+                elif mnt_bounds != mns_bounds:
+                    st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
+                else:
+                    try:
+                        volume = calculate_volume_in_polygon(mns, mnt, mnt_bounds, polygons_gdf)
+                        st.sidebar.write(f"Volume calculé dans la polygonale : {volume:.2f} m³")
+                    except Exception as e:
+                        st.sidebar.error(f"Erreur lors du calcul du volume : {e}")
+        elif method == "Méthode 2 : MNS seul":
+            if not mns_layer or not polygon_layer:
+                st.sidebar.error("Les couches MNS et Polygonale sont nécessaires pour cette méthode.")
+            else:
+                mns, mns_bounds = load_tiff(mns_layer["path"])
+                polygons_gdf = gpd.GeoDataFrame.from_features(polygon_layer["data"])
+
+                if mns is None or polygons_gdf is None:
+                    st.sidebar.error("Erreur lors du chargement des fichiers.")
+                else:
+                    try:
                         # Saisie de l'altitude de référence pour la méthode 2
                         reference_altitude = st.sidebar.number_input(
                             "Entrez l'altitude de référence (en mètres) :",
@@ -512,37 +549,8 @@ def main():
                         st.sidebar.write(f"Volume positif (au-dessus de la référence) : {positive_volume:.2f} m³")
                         st.sidebar.write(f"Volume négatif (en dessous de la référence) : {negative_volume:.2f} m³")
                         st.sidebar.write(f"Volume réel (différence) : {real_volume:.2f} m³")
-
-                    # Afficher la carte
-                    center_lat = (mns_bounds[1] + mns_bounds[3]) / 2
-                    center_lon = (mns_bounds[0] + mns_bounds[2]) / 2
-                    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-
-                    # Ajouter le MNS
-                    folium.raster_layers.ImageOverlay(
-                        image=mns,
-                        bounds=[[mns_bounds[1], mns_bounds[0]], [mns_bounds[3], mns_bounds[2]]],
-                        opacity=0.7,
-                        name="MNS"
-                    ).add_to(fmap)
-
-                    # Ajouter la polygonale
-                    folium.GeoJson(
-                        polygons_gdf,
-                        name="Polygone",
-                        style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}
-                    ).add_to(fmap)
-
-                    # Ajouter les contrôles de carte
-                    fmap.add_child(MeasureControl(position='topleft'))
-                    fmap.add_child(Draw(position='topleft', export=True))
-                    fmap.add_child(folium.LayerControl(position='topright'))
-
-                    # Afficher la carte
-                    folium_static(fmap, width=700, height=500)
-
-                except Exception as e:
-                    st.sidebar.error(f"Erreur lors du calcul du volume : {e}")
+                    except Exception as e:
+                        st.sidebar.error(f"Erreur lors du calcul du volume : {e}")
 
     # Affichage des paramètres pour la détection des arbres
     if st.session_state.get("show_tree_sidebar", False):
@@ -553,7 +561,10 @@ def main():
         mns_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "MNS"), None)
         polygon_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "Polygonale"), None)
 
-        if mnt_layer and mns_layer:
+        # Vérifier si les couches nécessaires sont disponibles
+        if not mnt_layer or not mns_layer:
+            st.sidebar.error("Les couches MNT et MNS sont nécessaires pour la détection des arbres.")
+        else:
             mnt, mnt_bounds = load_tiff(mnt_layer["path"])
             mns, mns_bounds = load_tiff(mns_layer["path"])
 
@@ -572,44 +583,45 @@ def main():
                 # Détection et visualisation
                 if st.sidebar.button("Lancer la détection"):
                     coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
-                    num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
-                    st.sidebar.write(f"Nombre d'arbres détectés : {num_trees}")
 
-                    centroids = calculate_cluster_centroids(coords, tree_clusters)
+                    if coords is not None and tree_clusters is not None:
+                        num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
+                        st.sidebar.write(f"Nombre d'arbres détectés : {num_trees}")
 
-                    # Mise à jour de la carte
-                    center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
-                    center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
-                    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+                        centroids = calculate_cluster_centroids(coords, tree_clusters)
 
-                    folium.raster_layers.ImageOverlay(
-                        image=mnt,
-                        bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
-                        opacity=0.5,
-                        name="MNT"
-                    ).add_to(fmap)
+                        # Mise à jour de la carte
+                        center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
+                        center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
+                        fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 
-                    add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
-
-                    # Ajout des polygones (optionnel)
-                    if polygon_layer:
-                        polygons_gdf = gpd.GeoDataFrame.from_features(polygon_layer["data"])
-                        folium.GeoJson(
-                            polygons_gdf,
-                            name="Polygones",
-                            style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}
+                        folium.raster_layers.ImageOverlay(
+                            image=mnt,
+                            bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
+                            opacity=0.5,
+                            name="MNT"
                         ).add_to(fmap)
 
-                        # Compter les arbres à l'intérieur de la polygonale
-                        tree_count_in_polygon = count_trees_in_polygon(centroids, mnt_bounds, mnt.shape, polygons_gdf)
-                        st.sidebar.write(f"Nombre d'arbres dans la polygonale : {tree_count_in_polygon}")
+                        add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
 
-                    fmap.add_child(MeasureControl(position='topleft'))
-                    fmap.add_child(Draw(position='topleft', export=True))
-                    fmap.add_child(folium.LayerControl(position='topright'))
+                        # Ajout des polygones (optionnel)
+                        if polygon_layer:
+                            polygons_gdf = gpd.GeoDataFrame.from_features(polygon_layer["data"])
+                            folium.GeoJson(
+                                polygons_gdf,
+                                name="Polygones",
+                                style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}
+                            ).add_to(fmap)
 
-                    # Afficher la carte
-                    folium_static(fmap, width=700, height=500)
+                            # Compter les arbres à l'intérieur de la polygonale
+                            tree_count_in_polygon = count_trees_in_polygon(centroids, mnt_bounds, mnt.shape, polygons_gdf)
+                            st.sidebar.write(f"Nombre d'arbres dans la polygonale : {tree_count_in_polygon}")
 
-if __name__ == "__main__":
-    main()
+                        fmap.add_child(MeasureControl(position='topleft'))
+                        fmap.add_child(Draw(position='topleft', export=True))
+                        fmap.add_child(folium.LayerControl(position='topright'))
+
+                        # Afficher la carte
+                        folium_static(fmap, width=700, height=500)
+
+# ... (le reste du code reste inchangé)
