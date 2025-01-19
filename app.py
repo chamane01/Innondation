@@ -1,19 +1,16 @@
 import streamlit as st
+from streamlit_folium import st_folium
+import folium
+from folium.plugins import Draw, MeasureControl
+from folium import LayerControl
 import rasterio
 import rasterio.warp
-import folium
-from folium import plugins
-from folium.plugins import MeasureControl, Draw
 from rasterio.plot import reshape_as_image
 from PIL import Image
-from streamlit_folium import folium_static
 from rasterio.warp import transform_bounds
 import numpy as np
-from sklearn.cluster import DBSCAN
 import geopandas as gpd
 from shapely.geometry import Polygon, Point, LineString
-from folium import IFrame
-from streamlit_folium import st_folium
 import json
 from io import BytesIO
 from rasterio.enums import Resampling
@@ -21,7 +18,29 @@ from rasterio.warp import calculate_default_transform, reproject
 import matplotlib.pyplot as plt
 import os
 
-# Reprojection function
+# Initialisation des couches et des entités dans la session Streamlit
+if "layers" not in st.session_state:
+    st.session_state["layers"] = {}  # Plus de couches prédéfinies
+
+if "uploaded_layers" not in st.session_state:
+    st.session_state["uploaded_layers"] = []
+
+if "new_features" not in st.session_state:
+    st.session_state["new_features"] = []
+
+# Titre de l'application
+st.title("Carte Dynamique avec Gestion Avancée des Couches")
+
+# Description
+st.markdown("""
+Créez des entités géographiques (points, lignes, polygones) en les dessinant sur la carte et ajoutez-les à des couches spécifiques. 
+Vous pouvez également téléverser des fichiers TIFF ou GeoJSON pour les superposer à la carte.
+""")
+
+# Carte de base
+m = folium.Map(location=[5.5, -4.0], zoom_start=8)
+
+# Fonction pour reprojeter un fichier TIFF
 def reproject_tiff(input_tiff, target_crs):
     """Reproject a TIFF file to a target CRS."""
     with rasterio.open(input_tiff) as src:
@@ -50,25 +69,18 @@ def reproject_tiff(input_tiff, target_crs):
                 )
     return reprojected_tiff
 
-# Function to apply color gradient to a DEM TIFF
+# Fonction pour appliquer un gradient de couleur à un fichier TIFF DEM
 def apply_color_gradient(tiff_path, output_path):
     """Apply a color gradient to the DEM TIFF and save it as a PNG."""
     with rasterio.open(tiff_path) as src:
-        # Read the DEM data
         dem_data = src.read(1)
-        
-        # Create a color map using matplotlib
         cmap = plt.get_cmap("terrain")
         norm = plt.Normalize(vmin=dem_data.min(), vmax=dem_data.max())
-        
-        # Apply the colormap
         colored_image = cmap(norm(dem_data))
-        
-        # Save the colored image as PNG
         plt.imsave(output_path, colored_image)
         plt.close()
 
-# Overlay function for TIFF images
+# Fonction pour ajouter une image TIFF en superposition sur la carte
 def add_image_overlay(map_object, tiff_path, bounds, name):
     """Add a TIFF image overlay to a Folium map."""
     with rasterio.open(tiff_path) as src:
@@ -80,12 +92,12 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
             opacity=0.6,
         ).add_to(map_object)
 
-# Function to calculate bounds from GeoJSON
+# Fonction pour calculer les limites d'un GeoJSON
 def calculate_geojson_bounds(geojson_data):
     """Calculate bounds from a GeoJSON object."""
     geometries = [feature["geometry"] for feature in geojson_data["features"]]
     gdf = gpd.GeoDataFrame.from_features(geojson_data)
-    return gdf.total_bounds  # Returns [minx, miny, maxx, maxy]
+    return gdf.total_bounds  # Retourne [minx, miny, maxx, maxy]
 
 # Dictionnaire des couleurs pour les types de fichiers GeoJSON
 geojson_colors = {
@@ -103,40 +115,82 @@ geojson_colors = {
     "Polygonale": "pink"
 }
 
-# Main application
-def main():
-    st.title("DESSINER une CARTE ")
+# Sidebar pour la gestion des couches
+with st.sidebar:
+    st.header("Gestion des Couches")
 
-    # Initialize session state for drawings and uploaded layers
-    if "drawings" not in st.session_state:
-        st.session_state["drawings"] = {
-            "type": "FeatureCollection",
-            "features": [],
-        }
-    if "uploaded_layers" not in st.session_state:
-        st.session_state["uploaded_layers"] = []
+    # Ajout d'une nouvelle couche par nom
+    st.subheader("Ajouter une nouvelle couche")
+    new_layer_name = st.text_input("Nom de la nouvelle couche à ajouter", "")
+    if st.button("Ajouter la couche") and new_layer_name:
+        if new_layer_name not in st.session_state["layers"]:
+            st.session_state["layers"][new_layer_name] = []
+            st.success(f"La couche '{new_layer_name}' a été ajoutée.")
+        else:
+            st.warning(f"La couche '{new_layer_name}' existe déjà.")
 
-    # Initialize map
-    fmap = folium.Map(location=[0, 0], zoom_start=2)
-    fmap.add_child(MeasureControl(position="topleft"))
-    draw = Draw(
-        position="topleft",
-        export=True,
-        draw_options={
-            "polyline": {"shapeOptions": {"color": "orange", "weight": 4, "opacity": 0.7}},
-            "polygon": {"shapeOptions": {"color": "green", "weight": 4, "opacity": 0.7}},
-            "rectangle": {"shapeOptions": {"color": "red", "weight": 4, "opacity": 0.7}},
-            "circle": {"shapeOptions": {"color": "purple", "weight": 4, "opacity": 0.7}},
-        },
-        edit_options={"edit": True},
-    )
-    fmap.add_child(draw)
+    # Sélection de la couche active pour ajouter les nouvelles entités
+    st.subheader("Sélectionner une couche active")
+    if st.session_state["layers"]:
+        layer_name = st.selectbox(
+            "Choisissez la couche à laquelle ajouter les entités",
+            list(st.session_state["layers"].keys())
+        )
+    else:
+        st.write("Aucune couche disponible. Ajoutez une couche pour commencer.")
 
-    # Single button for TIFF upload with type selection
+    # Affichage des entités temporairement dessinées
+    if st.session_state["new_features"]:
+        st.write(f"**Entités dessinées temporairement ({len(st.session_state['new_features'])}) :**")
+        for idx, feature in enumerate(st.session_state["new_features"]):
+            st.write(f"- Entité {idx + 1}: {feature['geometry']['type']}")
+
+    # Bouton pour enregistrer les nouvelles entités dans la couche active
+    if st.button("Enregistrer les entités") and st.session_state["layers"]:
+        # Ajouter les entités non dupliquées à la couche sélectionnée
+        current_layer = st.session_state["layers"][layer_name]
+        for feature in st.session_state["new_features"]:
+            if feature not in current_layer:
+                current_layer.append(feature)
+        st.session_state["new_features"] = []  # Réinitialisation des entités temporaires
+        st.success(f"Toutes les nouvelles entités ont été enregistrées dans la couche '{layer_name}'.")
+
+    # Suppression et modification d'une entité dans une couche
+    st.subheader("Gestion des entités dans les couches")
+    if st.session_state["layers"]:
+        selected_layer = st.selectbox("Choisissez une couche pour voir ses entités", list(st.session_state["layers"].keys()))
+        if st.session_state["layers"][selected_layer]:
+            entity_idx = st.selectbox(
+                "Sélectionnez une entité à gérer",
+                range(len(st.session_state["layers"][selected_layer])),
+                format_func=lambda idx: f"Entité {idx + 1}: {st.session_state['layers'][selected_layer][idx]['geometry']['type']}"
+            )
+            selected_entity = st.session_state["layers"][selected_layer][entity_idx]
+            current_name = selected_entity.get("properties", {}).get("name", "")
+            new_name = st.text_input("Nom de l'entité", current_name)
+
+            if st.button("Modifier le nom", key=f"edit_{entity_idx}"):
+                if "properties" not in selected_entity:
+                    selected_entity["properties"] = {}
+                selected_entity["properties"]["name"] = new_name
+                st.success(f"Le nom de l'entité a été mis à jour en '{new_name}'.")
+
+            if st.button("Supprimer l'entité sélectionnée", key=f"delete_{entity_idx}"):
+                st.session_state["layers"][selected_layer].pop(entity_idx)
+                st.success(f"L'entité sélectionnée a été supprimée de la couche '{selected_layer}'.")
+        else:
+            st.write("Aucune entité dans cette couche pour le moment.")
+    else:
+        st.write("Aucune couche disponible pour gérer les entités.")
+
+    # Section pour téléverser des fichiers TIFF et GeoJSON
+    st.header("Téléverser des fichiers")
+
+    # Téléverser un fichier TIFF
     tiff_type = st.selectbox(
         "Sélectionnez le type de fichier TIFF",
         options=["MNT", "MNS", "Orthophoto"],
-        index=None,  # Aucune option sélectionnée par défaut
+        index=None,
         placeholder="Veuillez sélectionner",
         key="tiff_selectbox"
     )
@@ -156,32 +210,19 @@ def main():
                     bounds = src.bounds
                     center_lat = (bounds.top + bounds.bottom) / 2
                     center_lon = (bounds.left + bounds.right) / 2
-                    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-
-                    fmap.add_child(MeasureControl(position="topleft"))
-                    draw = Draw(
-                        position="topleft",
-                        export=True,
-                        draw_options={
-                            "polyline": {"shapeOptions": {"color": "orange", "weight": 4, "opacity": 0.7}},
-                            "polygon": {"shapeOptions": {"color": "green", "weight": 4, "opacity": 0.7}},
-                            "rectangle": {"shapeOptions": {"color": "red", "weight": 4, "opacity": 0.7}},
-                            "circle": {"shapeOptions": {"color": "purple", "weight": 4, "opacity": 0.7}},
-                        },
-                        edit_options={"edit": True},
-                    )
-                    fmap.add_child(draw)
+                    m.location = [center_lat, center_lon]
+                    m.zoom_start = 12
 
                     # Bouton pour ajouter le fichier TIFF à la liste des couches
                     if st.button(f"Ajouter {tiff_type} à la liste de couches", key=f"add_tiff_{tiff_type}"):
-                        # Check if the layer already exists in the list
+                        # Vérifier si la couche existe déjà dans la liste
                         layer_exists = any(
                             layer["type"] == "TIFF" and layer["name"] == tiff_type and layer["path"] == reprojected_tiff
                             for layer in st.session_state["uploaded_layers"]
                         )
 
                         if not layer_exists:
-                            # Store the layer in the uploaded_layers list
+                            # Stocker la couche dans la liste uploaded_layers
                             st.session_state["uploaded_layers"].append({"type": "TIFF", "name": tiff_type, "path": reprojected_tiff, "bounds": bounds})
                             st.success(f"Couche {tiff_type} ajoutée à la liste des couches.")
                         else:
@@ -189,14 +230,12 @@ def main():
             except Exception as e:
                 st.error(f"Erreur lors de la reprojection : {e}")
 
-    # Single button for GeoJSON upload with type selection
+    # Téléverser un fichier GeoJSON
     geojson_type = st.selectbox(
         "Sélectionnez le type de fichier GeoJSON",
         options=[
-            "Polygonale",
             "Routes",
             "Cours d'eau",
-            "Bâtiments",
             "Pistes",
             "Plantations",
             "Électricité",
@@ -206,7 +245,7 @@ def main():
             "Chemin de fer",
             "Parc et réserves" 
         ],
-        index=None,  # Aucune option sélectionnée par défaut
+        index=None,
         placeholder="Veuillez sélectionner",
         key="geojson_selectbox"
     )
@@ -219,14 +258,14 @@ def main():
                 geojson_data = json.load(uploaded_geojson)
                 # Bouton pour ajouter le fichier GeoJSON à la liste des couches
                 if st.button(f"Ajouter {geojson_type} à la liste de couches", key=f"add_geojson_{geojson_type}"):
-                    # Check if the layer already exists in the list
+                    # Vérifier si la couche existe déjà dans la liste
                     layer_exists = any(
                         layer["type"] == "GeoJSON" and layer["name"] == geojson_type and layer["data"] == geojson_data
                         for layer in st.session_state["uploaded_layers"]
                     )
 
                     if not layer_exists:
-                        # Store the layer in the uploaded_layers list
+                        # Stocker la couche dans la liste uploaded_layers
                         st.session_state["uploaded_layers"].append({"type": "GeoJSON", "name": geojson_type, "data": geojson_data})
                         st.success(f"Couche {geojson_type} ajoutée à la liste des couches.")
                     else:
@@ -234,403 +273,62 @@ def main():
             except Exception as e:
                 st.error(f"Erreur lors du chargement du GeoJSON : {e}")
 
-    # Utiliser un conteneur Streamlit pour créer une zone distincte
-    with st.container():
-        # Ajouter un fond coloré à la section
-        st.markdown(
-            """
-            <style>
-            div.stContainer {
-                background-color: #f0f2f6;  /* Couleur de fond légèrement plus foncée */
-                padding: 20px;
-                border-radius: 10px;
-                margin: 10px 0;
-            }
-            </style>
-            """,
-            unsafe_allow_html=True
-        )
+    # Liste des couches téléversées
+    st.markdown("### Liste des couches téléversées")
+    
+    # Rafraîchir la liste
+    if st.button("Rafraîchir la liste", key="refresh_list"):
+        pass  # Rafraîchir la liste
 
-        st.markdown("### Liste des couches téléversées")
-        
-        # Rafraîchir la liste
-        if st.button("Rafraîchir la liste", key="refresh_list"):
-            pass  # Rafraîchir la liste
-
-        if st.session_state["uploaded_layers"]:
-            for i, layer in enumerate(st.session_state["uploaded_layers"]):
-                col1, col2 = st.columns([4, 1])
-                with col1:
-                    st.write(f"{i + 1}. {layer['name']} ({layer['type']})")
-                with col2:
-                    # Bouton de suppression en rouge
-                    if st.button(f"Supprimer {layer['name']}", key=f"delete_{i}", type="primary", help="Supprimer cette couche"):
-                        st.session_state["uploaded_layers"].pop(i)
-                        st.success(f"Couche {layer['name']} supprimée.")
-        else:
-            st.write("Aucune couche téléversée pour le moment.")
-
-        # Bouton pour ajouter toutes les couches à la carte
-        if st.button("Ajouter la liste de couches à la carte", key="add_layers_button"):
-            added_layers = set()
-            all_bounds = []  # Pour stocker les limites de toutes les couches
-
-            for layer in st.session_state["uploaded_layers"]:
-                if layer["name"] not in added_layers:
-                    if layer["type"] == "TIFF":
-                        if layer["name"] in ["MNT", "MNS"]:
-                            temp_png_path = f"{layer['name'].lower()}_colored.png"
-                            apply_color_gradient(layer["path"], temp_png_path)
-                            add_image_overlay(fmap, temp_png_path, layer["bounds"], layer["name"])
-                            os.remove(temp_png_path)
-                        else:
-                            add_image_overlay(fmap, layer["path"], layer["bounds"], layer["name"])
-                        all_bounds.append([[layer["bounds"].bottom, layer["bounds"].left], [layer["bounds"].top, layer["bounds"].right]])
-                    elif layer["type"] == "GeoJSON":
-                        color = geojson_colors.get(layer["name"], "blue")
-                        folium.GeoJson(
-                            layer["data"],
-                            name=layer["name"],
-                            style_function=lambda x, color=color: {
-                                "color": color,
-                                "weight": 4,
-                                "opacity": 0.7
-                            }
-                        ).add_to(fmap)
-                        geojson_bounds = calculate_geojson_bounds(layer["data"])
-                        all_bounds.append([[geojson_bounds[1], geojson_bounds[0]], [geojson_bounds[3], geojson_bounds[2]]])
-                    added_layers.add(layer["name"])
-
-            # Ajuster la vue de la carte pour inclure toutes les limites
-            if all_bounds:
-                fmap.fit_bounds(all_bounds)
-            st.success("Toutes les couches ont été ajoutées à la carte.")
-
-    # Ajout des contrôles de calques
-    folium.LayerControl().add_to(fmap)
-
-    # Affichage de la carte
-    folium_static(fmap, width=700, height=500)
-
-if __name__ == "__main__":
-    main()
-
-
-
-
-import rasterio
-from rasterio.warp import transform_bounds
-import geopandas as gpd
-import numpy as np
-from sklearn.cluster import DBSCAN
-import folium
-from folium.plugins import MeasureControl, Draw
-import streamlit as st
-from shapely.geometry import Point
-from streamlit_folium import folium_static
-
-# Fonction pour charger un fichier TIFF
-def load_tiff(file_path, target_crs="EPSG:4326"):
-    try:
-        with rasterio.open(file_path) as src:
-            data = src.read(1)  # Lire la première bande
-            src_crs = src.crs  # CRS source
-            bounds = src.bounds  # Bornes source
-
-            # Reprojeter les bornes vers le CRS cible
-            target_bounds = transform_bounds(src_crs, target_crs, *bounds)
-
-        return data, target_bounds
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier GeoTIFF : {e}")
-        return None, None
-
-# Fonction pour charger un fichier GeoJSON ou Shapefile et le projeter
-def load_and_reproject_shapefile(file_path, target_crs="EPSG:4326"):
-    try:
-        gdf = gpd.read_file(file_path)
-        gdf = gdf.to_crs(target_crs)  # Reprojection au CRS cible
-        return gdf
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier Shapefile/GeoJSON : {e}")
-        return None
-
-# Calcul de hauteur relative (pour la méthode 1 : MNS - MNT)
-def calculate_heights(mns, mnt):
-    return np.maximum(0, mns - mnt)
-
-# Fonction pour calculer le volume dans l'emprise de la polygonale (Méthode 1 : MNS - MNT)
-def calculate_volume_in_polygon(mns, mnt, bounds, polygon_gdf):
-    # Calculer les hauteurs relatives
-    heights = calculate_heights(mns, mnt)
-
-    # Extraire les coordonnées de la polygonale
-    polygon_mask = np.zeros_like(heights, dtype=bool)
-    height = bounds[3] - bounds[1]
-    width = bounds[2] - bounds[0]
-    img_height, img_width = heights.shape
-
-    for _, row in polygon_gdf.iterrows():
-        polygon = row.geometry
-        for x in range(img_width):
-            for y in range(img_height):
-                lat = bounds[3] - height * (y / img_height)
-                lon = bounds[0] + width * (x / img_width)
-                if polygon.contains(Point(lon, lat)):
-                    polygon_mask[y, x] = True
-
-    # Calculer le volume (somme des hauteurs dans la polygonale)
-    volume = np.sum(heights[polygon_mask])  # Volume en m³ (si les données sont en mètres)
-    return volume
-
-# Fonction pour calculer le volume avec MNS seul (Méthode 2 : MNS seul)
-def calculate_volume_without_mnt(mns, bounds, polygon_gdf, reference_altitude):
-    # Extraire les coordonnées de la polygonale
-    polygon_mask = np.zeros_like(mns, dtype=bool)
-    height = bounds[3] - bounds[1]
-    width = bounds[2] - bounds[0]
-    img_height, img_width = mns.shape
-
-    for _, row in polygon_gdf.iterrows():
-        polygon = row.geometry
-        for x in range(img_width):
-            for y in range(img_height):
-                lat = bounds[3] - height * (y / img_height)
-                lon = bounds[0] + width * (x / img_width)
-                if polygon.contains(Point(lon, lat)):
-                    polygon_mask[y, x] = True
-
-    # Calculer les différences par rapport à l'altitude de référence
-    diff = mns - reference_altitude
-
-    # Calculer les volumes positifs et négatifs
-    positive_volume = np.sum(diff[polygon_mask & (diff > 0)])  # Volume positif
-    negative_volume = np.sum(diff[polygon_mask & (diff < 0)])  # Volume négatif
-    real_volume = positive_volume + negative_volume  # Volume réel
-
-    return positive_volume, negative_volume, real_volume
-
-# Détection des arbres avec DBSCAN
-def detect_trees(heights, threshold, eps, min_samples):
-    tree_mask = heights > threshold
-    coords = np.column_stack(np.where(tree_mask))
-
-    clustering = DBSCAN(eps=eps, min_samples=min_samples).fit(coords)
-    tree_clusters = clustering.labels_
-
-    return coords, tree_clusters
-
-# Calcul des centroïdes des arbres
-def calculate_cluster_centroids(coords, clusters):
-    unique_clusters = set(clusters) - {-1}
-    centroids = []
-
-    for cluster_id in unique_clusters:
-        cluster_coords = coords[clusters == cluster_id]
-        centroid = cluster_coords.mean(axis=0)
-        centroids.append((cluster_id, centroid))
-
-    return centroids
-
-# Ajout des centroïdes des arbres sur la carte
-def add_tree_centroids_layer(map_object, centroids, bounds, image_shape, layer_name):
-    height = bounds[3] - bounds[1]
-    width = bounds[2] - bounds[0]
-    img_height, img_width = image_shape[:2]
-
-    feature_group = folium.FeatureGroup(name=layer_name)
-    for _, centroid in centroids:
-        lat = bounds[3] - height * (centroid[0] / img_height)
-        lon = bounds[0] + width * (centroid[1] / img_width)
-
-        folium.CircleMarker(
-            location=[lat, lon],
-            radius=3,
-            color="green",
-            fill=True,
-            fill_color="green",
-            fill_opacity=0.8,
-        ).add_to(feature_group)
-
-    feature_group.add_to(map_object)
-
-# Fonction pour compter les arbres à l'intérieur de la polygonale
-def count_trees_in_polygon(centroids, bounds, image_shape, polygon_gdf):
-    height = bounds[3] - bounds[1]
-    width = bounds[2] - bounds[0]
-    img_height, img_width = image_shape[:2]
-
-    tree_count = 0
-    for _, centroid in centroids:
-        lat = bounds[3] - height * (centroid[0] / img_height)
-        lon = bounds[0] + width * (centroid[1] / img_width)
-        point = Point(lon, lat)
-        if polygon_gdf.contains(point).any():
-            tree_count += 1
-
-    return tree_count
-
-# Streamlit app
-st.title("Options d'analyse")
-
-# Boutons sous la carte
-col1, col2, col3 = st.columns(3)
-with col1:
-    if st.button("Faire une carte"):
-        st.info("Fonctionnalité 'Faire une carte' en cours de développement.")
-with col2:
-    if st.button("Calculer des volumes"):
-        st.session_state.show_volume_sidebar = True
-        st.session_state.show_tree_sidebar = False  # Désactiver l'autre sidebar
-with col3:
-    if st.button("Détecter les arbres"):
-        st.session_state.show_tree_sidebar = True
-        st.session_state.show_volume_sidebar = False  # Désactiver l'autre sidebar
-
-# Affichage des paramètres pour le calcul des volumes
-if st.session_state.get("show_volume_sidebar", False):
-    st.sidebar.title("Paramètres de calcul des volumes")
-
-    # Choix de la méthode
-    method = st.sidebar.radio(
-        "Choisissez la méthode de calcul :",
-        ("Méthode 1 : MNS - MNT", "Méthode 2 : MNS seul"),
-        key="volume_method"
-    )
-
-    # Téléversement des fichiers
-    mns_file = st.sidebar.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"], key="mns_volume")
-    polygon_file = st.sidebar.file_uploader("Téléchargez un fichier de polygone (obligatoire)", type=["geojson", "shp"], key="polygon_volume")
-
-    if method == "Méthode 1 : MNS - MNT":
-        mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"], key="mnt_volume")
+    if st.session_state["uploaded_layers"]:
+        for i, layer in enumerate(st.session_state["uploaded_layers"]):
+            col1, col2 = st.columns([4, 1])
+            with col1:
+                st.write(f"{i + 1}. {layer['name']} ({layer['type']})")
+            with col2:
+                # Utiliser le nom de la couche comme clé pour éviter les doublons
+                if st.button(f"Supprimer {layer['name']}", key=f"delete_{layer['name']}", type="primary", help="Supprimer cette couche"):
+                    st.session_state["uploaded_layers"].pop(i)
+                    st.success(f"Couche {layer['name']} supprimée.")
+                    st.experimental_rerun()  # Rafraîchir l'interface après suppression
     else:
-        mnt_file = None
+        st.write("Aucune couche téléversée pour le moment.")
 
-    if mns_file and polygon_file and (method == "Méthode 2 : MNS seul" or mnt_file):
-        mns, mns_bounds = load_tiff(mns_file)
-        polygons_gdf = load_and_reproject_shapefile(polygon_file)
+    # Bouton pour ajouter toutes les couches à la carte
+    if st.button("Ajouter la liste de couches à la carte", key="add_layers_button"):
+        added_layers = set()
+        all_bounds = []  # Pour stocker les limites de toutes les couches
 
-        if mns is None or polygons_gdf is None:
-            st.sidebar.error("Erreur lors du chargement des fichiers.")
-        else:
-            try:
-                if method == "Méthode 1 : MNS - MNT":
-                    mnt, mnt_bounds = load_tiff(mnt_file)
-                    if mnt is None or mnt_bounds != mns_bounds:
-                        st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
+        for layer in st.session_state["uploaded_layers"]:
+            if layer["name"] not in added_layers:
+                if layer["type"] == "TIFF":
+                    if layer["name"] in ["MNT", "MNS"]:
+                        temp_png_path = f"{layer['name'].lower()}_colored.png"
+                        apply_color_gradient(layer["path"], temp_png_path)
+                        add_image_overlay(m, temp_png_path, layer["bounds"], layer["name"])
+                        os.remove(temp_png_path)
                     else:
-                        volume = calculate_volume_in_polygon(mns, mnt, mnt_bounds, polygons_gdf)
-                        st.sidebar.write(f"Volume calculé dans la polygonale : {volume:.2f} m³")
-                else:
-                    # Saisie de l'altitude de référence pour la méthode 2
-                    reference_altitude = st.sidebar.number_input(
-                        "Entrez l'altitude de référence (en mètres) :",
-                        value=0.0,
-                        step=0.1,
-                        key="reference_altitude"
-                    )
-                    positive_volume, negative_volume, real_volume = calculate_volume_without_mnt(
-                        mns, mns_bounds, polygons_gdf, reference_altitude
-                    )
-                    st.sidebar.write(f"Volume positif (au-dessus de la référence) : {positive_volume:.2f} m³")
-                    st.sidebar.write(f"Volume négatif (en dessous de la référence) : {negative_volume:.2f} m³")
-                    st.sidebar.write(f"Volume réel (différence) : {real_volume:.2f} m³")
-
-                # Afficher la carte
-                center_lat = (mns_bounds[1] + mns_bounds[3]) / 2
-                center_lon = (mns_bounds[0] + mns_bounds[2]) / 2
-                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-
-                # Ajouter le MNS
-                folium.raster_layers.ImageOverlay(
-                    image=mns,
-                    bounds=[[mns_bounds[1], mns_bounds[0]], [mns_bounds[3], mns_bounds[2]]],
-                    opacity=0.7,
-                    name="MNS"
-                ).add_to(fmap)
-
-                # Ajouter la polygonale
-                folium.GeoJson(
-                    polygons_gdf,
-                    name="Polygone",
-                    style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}
-                ).add_to(fmap)
-
-                # Ajouter les contrôles de carte
-                fmap.add_child(MeasureControl(position='topleft'))
-                fmap.add_child(Draw(position='topleft', export=True))
-                fmap.add_child(folium.LayerControl(position='topright'))
-
-                # Afficher la carte
-                folium_static(fmap, width=700, height=500)
-
-            except Exception as e:
-                st.sidebar.error(f"Erreur lors du calcul du volume : {e}")
-
-# Affichage des paramètres pour la détection des arbres
-if st.session_state.get("show_tree_sidebar", False):
-    st.sidebar.title("Paramètres de détection des arbres")
-
-    # Téléversement des fichiers
-    mnt_file = st.sidebar.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"], key="mnt_tree")
-    mns_file = st.sidebar.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"], key="mns_tree")
-    polygon_file = st.sidebar.file_uploader("Téléchargez un fichier de polygone (optionnel)", type=["geojson", "shp"], key="polygon_tree")
-
-    if mnt_file and mns_file:
-        mnt, mnt_bounds = load_tiff(mnt_file)
-        mns, mns_bounds = load_tiff(mns_file)
-
-        if mnt is None or mns is None:
-            st.sidebar.error("Erreur lors du chargement des fichiers.")
-        elif mnt_bounds != mns_bounds:
-            st.sidebar.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
-        else:
-            heights = calculate_heights(mns, mnt)
-
-            # Paramètres de détection
-            height_threshold = st.sidebar.slider("Seuil de hauteur", 0.1, 20.0, 2.0, 0.1, key="height_threshold")
-            eps = st.sidebar.slider("Rayon de voisinage", 0.1, 10.0, 2.0, 0.1, key="eps")
-            min_samples = st.sidebar.slider("Min. points pour un cluster", 1, 10, 5, 1, key="min_samples")
-
-            # Détection et visualisation
-            if st.sidebar.button("Lancer la détection"):
-                coords, tree_clusters = detect_trees(heights, height_threshold, eps, min_samples)
-                num_trees = len(set(tree_clusters)) - (1 if -1 in tree_clusters else 0)
-                st.sidebar.write(f"Nombre d'arbres détectés : {num_trees}")
-
-                centroids = calculate_cluster_centroids(coords, tree_clusters)
-
-                # Mise à jour de la carte
-                center_lat = (mnt_bounds[1] + mnt_bounds[3]) / 2
-                center_lon = (mnt_bounds[0] + mnt_bounds[2]) / 2
-                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-
-                folium.raster_layers.ImageOverlay(
-                    image=mnt,
-                    bounds=[[mnt_bounds[1], mnt_bounds[0]], [mnt_bounds[3], mnt_bounds[2]]],
-                    opacity=0.5,
-                    name="MNT"
-                ).add_to(fmap)
-
-                add_tree_centroids_layer(fmap, centroids, mnt_bounds, mnt.shape, "Arbres")
-
-                # Ajout des polygones (optionnel)
-                if polygon_file:
-                    polygons_gdf = load_and_reproject_shapefile(polygon_file)
+                        add_image_overlay(m, layer["path"], layer["bounds"], layer["name"])
+                    all_bounds.append([[layer["bounds"].bottom, layer["bounds"].left], [layer["bounds"].top, layer["bounds"].right]])
+                elif layer["type"] == "GeoJSON":
+                    color = geojson_colors.get(layer["name"], "blue")
                     folium.GeoJson(
-                        polygons_gdf,
-                        name="Polygones",
-                        style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}
-                    ).add_to(fmap)
+                        layer["data"],
+                        name=layer["name"],
+                        style_function=lambda x, color=color: {
+                            "color": color,
+                            "weight": 4,
+                            "opacity": 0.7
+                        }
+                    ).add_to(m)
+                    geojson_bounds = calculate_geojson_bounds(layer["data"])
+                    all_bounds.append([[geojson_bounds[1], geojson_bounds[0]], [geojson_bounds[3], geojson_bounds[2]]])
+                added_layers.add(layer["name"])
 
-                    # Compter les arbres à l'intérieur de la polygonale
-                    tree_count_in_polygon = count_trees_in_polygon(centroids, mnt_bounds, mnt.shape, polygons_gdf)
-                    st.sidebar.write(f"Nombre d'arbres dans la polygonale : {tree_count_in_polygon}")
+        # Ajuster la vue de la carte pour inclure toutes les limites
+        if all_bounds:
+            m.fit_bounds(all_bounds)
+        st.success("Toutes les couches ont été ajoutées à la carte.")
 
-                fmap.add_child(MeasureControl(position='topleft'))
-                fmap.add_child(Draw(position='topleft', export=True))
-                fmap.add_child(folium.LayerControl(position='topright'))
-
-                # Afficher la carte
-                folium_static(fmap, width=700, height=500)
+# Affichage interactif de la carte
+st_folium(m, width=800, height=600)
