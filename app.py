@@ -36,28 +36,16 @@ geojson_colors = {
 }
 
 # Fonction pour charger un fichier TIFF
-def load_tiff(tiff_file):
+def load_tiff(tiff_path):
     """Charge un fichier TIFF et retourne les données et les bornes."""
     try:
-        with rasterio.open(tiff_file) as src:
+        with rasterio.open(tiff_path) as src:
             data = src.read(1)
             bounds = src.bounds
         return data, bounds
     except Exception as e:
         st.error(f"Erreur lors du chargement du fichier TIFF : {e}")
         return None, None
-
-# Fonction pour charger et reprojeter un fichier GeoJSON ou Shapefile
-def load_and_reproject_shapefile(file):
-    """Charge et reprojette un fichier GeoJSON ou Shapefile."""
-    try:
-        gdf = gpd.read_file(file)
-        if gdf.crs != "EPSG:4326":
-            gdf = gdf.to_crs("EPSG:4326")
-        return gdf
-    except Exception as e:
-        st.error(f"Erreur lors du chargement du fichier GeoJSON/Shapefile : {e}")
-        return None
 
 # Fonction pour calculer le volume avec MNS et MNT
 def calculate_volume_in_polygon(mns, mnt, bounds, polygons_gdf):
@@ -361,75 +349,55 @@ def display_parameters(button_name):
             key="volume_method"
         )
 
-        # Téléversement des fichiers
-        mns_file = st.file_uploader("Téléchargez le fichier MNS (TIFF)", type=["tif", "tiff"], key="mns_volume")
-        polygon_file = st.file_uploader("Téléchargez un fichier de polygone (obligatoire)", type=["geojson", "shp"], key="polygon_volume")
+        # Récupérer les couches nécessaires
+        mns_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "MNS"), None)
+        mnt_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "MNT"), None)
+        polygon_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "Polygonale"), None)
 
+        if not mns_layer:
+            st.error("La couche MNS est manquante. Veuillez téléverser un fichier MNS.")
+            return
+        if method == "Méthode 1 : MNS - MNT" and not mnt_layer:
+            st.error("La couche MNT est manquante. Veuillez téléverser un fichier MNT.")
+            return
+        if not polygon_layer:
+            st.error("La couche Polygonale est manquante. Veuillez téléverser un fichier de polygone.")
+            return
+
+        # Charger les données
+        mns, mns_bounds = load_tiff(mns_layer["path"])
         if method == "Méthode 1 : MNS - MNT":
-            mnt_file = st.file_uploader("Téléchargez le fichier MNT (TIFF)", type=["tif", "tiff"], key="mnt_volume")
-        else:
-            mnt_file = None
+            mnt, mnt_bounds = load_tiff(mnt_layer["path"])
+        polygons_gdf = load_and_reproject_shapefile(polygon_layer["data"])
 
-        if mns_file and polygon_file and (method == "Méthode 2 : MNS seul" or mnt_file):
-            mns, mns_bounds = load_tiff(mns_file)
-            polygons_gdf = load_and_reproject_shapefile(polygon_file)
+        if mns is None or polygons_gdf is None:
+            st.error("Erreur lors du chargement des fichiers.")
+            return
 
-            if mns is None or polygons_gdf is None:
-                st.error("Erreur lors du chargement des fichiers.")
+        try:
+            if method == "Méthode 1 : MNS - MNT":
+                if mnt is None or mnt_bounds != mns_bounds:
+                    st.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
+                else:
+                    volume = calculate_volume_in_polygon(mns, mnt, mnt_bounds, polygons_gdf)
+                    st.write(f"Volume calculé dans la polygonale : {volume:.2f} m³")
             else:
-                try:
-                    if method == "Méthode 1 : MNS - MNT":
-                        mnt, mnt_bounds = load_tiff(mnt_file)
-                        if mnt is None or mnt_bounds != mns_bounds:
-                            st.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
-                        else:
-                            volume = calculate_volume_in_polygon(mns, mnt, mnt_bounds, polygons_gdf)
-                            st.write(f"Volume calculé dans la polygonale : {volume:.2f} m³")
-                    else:
-                        # Saisie de l'altitude de référence pour la méthode 2
-                        reference_altitude = st.number_input(
-                            "Entrez l'altitude de référence (en mètres) :",
-                            value=0.0,
-                            step=0.1,
-                            key="reference_altitude"
-                        )
-                        positive_volume, negative_volume, real_volume = calculate_volume_without_mnt(
-                            mns, mns_bounds, polygons_gdf, reference_altitude
-                        )
-                        st.write(f"Volume positif (au-dessus de la référence) : {positive_volume:.2f} m³")
-                        st.write(f"Volume négatif (en dessous de la référence) : {negative_volume:.2f} m³")
-                        st.write(f"Volume réel (différence) : {real_volume:.2f} m³")
+                # Saisie de l'altitude de référence pour la méthode 2
+                reference_altitude = st.number_input(
+                    "Entrez l'altitude de référence (en mètres) :",
+                    value=0.0,
+                    step=0.1,
+                    key="reference_altitude"
+                )
+                positive_volume, negative_volume, real_volume = calculate_volume_without_mnt(
+                    mns, mns_bounds, polygons_gdf, reference_altitude
+                )
+                st.write(f"Volume positif (au-dessus de la référence) : {positive_volume:.2f} m³")
+                st.write(f"Volume négatif (en dessous de la référence) : {negative_volume:.2f} m³")
+                st.write(f"Volume réel (différence) : {real_volume:.2f} m³")
 
-                    # Afficher la carte
-                    center_lat = (mns_bounds[1] + mns_bounds[3]) / 2
-                    center_lon = (mns_bounds[0] + mns_bounds[2]) / 2
-                    fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
-
-                    # Ajouter le MNS
-                    folium.raster_layers.ImageOverlay(
-                        image=mns,
-                        bounds=[[mns_bounds[1], mns_bounds[0]], [mns_bounds[3], mns_bounds[2]]],
-                        opacity=0.7,
-                        name="MNS"
-                    ).add_to(fmap)
-
-                    # Ajouter la polygonale
-                    folium.GeoJson(
-                        polygons_gdf,
-                        name="Polygone",
-                        style_function=lambda x: {'fillOpacity': 0, 'color': 'red', 'weight': 2}
-                    ).add_to(fmap)
-
-                    # Ajouter les contrôles de carte
-                    fmap.add_child(MeasureControl(position='topleft'))
-                    fmap.add_child(Draw(position='topleft', export=True))
-                    fmap.add_child(folium.LayerControl(position='topright'))
-
-                    # Afficher la carte
-                    folium_static(fmap, width=700, height=500)
-
-                except Exception as e:
-                    st.error(f"Erreur lors du calcul du volume : {e}")
+        except Exception as e:
+            st.error(f"Erreur lors du calcul du volume : {e}")
 
 # Ajout des boutons pour les analyses spatiales
 st.markdown("### Analyse Spatiale")
