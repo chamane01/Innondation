@@ -115,50 +115,31 @@ def load_tiff(tiff_path):
         st.error(f"Erreur lors du chargement du fichier TIFF : {e}")
         return None, None
 
-# Fonction pour calculer le volume avec MNS et MNT
-def calculate_volume_in_polygon(mns, mnt, bounds, polygons_gdf):
-    """Calcule le volume entre un MNS et un MNT dans une polygonale."""
-    try:
-        # Masquer les données en dehors de la polygonale
-        mask = polygons_gdf.geometry
-        mns_masked = np.where(mask, mns, np.nan)
-        mnt_masked = np.where(mask, mnt, np.nan)
+# Fonction pour calculer le volume pour chaque polygone
+def calculate_volume_for_each_polygon(mns, mnt, bounds, polygons_gdf):
+    """Calcule le volume pour chaque polygone individuellement."""
+    volumes = []
+    for idx, polygon in polygons_gdf.iterrows():
+        try:
+            # Masquer les données en dehors du polygone courant
+            mask = polygon.geometry
+            mns_masked = np.where(mask, mns, np.nan)
+            mnt_masked = np.where(mask, mnt, np.nan)
 
-        # Calculer la différence entre MNS et MNT
-        volume = np.nansum(mns_masked - mnt_masked) * (bounds[2] - bounds[0]) * (bounds[3] - bounds[1]) / (mns.shape[0] * mns.shape[1])
-        return volume
-    except Exception as e:
-        st.error(f"Erreur lors du calcul du volume : {e}")
-        return None
+            # Calculer la différence entre MNS et MNT
+            volume = np.nansum(mns_masked - mnt_masked) * (bounds[2] - bounds[0]) * (bounds[3] - bounds[1]) / (mns.shape[0] * mns.shape[1])
+            volumes.append(volume)
+            st.write(f"Volume pour le polygone {idx + 1} : {volume:.2f} m³")
+        except Exception as e:
+            st.error(f"Erreur lors du calcul du volume pour le polygone {idx + 1} : {e}")
+    return volumes
 
-# Fonction pour calculer le volume avec MNS seul
-def calculate_volume_without_mnt(mns, bounds, polygons_gdf, reference_altitude):
-    """Calcule le volume avec un MNS seul et une altitude de référence."""
-    try:
-        # Masquer les données en dehors de la polygonale
-        mask = polygons_gdf.geometry
-        mns_masked = np.where(mask, mns, np.nan)
+# Fonction pour calculer le volume global
+def calculate_global_volume(volumes):
+    """Calcule le volume global en additionnant les volumes individuels."""
+    return sum(volumes)
 
-        # Calculer les volumes positif et négatif
-        positive_volume = np.nansum(np.where(mns_masked > reference_altitude, mns_masked - reference_altitude, 0)) * (bounds[2] - bounds[0]) * (bounds[3] - bounds[1]) / (mns.shape[0] * mns.shape[1])
-        negative_volume = np.nansum(np.where(mns_masked < reference_altitude, reference_altitude - mns_masked, 0)) * (bounds[2] - bounds[0]) * (bounds[3] - bounds[1]) / (mns.shape[0] * mns.shape[1])
-        real_volume = positive_volume - negative_volume
-        return positive_volume, negative_volume, real_volume
-    except Exception as e:
-        st.error(f"Erreur lors du calcul du volume : {e}")
-        return None, None, None
-
-# Fonction pour convertir les entités dessinées en GeoDataFrame
-def convert_drawn_features_to_gdf(features):
-    """Convertit les entités dessinées en GeoDataFrame."""
-    geometries = []
-    for feature in features:
-        geom = shape(feature["geometry"])
-        geometries.append(geom)
-    gdf = gpd.GeoDataFrame(geometry=geometries, crs="EPSG:4326")
-    return gdf
-
-# Fonction pour vérifier si une couche contient des polygones
+# Fonction pour rechercher des polygones dans les couches téléversées
 def find_polygons_in_layers(layers):
     """Recherche des polygones dans les couches téléversées."""
     polygons = []
@@ -170,10 +151,30 @@ def find_polygons_in_layers(layers):
                     polygons.append(feature)
     return polygons
 
+# Fonction pour rechercher des polygones dans les couches créées par l'utilisateur
+def find_polygons_in_user_layers(layers):
+    """Recherche des polygones dans les couches créées par l'utilisateur."""
+    polygons = []
+    for layer_name, features in layers.items():
+        for feature in features:
+            if feature["geometry"]["type"] == "Polygon":
+                polygons.append(feature)
+    return polygons
+
 # Fonction pour convertir les polygones en GeoDataFrame
 def convert_polygons_to_gdf(polygons):
     """Convertit une liste de polygones en GeoDataFrame."""
     geometries = [shape(polygon["geometry"]) for polygon in polygons]
+    gdf = gpd.GeoDataFrame(geometry=geometries, crs="EPSG:4326")
+    return gdf
+
+# Fonction pour convertir les entités dessinées en GeoDataFrame
+def convert_drawn_features_to_gdf(features):
+    """Convertit les entités dessinées en GeoDataFrame."""
+    geometries = []
+    for feature in features:
+        geom = shape(feature["geometry"])
+        geometries.append(geom)
     gdf = gpd.GeoDataFrame(geometry=geometries, crs="EPSG:4326")
     return gdf
 
@@ -462,15 +463,20 @@ def display_parameters(button_name):
         if method == "Méthode 1 : MNS - MNT":
             mnt, mnt_bounds = load_tiff(mnt_layer["path"])
 
-        # Récupérer les polygones des couches ou des dessins
-        polygons = find_polygons_in_layers(st.session_state["uploaded_layers"])
-        if polygons:
-            polygons_gdf = convert_polygons_to_gdf(polygons)
-        elif st.session_state["new_features"]:
-            polygons_gdf = convert_drawn_features_to_gdf(st.session_state["new_features"])
-        else:
+        # Récupérer les polygones des couches téléversées, des couches créées par l'utilisateur et des dessins
+        polygons_uploaded = find_polygons_in_layers(st.session_state["uploaded_layers"])
+        polygons_user_layers = find_polygons_in_user_layers(st.session_state["layers"])
+        polygons_drawn = st.session_state["new_features"]
+
+        # Combiner tous les polygones
+        all_polygons = polygons_uploaded + polygons_user_layers + polygons_drawn
+
+        if not all_polygons:
             st.error("Aucune polygonale disponible. Veuillez dessiner ou téléverser une polygonale.")
             return
+
+        # Convertir les polygones en GeoDataFrame
+        polygons_gdf = convert_polygons_to_gdf(all_polygons)
 
         if mns is None or polygons_gdf is None:
             st.error("Erreur lors du chargement des fichiers.")
@@ -481,8 +487,12 @@ def display_parameters(button_name):
                 if mnt is None or mnt_bounds != mns_bounds:
                     st.error("Les fichiers doivent avoir les mêmes bornes géographiques.")
                 else:
-                    volume = calculate_volume_in_polygon(mns, mnt, mnt_bounds, polygons_gdf)
-                    st.write(f"Volume calculé dans la polygonale : {volume:.2f} m³")
+                    # Calculer le volume pour chaque polygone
+                    volumes = calculate_volume_for_each_polygon(mns, mnt, mnt_bounds, polygons_gdf)
+                    
+                    # Calculer le volume global
+                    global_volume = calculate_global_volume(volumes)
+                    st.write(f"Volume global : {global_volume:.2f} m³")
             else:
                 # Saisie de l'altitude de référence pour la méthode 2
                 reference_altitude = st.number_input(
