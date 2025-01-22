@@ -10,7 +10,7 @@ from PIL import Image
 from rasterio.warp import transform_bounds
 import numpy as np
 import geopandas as gpd
-from shapely.geometry import Polygon, Point, LineString
+from shapely.geometry import Polygon, Point, LineString, shape
 import json
 from io import BytesIO
 from rasterio.enums import Resampling
@@ -147,6 +147,16 @@ def calculate_volume_without_mnt(mns, bounds, polygons_gdf, reference_altitude):
     except Exception as e:
         st.error(f"Erreur lors du calcul du volume : {e}")
         return None, None, None
+
+# Fonction pour convertir les entités dessinées en GeoDataFrame
+def convert_drawn_features_to_gdf(features):
+    """Convertit les entités dessinées en GeoDataFrame."""
+    geometries = []
+    for feature in features:
+        geom = shape(feature["geometry"])
+        geometries.append(geom)
+    gdf = gpd.GeoDataFrame(geometry=geometries, crs="EPSG:4326")
+    return gdf
 
 # Initialisation des couches et des entités dans la session Streamlit
 if "layers" not in st.session_state:
@@ -428,15 +438,20 @@ def display_parameters(button_name):
         if method == "Méthode 1 : MNS - MNT" and not mnt_layer:
             st.error("La couche MNT est manquante. Veuillez téléverser un fichier MNT.")
             return
-        if not polygon_layer:
-            st.error("La couche Polygonale est manquante. Veuillez téléverser un fichier de polygone.")
-            return
 
         # Charger les données
         mns, mns_bounds = load_tiff(mns_layer["path"])
         if method == "Méthode 1 : MNS - MNT":
             mnt, mnt_bounds = load_tiff(mnt_layer["path"])
-        polygons_gdf = load_and_reproject_shapefile(polygon_layer["data"])
+
+        # Récupérer les polygones dessinés ou téléversés
+        if polygon_layer:
+            polygons_gdf = load_and_reproject_shapefile(polygon_layer["data"])
+        elif st.session_state["new_features"]:
+            polygons_gdf = convert_drawn_features_to_gdf(st.session_state["new_features"])
+        else:
+            st.error("Aucune polygonale disponible. Veuillez dessiner ou téléverser une polygonale.")
+            return
 
         if mns is None or polygons_gdf is None:
             st.error("Erreur lors du chargement des fichiers.")
