@@ -158,6 +158,25 @@ def convert_drawn_features_to_gdf(features):
     gdf = gpd.GeoDataFrame(geometry=geometries, crs="EPSG:4326")
     return gdf
 
+# Fonction pour vérifier si une couche contient des polygones
+def find_polygons_in_layers(layers):
+    """Recherche des polygones dans les couches téléversées."""
+    polygons = []
+    for layer in layers:
+        if layer["type"] == "GeoJSON":
+            geojson_data = layer["data"]
+            for feature in geojson_data["features"]:
+                if feature["geometry"]["type"] == "Polygon":
+                    polygons.append(feature)
+    return polygons
+
+# Fonction pour convertir les polygones en GeoDataFrame
+def convert_polygons_to_gdf(polygons):
+    """Convertit une liste de polygones en GeoDataFrame."""
+    geometries = [shape(polygon["geometry"]) for polygon in polygons]
+    gdf = gpd.GeoDataFrame(geometry=geometries, crs="EPSG:4326")
+    return gdf
+
 # Initialisation des couches et des entités dans la session Streamlit
 if "layers" not in st.session_state:
     st.session_state["layers"] = {}  # Couches créées par l'utilisateur
@@ -430,7 +449,6 @@ def display_parameters(button_name):
         # Récupérer les couches nécessaires
         mns_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "MNS"), None)
         mnt_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "MNT"), None)
-        polygon_layer = next((layer for layer in st.session_state["uploaded_layers"] if layer["name"] == "Polygonale"), None)
 
         if not mns_layer:
             st.error("La couche MNS est manquante. Veuillez téléverser un fichier MNS.")
@@ -444,9 +462,10 @@ def display_parameters(button_name):
         if method == "Méthode 1 : MNS - MNT":
             mnt, mnt_bounds = load_tiff(mnt_layer["path"])
 
-        # Récupérer les polygones dessinés ou téléversés
-        if polygon_layer:
-            polygons_gdf = load_and_reproject_shapefile(polygon_layer["data"])
+        # Récupérer les polygones des couches ou des dessins
+        polygons = find_polygons_in_layers(st.session_state["uploaded_layers"])
+        if polygons:
+            polygons_gdf = convert_polygons_to_gdf(polygons)
         elif st.session_state["new_features"]:
             polygons_gdf = convert_drawn_features_to_gdf(st.session_state["new_features"])
         else:
