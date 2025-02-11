@@ -2,8 +2,6 @@ import streamlit as st
 import os
 import rasterio
 import folium
-import numpy as np
-import matplotlib.pyplot as plt
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from streamlit_folium import folium_static
 
@@ -47,46 +45,30 @@ def load_tiff_files(folder_path):
     
     return reproj_files
 
-def apply_color_gradient(tiff_path):
-    """Applique un dégradé de couleur aux données TIFF."""
-    with rasterio.open(tiff_path) as src:
-        data = src.read(1)
-        masked_data = np.ma.masked_where(data == src.nodata, data)
-        
-        # Créer une figure matplotlib avec un dégradé de couleur
-        fig, ax = plt.subplots(figsize=(10, 10))
-        cax = ax.imshow(masked_data, cmap='viridis')
-        fig.colorbar(cax, orientation='vertical')
-        plt.axis('off')
-        
-        # Sauvegarder l'image en mémoire
-        from io import BytesIO
-        buf = BytesIO()
-        plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0)
-        buf.seek(0)
-        plt.close()
-        
-        return buf
-
-def create_map(tiff_files):
+def create_map(tiff_files, layer_control):
     """Crée une carte avec une couche OSM et les fichiers TIFF reprojectés."""
     m = folium.Map(location=[0, 0], zoom_start=2)
     
+    # Ajouter une couche OSM par défaut
+    folium.TileLayer('openstreetmap').add_to(m)
+    
+    # Ajouter les fichiers TIFF comme une couche 'elevation'
+    elevation_layer = folium.FeatureGroup(name='Elevation')
     for tiff in tiff_files:
         with rasterio.open(tiff) as src:
             bounds = src.bounds
-            color_gradient_image = apply_color_gradient(tiff)
-            
-            folium.raster_layers.ImageOverlay(
-                image=color_gradient_image,
+            folium.Rectangle(
                 bounds=[
                     [bounds.bottom, bounds.left],
                     [bounds.top, bounds.right]
                 ],
-                opacity=0.6,
-                interactive=True,
-                cross_origin=False
-            ).add_to(m)
+                color='blue', fill=True, fill_opacity=0.4, tooltip=tiff
+            ).add_to(elevation_layer)
+    elevation_layer.add_to(m)
+    
+    # Ajouter le contrôle des couches si demandé
+    if layer_control:
+        folium.LayerControl().add_to(m)
     
     return m
 
@@ -106,7 +88,8 @@ def main():
         return
     
     st.write("Création de la carte...")
-    map_object = create_map(reproj_files)
+    layer_control = st.checkbox("Afficher le contrôle des couches", value=True)
+    map_object = create_map(reproj_files, layer_control)
     folium_static(map_object)
 
 if __name__ == "__main__":
