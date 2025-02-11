@@ -38,22 +38,21 @@ def load_tiff_files(folder_path):
     reproj_files = []
     
     for file in tiff_files:
-        input_path = os.path.join(folder_path, file)
         output_path_4326 = os.path.join(folder_path, f"reproj_{file}")
-        reproject_tiff(input_path, output_path_4326, 'EPSG:4326')
+        
+        # Vérifie si le fichier reprojeté existe déjà
+        if not os.path.exists(output_path_4326):
+            input_path = os.path.join(folder_path, file)
+            reproject_tiff(input_path, output_path_4326, 'EPSG:4326')
+        
         reproj_files.append(output_path_4326)
     
     return reproj_files
 
-def create_map(tiff_files, layer_control):
+def create_map(tiff_files):
     """Crée une carte avec une couche OSM et les fichiers TIFF reprojectés."""
     m = folium.Map(location=[0, 0], zoom_start=2)
     
-    # Ajouter une couche OSM par défaut
-    folium.TileLayer('openstreetmap').add_to(m)
-    
-    # Ajouter les fichiers TIFF comme une couche 'elevation'
-    elevation_layer = folium.FeatureGroup(name='Elevation')
     for tiff in tiff_files:
         with rasterio.open(tiff) as src:
             bounds = src.bounds
@@ -63,12 +62,7 @@ def create_map(tiff_files, layer_control):
                     [bounds.top, bounds.right]
                 ],
                 color='blue', fill=True, fill_opacity=0.4, tooltip=tiff
-            ).add_to(elevation_layer)
-    elevation_layer.add_to(m)
-    
-    # Ajouter le contrôle des couches si demandé
-    if layer_control:
-        folium.LayerControl().add_to(m)
+            ).add_to(m)
     
     return m
 
@@ -88,8 +82,7 @@ def main():
         return
     
     st.write("Création de la carte...")
-    layer_control = st.checkbox("Afficher le contrôle des couches", value=True)
-    map_object = create_map(reproj_files, layer_control)
+    map_object = create_map(reproj_files)
     folium_static(map_object)
 
 if __name__ == "__main__":
