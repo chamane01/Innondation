@@ -25,7 +25,7 @@ import os
 def reproject_tiff(input_tiff, target_crs):
     """Reproject a TIFF file to a target CRS."""
     with rasterio.open(input_tiff) as src:
-        transform, width, height = rasterio.warp.calculate_default_transform(
+        transform, width, height = calculate_default_transform(
             src.crs, target_crs, src.width, src.height, *src.bounds
         )
         kwargs = src.meta.copy()
@@ -36,25 +36,28 @@ def reproject_tiff(input_tiff, target_crs):
             "height": height,
         })
 
-        reprojected_tiff = "reprojected.tiff"
-        with rasterio.open(reprojected_tiff, "w", **kwargs) as dst:
+        # Generate unique output filename
+        base_name = os.path.basename(input_tiff)
+        reprojected_tiff = os.path.splitext(base_name)[0] + "_reprojected.tif"
+        reprojected_path = os.path.join(os.path.dirname(input_tiff), reprojected_tiff)
+
+        with rasterio.open(reprojected_path, "w", **kwargs) as dst:
             for i in range(1, src.count + 1):
-                rasterio.warp.reproject(
+                reproject(
                     source=rasterio.band(src, i),
                     destination=rasterio.band(dst, i),
                     src_transform=src.transform,
                     src_crs=src.crs,
                     dst_transform=transform,
                     dst_crs=target_crs,
-                    resampling=rasterio.warp.Resampling.nearest,
+                    resampling=Resampling.nearest,
                 )
-    return reprojected_tiff
+    return reprojected_path
 
 # Function to apply color gradient to a DEM TIFF
 def apply_color_gradient(tiff_path, output_path):
     """Apply a color gradient to the DEM TIFF and save it as a PNG."""
     with rasterio.open(tiff_path) as src:
-        # Read the DEM data
         dem_data = src.read(1)
         
         # Create a color map using matplotlib
@@ -89,9 +92,9 @@ def calculate_geojson_bounds(geojson_data):
 
 # Main application
 def main():
-    st.title("DESSINER une CARTE ")
+    st.title("DESSINER une CARTE")
 
-    # Initialize session state for drawings and uploaded layers
+    # Initialize session state
     if "drawings" not in st.session_state:
         st.session_state["drawings"] = {
             "type": "FeatureCollection",
@@ -99,9 +102,54 @@ def main():
         }
     if "uploaded_layers" not in st.session_state:
         st.session_state["uploaded_layers"] = []
+    if "auto_bounds" not in st.session_state:
+        st.session_state["auto_bounds"] = []
 
     # Initialize map
     fmap = folium.Map(location=[0, 0], zoom_start=2)
+    
+    # Chargement automatique des TIFF du dossier TIFF
+    tiff_dir = "TIFF"
+    if os.path.exists(tiff_dir) and os.path.isdir(tiff_dir):
+        tiff_files = [f for f in os.listdir(tiff_dir) 
+                     if f.lower().endswith(('.tif', '.tiff')) 
+                     and '_reprojected' not in f]
+        
+        for tiff_file in tiff_files:
+            try:
+                tiff_path = os.path.join(tiff_dir, tiff_file)
+                reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
+                
+                # Apply color gradient
+                temp_png_path = f"elevation_colored_{tiff_file}.png"
+                apply_color_gradient(reprojected_tiff, temp_png_path)
+                
+                # Get bounds
+                with rasterio.open(reprojected_tiff) as src:
+                    bounds = src.bounds
+                    image_bounds = [[bounds.bottom, bounds.left], [bounds.top, bounds.right]]
+                
+                # Add to map
+                folium.raster_layers.ImageOverlay(
+                    image=temp_png_path,
+                    bounds=image_bounds,
+                    name="Élévation",
+                    opacity=0.6,
+                ).add_to(fmap)
+                
+                st.session_state["auto_bounds"].append(image_bounds)
+                
+                # Cleanup
+                os.remove(temp_png_path)
+                os.remove(reprojected_tiff)
+                
+            except Exception as e:
+                st.error(f"Erreur lors du traitement du fichier {tiff_file}: {e}")
+
+    # Adjust map view for auto layers
+    if st.session_state["auto_bounds"]:
+        fmap.fit_bounds(st.session_state["auto_bounds"])
+
     fmap.add_child(MeasureControl(position="topleft"))
     draw = Draw(
         position="topleft",
@@ -116,146 +164,109 @@ def main():
     )
     fmap.add_child(draw)
 
-    # Single button for TIFF upload with type selection
+    # Interface de téléversement manuel
     tiff_type = st.selectbox("Sélectionnez le type de fichier TIFF", ["MNT", "MNS", "Orthophoto"], key="tiff_selectbox")
     uploaded_tiff = st.file_uploader(f"Téléverser un fichier TIFF ({tiff_type})", type=["tif", "tiff"], key="tiff_uploader")
+    
     if uploaded_tiff:
         tiff_path = uploaded_tiff.name
         with open(tiff_path, "wb") as f:
             f.write(uploaded_tiff.read())
 
-        st.write(f"Reprojection du fichier TIFF ({tiff_type})...")
         try:
             reprojected_tiff = reproject_tiff(tiff_path, "EPSG:4326")
             with rasterio.open(reprojected_tiff) as src:
                 bounds = src.bounds
+                
+                # Update map location
                 center_lat = (bounds.top + bounds.bottom) / 2
                 center_lon = (bounds.left + bounds.right) / 2
-                fmap = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+                fmap.location = [center_lat, center_lon]
 
-                fmap.add_child(MeasureControl(position="topleft"))
-                draw = Draw(
-                    position="topleft",
-                    export=True,
-                    draw_options={
-                        "polyline": {"shapeOptions": {"color": "orange", "weight": 4, "opacity": 0.7}},
-                        "polygon": {"shapeOptions": {"color": "green", "weight": 4, "opacity": 0.7}},
-                        "rectangle": {"shapeOptions": {"color": "red", "weight": 4, "opacity": 0.7}},
-                        "circle": {"shapeOptions": {"color": "purple", "weight": 4, "opacity": 0.7}},
-                    },
-                    edit_options={"edit": True},
-                )
-                fmap.add_child(draw)
-
-                # Check if the layer already exists in the list
+                # Check existing layers
                 layer_exists = any(
-                    layer["type"] == "TIFF" and layer["name"] == tiff_type and layer["path"] == reprojected_tiff
+                    layer["type"] == "TIFF" and layer["name"] == tiff_type
                     for layer in st.session_state["uploaded_layers"]
                 )
 
                 if not layer_exists:
-                    # Store the layer in the uploaded_layers list without displaying it
-                    st.session_state["uploaded_layers"].append({"type": "TIFF", "name": tiff_type, "path": reprojected_tiff, "bounds": bounds})
-                    st.success(f"Couche {tiff_type} téléversée et ajoutée à la liste des couches.")
+                    st.session_state["uploaded_layers"].append({
+                        "type": "TIFF",
+                        "name": tiff_type,
+                        "path": reprojected_tiff,
+                        "bounds": bounds
+                    })
+                    st.success(f"Couche {tiff_type} ajoutée!")
                 else:
-                    st.warning(f"La couche {tiff_type} existe déjà dans la liste.")
-        except Exception as e:
-            st.error(f"Erreur lors de la reprojection : {e}")
+                    st.warning("Couche déjà existante!")
 
-    # Single button for GeoJSON upload with type selection
+        except Exception as e:
+            st.error(f"Erreur de traitement: {e}")
+
+    # Gestion des GeoJSON
     geojson_type = st.selectbox("Sélectionnez le type de fichier GeoJSON", ["Routes", "Polygonale", "Cours d'eau"], key="geojson_selectbox")
     uploaded_geojson = st.file_uploader(f"Téléverser un fichier GeoJSON ({geojson_type})", type=["geojson"], key="geojson_uploader")
+    
     if uploaded_geojson:
         try:
             geojson_data = json.load(uploaded_geojson)
-            # Check if the layer already exists in the list
             layer_exists = any(
-                layer["type"] == "GeoJSON" and layer["name"] == geojson_type and layer["data"] == geojson_data
+                layer["type"] == "GeoJSON" and layer["name"] == geojson_type
                 for layer in st.session_state["uploaded_layers"]
             )
 
             if not layer_exists:
-                # Store the layer in the uploaded_layers list without displaying it
-                st.session_state["uploaded_layers"].append({"type": "GeoJSON", "name": geojson_type, "data": geojson_data})
-                st.success(f"Couche {geojson_type} téléversée et ajoutée à la liste des couches.")
+                st.session_state["uploaded_layers"].append({
+                    "type": "GeoJSON",
+                    "name": geojson_type,
+                    "data": geojson_data
+                })
+                st.success(f"Couche {geojson_type} ajoutée!")
             else:
-                st.warning(f"La couche {geojson_type} existe déjà dans la liste.")
+                st.warning("Couche déjà existante!")
+
         except Exception as e:
-            st.error(f"Erreur lors du chargement du GeoJSON : {e}")
+            st.error(f"Erreur de chargement: {e}")
 
-    # Display the list of uploaded layers
-    st.subheader("Liste des couches téléversées")
-    if st.session_state["uploaded_layers"]:
-        for i, layer in enumerate(st.session_state["uploaded_layers"]):
-            st.write(f"{i + 1}. {layer['name']} ({layer['type']})")
-    else:
-        st.write("Aucune couche téléversée pour le moment.")
-
-    # Button to add all uploaded layers to the map
-    if st.button("Ajouter la liste de couches à la carte", key="add_layers_button"):
-        # Use a set to track added layers and avoid duplicates
-        added_layers = set()
-        all_bounds = []  # To store bounds of all layers
-
+    # Affichage des couches
+    if st.button("Afficher toutes les couches"):
+        all_bounds = st.session_state["auto_bounds"].copy()
+        
+        # Add uploaded layers
         for layer in st.session_state["uploaded_layers"]:
-            if layer["name"] not in added_layers:
-                if layer["type"] == "TIFF":
-                    if layer["name"] in ["MNT", "MNS"]:
-                        temp_png_path = f"{layer['name'].lower()}_colored.png"
-                        apply_color_gradient(layer["path"], temp_png_path)
-                        add_image_overlay(fmap, temp_png_path, layer["bounds"], layer["name"])
-                        os.remove(temp_png_path)
-                    else:
-                        add_image_overlay(fmap, layer["path"], layer["bounds"], layer["name"])
-                    # Add bounds to the list
-                    all_bounds.append([[layer["bounds"].bottom, layer["bounds"].left], [layer["bounds"].top, layer["bounds"].right]])
-                elif layer["type"] == "GeoJSON":
-                    if layer["name"] == "Routes":
-                        folium.GeoJson(
-                            layer["data"],
-                            name="Routes",
-                            style_function=lambda x: {
-                                "color": "orange",
-                                "weight": 4,
-                                "opacity": 0.7
-                            }
-                        ).add_to(fmap)
-                    elif layer["name"] == "Polygonale":
-                        folium.GeoJson(
-                            layer["data"],
-                            name="Polygonale",
-                            style_function=lambda x: {
-                                "color": "red",
-                                "weight": 2,
-                                "opacity": 1,
-                                "fillColor": "transparent",
-                                "fillOpacity": 0.1
-                            }
-                        ).add_to(fmap)
-                    elif layer["name"] == "Cours d'eau":
-                        folium.GeoJson(
-                            layer["data"],
-                            name="Cours d'eau",
-                            style_function=lambda x: {
-                                "color": "blue",
-                                "weight": 4,
-                                "opacity": 0.7
-                            }
-                        ).add_to(fmap)
-                    # Calculate bounds for GeoJSON and add to the list
-                    geojson_bounds = calculate_geojson_bounds(layer["data"])
-                    all_bounds.append([[geojson_bounds[1], geojson_bounds[0]], [geojson_bounds[3], geojson_bounds[2]]])
-                added_layers.add(layer["name"])
+            if layer["type"] == "TIFF":
+                if layer["name"] in ["MNT", "MNS"]:
+                    temp_png_path = f"{layer['name']}_colored.png"
+                    apply_color_gradient(layer["path"], temp_png_path)
+                    add_image_overlay(fmap, temp_png_path, layer["bounds"], layer["name"])
+                    os.remove(temp_png_path)
+                else:
+                    add_image_overlay(fmap, layer["path"], layer["bounds"], layer["name"])
+                
+                all_bounds.append([
+                    [layer["bounds"].bottom, layer["bounds"].left],
+                    [layer["bounds"].top, layer["bounds"].right]
+                ])
+                
+            elif layer["type"] == "GeoJSON":
+                color = "orange" if layer["name"] == "Routes" else "blue"
+                folium.GeoJson(
+                    layer["data"],
+                    name=layer["name"],
+                    style_function=lambda x, color=color: {"color": color, "weight": 4}
+                ).add_to(fmap)
+                
+                geojson_bounds = calculate_geojson_bounds(layer["data"])
+                all_bounds.append([
+                    [geojson_bounds[1], geojson_bounds[0]],
+                    [geojson_bounds[3], geojson_bounds[2]]
+                ])
 
-        # Adjust the map view to fit all bounds
         if all_bounds:
             fmap.fit_bounds(all_bounds)
-        st.success("Toutes les couches ont été ajoutées à la carte.")
 
-    # Ajout des contrôles de calques
+    # Contrôle des calques
     folium.LayerControl().add_to(fmap)
-
-    # Affichage de la carte
     folium_static(fmap, width=700, height=500)
 
 if __name__ == "__main__":
