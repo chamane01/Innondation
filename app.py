@@ -3,16 +3,10 @@ import os
 import rasterio
 import folium
 import numpy as np
-import matplotlib.pyplot as plt
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from streamlit_folium import folium_static
-from matplotlib.colors import LinearSegmentedColormap
+from matplotlib import cm
 
-# Fonction pour vérifier si un fichier a déjà été reprojeté
-def is_already_reprojected(file_path):
-    return os.path.exists(file_path)
-
-# Fonction pour reprojeter un fichier TIFF
 def reproject_tiff(input_path, output_path, dst_crs):
     """Reprojette un fichier TIFF vers le système de coordonnées spécifié."""
     with rasterio.open(input_path) as src:
@@ -40,96 +34,62 @@ def reproject_tiff(input_path, output_path, dst_crs):
                     resampling=Resampling.nearest
                 )
 
-# Fonction pour appliquer un dégradé de couleur à un fichier TIFF
-def apply_colormap(tiff_path):
-    """Applique un dégradé de couleur à un fichier TIFF."""
-    with rasterio.open(tiff_path) as src:
-        data = src.read(1)
-        
-        # Vérifier si la valeur nodata est définie
-        if src.nodata is not None:
-            # Convertir la valeur nodata au même type que les données
-            if np.issubdtype(data.dtype, np.floating):
-                data[data == src.nodata] = np.nan  # Masquer les valeurs nodata
-            else:
-                nodata = np.array(src.nodata).astype(data.dtype)
-                data[data == nodata] = np.nan  # Masquer les valeurs nodata
-        else:
-            st.warning(f"Aucune valeur nodata définie pour {tiff_path}. Les valeurs nodata ne seront pas masquées.")
-
-        # Créer un dégradé de couleur
-        cmap = LinearSegmentedColormap.from_list("elevation", ["green", "yellow", "red"])
-        norm_data = (data - np.nanmin(data)) / (np.nanmax(data) - np.nanmin(data))  # Normalisation
-        colored_data = cmap(norm_data)
-
-        # Sauvegarder l'image colorée
-        output_path = tiff_path.replace(".tif", "_colored.png")
-        plt.imsave(output_path, colored_data)
-        return output_path
-
-# Fonction pour charger les fichiers TIFF
-def load_tiff_files(folder_path):
+def load_tiff_files(folder_path, reproj_folder):
     """Charge et reprojette les fichiers TIFF contenus dans un dossier."""
-    tiff_files = [f for f in os.listdir(folder_path) if f.endswith('.tif') and not f.startswith('reproj_')]
+    if not os.path.exists(reproj_folder):
+        os.makedirs(reproj_folder)
+    
+    tiff_files = [f for f in os.listdir(folder_path) if f.endswith('.tif')]
     reproj_files = []
     
     for file in tiff_files:
-        input_path = os.path.join(folder_path, file)
-        output_path_4326 = os.path.join(folder_path, f"reproj_{file}")
-        
-        # Reprojeter uniquement si le fichier n'a pas déjà été reprojeté
-        if not is_already_reprojected(output_path_4326):
+        output_path_4326 = os.path.join(reproj_folder, f"reproj_{file}")
+        if not os.path.exists(output_path_4326):
+            input_path = os.path.join(folder_path, file)
             reproject_tiff(input_path, output_path_4326, 'EPSG:4326')
-        
-        # Appliquer un dégradé de couleur
-        try:
-            colored_path = apply_colormap(output_path_4326)
-            reproj_files.append(colored_path)
-        except Exception as e:
-            st.error(f"Erreur lors de l'application du dégradé de couleur à {output_path_4326}: {e}")
+        reproj_files.append(output_path_4326)
     
     return reproj_files
 
-# Fonction pour créer la carte
 def create_map(tiff_files):
     """Crée une carte avec une couche OSM et les fichiers TIFF reprojectés."""
     m = folium.Map(location=[0, 0], zoom_start=2)
     
-    # Créer une couche commune "Élévation"
-    elevation_layer = folium.FeatureGroup(name="Élévation")
+    elevation_layer = folium.FeatureGroup(name='Élévation')
     
     for tiff in tiff_files:
-        try:
-            with rasterio.open(tiff.replace("_colored.png", ".tif")) as src:
-                bounds = src.bounds
-                folium.raster_layers.ImageOverlay(
-                    image=tiff,
-                    bounds=[
-                        [bounds.bottom, bounds.left],
-                        [bounds.top, bounds.right]
-                    ],
-                    opacity=0.6,
-                    name="Élévation"
-                ).add_to(elevation_layer)
-        except Exception as e:
-            st.error(f"Erreur lors de l'ajout de {tiff} à la carte : {e}")
+        with rasterio.open(tiff) as src:
+            data = src.read(1)
+            bounds = src.bounds
+            normalized_data = (data - np.nanmin(data)) / (np.nanmax(data) - np.nanmin(data))
+            colored_data = cm.viridis(normalized_data)
+            
+            folium.raster_layers.ImageOverlay(
+                image=colored_data,
+                bounds=[
+                    [bounds.bottom, bounds.left],
+                    [bounds.top, bounds.right]
+                ],
+                opacity=0.6,
+                name=tiff
+            ).add_to(elevation_layer)
     
     elevation_layer.add_to(m)
     folium.LayerControl().add_to(m)
     
     return m
 
-# Fonction principale
 def main():
     st.title("Carte Dynamique avec Données d'Élévation")
     folder_path = "TIFF"  # Modifier selon l'emplacement réel du dossier
+    reproj_folder = "reproj_tiff"  # Dossier pour stocker les fichiers reprojetés
     
     if not os.path.exists(folder_path):
         st.error("Le dossier TIFF n'existe pas.")
         return
     
     st.write("Chargement et reprojection des fichiers TIFF...")
-    reproj_files = load_tiff_files(folder_path)
+    reproj_files = load_tiff_files(folder_path, reproj_folder)
     
     if not reproj_files:
         st.warning("Aucun fichier TIFF trouvé.")
