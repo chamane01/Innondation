@@ -78,7 +78,7 @@ def load_tiff_files(folder_path):
                 reproj_files.append(input_path)
                 continue
                 
-            # Générer un nom de fichier court
+            # Générer un nom de fichier court et unique
             output_filename = f"reproj_{file[:20]}.tif"  # Limite à 20 caractères
             output_path_4326 = os.path.join(output_dir, output_filename)
             
