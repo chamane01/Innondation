@@ -2,10 +2,8 @@ import streamlit as st
 import os
 import rasterio
 import folium
-import numpy as np
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from streamlit_folium import folium_static
-from matplotlib import cm
 
 def reproject_tiff(input_path, output_path, dst_crs):
     """Reprojette un fichier TIFF vers le système de coordonnées spécifié."""
@@ -59,13 +57,9 @@ def create_map(tiff_files):
     
     for tiff in tiff_files:
         with rasterio.open(tiff) as src:
-            data = src.read(1)
             bounds = src.bounds
-            normalized_data = (data - np.nanmin(data)) / (np.nanmax(data) - np.nanmin(data))
-            colored_data = cm.viridis(normalized_data)
-            
             folium.raster_layers.ImageOverlay(
-                image=colored_data,
+                image=src.read(1),  # Affiche directement les données sans dégradé
                 bounds=[
                     [bounds.bottom, bounds.left],
                     [bounds.top, bounds.right]
