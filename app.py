@@ -45,7 +45,12 @@ def apply_colormap(tiff_path):
     """Applique un dégradé de couleur à un fichier TIFF."""
     with rasterio.open(tiff_path) as src:
         data = src.read(1)
-        data[data == src.nodata] = np.nan  # Gérer les valeurs nodata
+        
+        # Vérifier si la valeur nodata est définie
+        if src.nodata is not None:
+            data[data == src.nodata] = np.nan  # Masquer les valeurs nodata
+        else:
+            st.warning(f"Aucune valeur nodata définie pour {tiff_path}. Les valeurs nodata ne seront pas masquées.")
 
         # Créer un dégradé de couleur
         cmap = LinearSegmentedColormap.from_list("elevation", ["green", "yellow", "red"])
@@ -72,8 +77,11 @@ def load_tiff_files(folder_path):
             reproject_tiff(input_path, output_path_4326, 'EPSG:4326')
         
         # Appliquer un dégradé de couleur
-        colored_path = apply_colormap(output_path_4326)
-        reproj_files.append(colored_path)
+        try:
+            colored_path = apply_colormap(output_path_4326)
+            reproj_files.append(colored_path)
+        except Exception as e:
+            st.error(f"Erreur lors de l'application du dégradé de couleur à {output_path_4326}: {e}")
     
     return reproj_files
 
@@ -86,17 +94,20 @@ def create_map(tiff_files):
     elevation_layer = folium.FeatureGroup(name="Élévation")
     
     for tiff in tiff_files:
-        with rasterio.open(tiff.replace("_colored.png", ".tif")) as src:
-            bounds = src.bounds
-            folium.raster_layers.ImageOverlay(
-                image=tiff,
-                bounds=[
-                    [bounds.bottom, bounds.left],
-                    [bounds.top, bounds.right]
-                ],
-                opacity=0.6,
-                name="Élévation"
-            ).add_to(elevation_layer)
+        try:
+            with rasterio.open(tiff.replace("_colored.png", ".tif")) as src:
+                bounds = src.bounds
+                folium.raster_layers.ImageOverlay(
+                    image=tiff,
+                    bounds=[
+                        [bounds.bottom, bounds.left],
+                        [bounds.top, bounds.right]
+                    ],
+                    opacity=0.6,
+                    name="Élévation"
+                ).add_to(elevation_layer)
+        except Exception as e:
+            st.error(f"Erreur lors de l'ajout de {tiff} à la carte : {e}")
     
     elevation_layer.add_to(m)
     folium.LayerControl().add_to(m)
