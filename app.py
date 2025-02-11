@@ -32,19 +32,15 @@ def reproject_tiff(input_path, output_path, dst_crs):
                     resampling=Resampling.nearest
                 )
 
-def load_tiff_files(folder_path, reproj_folder):
+def load_tiff_files(folder_path):
     """Charge et reprojette les fichiers TIFF contenus dans un dossier."""
-    if not os.path.exists(reproj_folder):
-        os.makedirs(reproj_folder)
-    
     tiff_files = [f for f in os.listdir(folder_path) if f.endswith('.tif')]
     reproj_files = []
     
     for file in tiff_files:
-        output_path_4326 = os.path.join(reproj_folder, f"reproj_{file}")
-        if not os.path.exists(output_path_4326):
-            input_path = os.path.join(folder_path, file)
-            reproject_tiff(input_path, output_path_4326, 'EPSG:4326')
+        input_path = os.path.join(folder_path, file)
+        output_path_4326 = os.path.join(folder_path, f"reproj_{file}")
+        reproject_tiff(input_path, output_path_4326, 'EPSG:4326')
         reproj_files.append(output_path_4326)
     
     return reproj_files
@@ -53,37 +49,29 @@ def create_map(tiff_files):
     """Crée une carte avec une couche OSM et les fichiers TIFF reprojectés."""
     m = folium.Map(location=[0, 0], zoom_start=2)
     
-    elevation_layer = folium.FeatureGroup(name='Élévation')
-    
     for tiff in tiff_files:
         with rasterio.open(tiff) as src:
             bounds = src.bounds
-            folium.raster_layers.ImageOverlay(
-                image=src.read(1),  # Affiche directement les données sans dégradé
+            folium.Rectangle(
                 bounds=[
                     [bounds.bottom, bounds.left],
                     [bounds.top, bounds.right]
                 ],
-                opacity=0.6,
-                name=tiff
-            ).add_to(elevation_layer)
-    
-    elevation_layer.add_to(m)
-    folium.LayerControl().add_to(m)
+                color='blue', fill=True, fill_opacity=0.4, tooltip=tiff
+            ).add_to(m)
     
     return m
 
 def main():
     st.title("Carte Dynamique avec Données d'Élévation")
     folder_path = "TIFF"  # Modifier selon l'emplacement réel du dossier
-    reproj_folder = "reproj_tiff"  # Dossier pour stocker les fichiers reprojetés
     
     if not os.path.exists(folder_path):
         st.error("Le dossier TIFF n'existe pas.")
         return
     
     st.write("Chargement et reprojection des fichiers TIFF...")
-    reproj_files = load_tiff_files(folder_path, reproj_folder)
+    reproj_files = load_tiff_files(folder_path)
     
     if not reproj_files:
         st.warning("Aucun fichier TIFF trouvé.")
