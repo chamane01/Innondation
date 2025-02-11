@@ -4,9 +4,6 @@ import rasterio
 import folium
 import numpy as np
 import matplotlib.pyplot as plt
-from PIL import Image
-import io
-import base64
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from streamlit_folium import folium_static
 
@@ -50,51 +47,47 @@ def load_tiff_files(folder_path):
     
     return reproj_files
 
+def apply_color_gradient(tiff_path):
+    """Applique un dégradé de couleur aux données TIFF."""
+    with rasterio.open(tiff_path) as src:
+        data = src.read(1)
+        masked_data = np.ma.masked_where(data == src.nodata, data)
+        
+        # Créer une figure matplotlib avec un dégradé de couleur
+        fig, ax = plt.subplots(figsize=(10, 10))
+        cax = ax.imshow(masked_data, cmap='viridis')
+        fig.colorbar(cax, orientation='vertical')
+        plt.axis('off')
+        
+        # Sauvegarder l'image en mémoire
+        from io import BytesIO
+        buf = BytesIO()
+        plt.savefig(buf, format='png', bbox_inches='tight', pad_inches=0)
+        buf.seek(0)
+        plt.close()
+        
+        return buf
+
 def create_map(tiff_files):
-    """Crée une carte avec les fichiers TIFF affichés en dégradé de couleur."""
+    """Crée une carte avec une couche OSM et les fichiers TIFF reprojectés."""
     m = folium.Map(location=[0, 0], zoom_start=2)
     
     for tiff in tiff_files:
         with rasterio.open(tiff) as src:
-            data = src.read(1)
+            bounds = src.bounds
+            color_gradient_image = apply_color_gradient(tiff)
             
-            # Gérer les valeurs nodata
-            if src.nodata is not None:
-                data = np.ma.masked_where(data == src.nodata, data)
-            
-            # Normaliser les données et appliquer un colormap
-            norm = plt.Normalize(vmin=np.nanmin(data), vmax=np.nanmax(data))
-            cmap = plt.cm.viridis  # Choix du dégradé de couleur
-            image_data = cmap(norm(data))
-            
-            # Convertir en image PNG
-            image_data_uint8 = (image_data * 255).astype(np.uint8)
-            img = Image.fromarray(image_data_uint8)
-            
-            # Sauvegarder l'image dans un buffer
-            img_buffer = io.BytesIO()
-            img.save(img_buffer, format='PNG')
-            img_buffer.seek(0)
-            img_base64 = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
-            
-            # Définir les bornes de l'image
-            bounds = [
-                [src.bounds.bottom, src.bounds.left],
-                [src.bounds.top, src.bounds.right]
-            ]
-            
-            # Ajouter l'image à la carte Folium
-            img_overlay = folium.raster_layers.ImageOverlay(
-                name=os.path.basename(tiff),
-                image=f'data:image/png;base64,{img_base64}',
-                bounds=bounds,
+            folium.raster_layers.ImageOverlay(
+                image=color_gradient_image,
+                bounds=[
+                    [bounds.bottom, bounds.left],
+                    [bounds.top, bounds.right]
+                ],
                 opacity=0.6,
                 interactive=True,
                 cross_origin=False
-            )
-            img_overlay.add_to(m)
+            ).add_to(m)
     
-    folium.LayerControl().add_to(m)
     return m
 
 def main():
