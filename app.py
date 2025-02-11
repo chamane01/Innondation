@@ -4,9 +4,6 @@ import rasterio
 import folium
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from streamlit_folium import folium_static
-from folium.plugins import Draw
-import geopandas as gpd
-from shapely.geometry import Polygon
 
 def reproject_tiff(input_path, output_path, dst_crs):
     """Reprojette un fichier TIFF vers le système de coordonnées spécifié."""
@@ -63,29 +60,10 @@ def create_map(tiff_files):
                 color='blue', fill=True, fill_opacity=0.4, tooltip=tiff
             ).add_to(m)
     
-    # Ajouter des outils de dessin
-    Draw(export=True).add_to(m)
-    
     return m
-
-def generate_contours(polygon):
-    """Génère des contours à partir d'un polygone."""
-    # Cette fonction est un exemple, vous pouvez l'adapter pour générer des contours réels
-    st.write("Génération des contours pour le polygone sélectionné...")
-    st.write(polygon)
 
 def main():
     st.title("Carte Dynamique avec Données d'Élévation")
-    
-    # Barre latérale à gauche
-    st.sidebar.title("Outils d'Analyse Spatiale")
-    
-    # Menu Streamlit dans la barre latérale
-    analysis_tool = st.sidebar.selectbox(
-        "Sélectionnez un outil d'analyse",
-        ["Aucun", "Générer des contours"]
-    )
-    
     folder_path = "TIFF"  # Modifier selon l'emplacement réel du dossier
     
     if not os.path.exists(folder_path):
@@ -101,20 +79,7 @@ def main():
     
     st.write("Création de la carte...")
     map_object = create_map(reproj_files)
-    
-    # Afficher la carte
     folium_static(map_object)
-    
-    # Récupérer les données dessinées sur la carte
-    if analysis_tool == "Générer des contours":
-        st.sidebar.write("Dessinez un polygone sur la carte pour générer des contours.")
-        drawn_data = st.session_state.get("drawn_data", None)
-        
-        if drawn_data:
-            polygon = drawn_data[-1]  # Prendre le dernier polygone dessiné
-            generate_contours(polygon)
-        else:
-            st.sidebar.warning("Veuillez dessiner un polygone sur la carte.")
 
 if __name__ == "__main__":
     main()
