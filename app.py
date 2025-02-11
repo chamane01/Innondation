@@ -1,12 +1,21 @@
 import streamlit as st
 import os
 import rasterio
-import geopandas as gpd
 import folium
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from streamlit_folium import folium_static
-from pyproj import CRS
 from rasterio.crs import CRS as RasterioCRS
+
+def is_already_4326(input_path):
+    """Vérifie si un fichier est déjà en EPSG:4326."""
+    try:
+        with rasterio.open(input_path) as src:
+            if src.crs is None:
+                return False
+            return src.crs == RasterioCRS.from_epsg(4326)
+    except Exception as e:
+        st.error(f"Erreur lors de la vérification du CRS : {str(e)}")
+        return False
 
 def reproject_tiff(input_path, output_path, dst_crs):
     """Reprojette un fichier TIFF vers le système de coordonnées spécifié."""
@@ -55,10 +64,23 @@ def load_tiff_files(folder_path):
         output_dir = os.path.join(folder_path, 'reprojected')
         os.makedirs(output_dir, exist_ok=True)
         
+        # Nettoyer les anciens fichiers reprojetés
+        for old_file in os.listdir(output_dir):
+            os.remove(os.path.join(output_dir, old_file))
+        
         reproj_files = []
         for file in tiff_files:
             input_path = os.path.join(folder_path, file)
-            output_path_4326 = os.path.join(output_dir, f"reproj_{file}")
+            
+            # Vérifier si le fichier est déjà en EPSG:4326
+            if is_already_4326(input_path):
+                st.info(f"{file} est déjà en EPSG:4326, pas de reprojection nécessaire")
+                reproj_files.append(input_path)
+                continue
+                
+            # Générer un nom de fichier court
+            output_filename = f"reproj_{file[:20]}.tif"  # Limite à 20 caractères
+            output_path_4326 = os.path.join(output_dir, output_filename)
             
             if not os.path.exists(input_path):
                 st.error(f"Fichier introuvable : {input_path}")
