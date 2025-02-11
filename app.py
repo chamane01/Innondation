@@ -1,45 +1,48 @@
-import streamlit as st
 import os
+import glob
 import rasterio
-import geopandas as gpd
+import numpy as np
 import folium
+import branca.colormap as cm
 from rasterio.warp import calculate_default_transform, reproject, Resampling
-from streamlit_folium import folium_static
-from pyproj import CRS
+from folium.raster_layers import ImageOverlay
 
-# Définir un dossier de travail (changer selon l'environnement)
-FOLDER_PATH = "TIFF"  # Modifier si besoin
-TEMP_FOLDER_PATH = "/tmp/TIFF"  # Pour Streamlit Cloud
+# Dossiers
+TIFF_DIRECTORY = "TIFF"
+OUTPUT_DIRECTORY = "TIFF_FIXED"
+os.makedirs(OUTPUT_DIRECTORY, exist_ok=True)
 
-# Vérifier si le dossier TIFF est accessible, sinon utiliser un dossier temporaire
-if not os.path.exists(FOLDER_PATH):
-    st.warning(f"Le dossier {FOLDER_PATH} n'existe pas, utilisation du dossier temporaire.")
-    FOLDER_PATH = TEMP_FOLDER_PATH
-os.makedirs(FOLDER_PATH, exist_ok=True)  # S'assurer que le dossier existe
+# Systèmes de coordonnées désirés
+TARGET_CRS = "EPSG:4326"  # WGS 84 (latitude/longitude)
 
-def reproject_tiff(input_path, output_path, dst_crs):
-    """Reprojette un fichier TIFF vers le système de coordonnées spécifié."""
-    
-    if not os.path.exists(input_path):
-        raise FileNotFoundError(f"Le fichier {input_path} n'existe pas.")
+# Liste des fichiers TIFF
+original_tiff_files = glob.glob(os.path.join(TIFF_DIRECTORY, "*.tif"))
+reprojected_files = []
 
-    with rasterio.open(input_path) as src:
-        if src.crs is None:
-            raise ValueError(f"Le fichier {input_path} n'a pas de CRS défini.")
-        
+def shorten_filename(filepath):
+    """Réduit la longueur des noms de fichiers trop longs."""
+    base_name = os.path.basename(filepath)
+    parts = base_name.split("_")
+    if len(parts) > 3:
+        new_name = "_".join(parts[:2]) + "_" + parts[-1]
+    else:
+        new_name = base_name
+    return os.path.join(OUTPUT_DIRECTORY, new_name)
+
+def reproject_tiff(input_tiff, output_tiff, target_crs):
+    """Reprojette un fichier TIFF uniquement s'il n'est pas déjà dans le bon CRS."""
+    with rasterio.open(input_tiff) as src:
+        if src.crs == target_crs:
+            print(f"Pas de reprojection nécessaire pour {input_tiff}")
+            return input_tiff  # Retourne l'original si pas besoin de reprojection
+
         transform, width, height = calculate_default_transform(
-            src.crs, dst_crs, src.width, src.height, *src.bounds
+            src.crs, target_crs, src.width, src.height, *src.bounds
         )
-        
         kwargs = src.meta.copy()
-        kwargs.update({
-            'crs': dst_crs,
-            'transform': transform,
-            'width': width,
-            'height': height
-        })
-        
-        with rasterio.open(output_path, 'w', **kwargs) as dst:
+        kwargs.update({"crs": target_crs, "transform": transform, "width": width, "height": height})
+
+        with rasterio.open(output_tiff, "w", **kwargs) as dst:
             for i in range(1, src.count + 1):
                 reproject(
                     source=rasterio.band(src, i),
@@ -47,74 +50,38 @@ def reproject_tiff(input_path, output_path, dst_crs):
                     src_transform=src.transform,
                     src_crs=src.crs,
                     dst_transform=transform,
-                    dst_crs=dst_crs,
-                    resampling=Resampling.nearest
+                    dst_crs=target_crs,
+                    resampling=Resampling.nearest,
                 )
+    return output_tiff
 
-def load_tiff_files(folder_path):
-    """Charge et reprojette les fichiers TIFF contenus dans un dossier."""
-    tiff_files = [f for f in os.listdir(folder_path) if f.endswith('.tif')]
-    reproj_files = []
-    
-    if not tiff_files:
-        st.warning("Aucun fichier TIFF trouvé dans le dossier.")
-        return []
-    
-    for file in tiff_files:
-        input_path = os.path.join(folder_path, file)
-        output_path_4326 = os.path.join(folder_path, f"reproj_{file}")
-        
-        try:
-            reproject_tiff(input_path, output_path_4326, 'EPSG:4326')
-            reproj_files.append(output_path_4326)
-        except Exception as e:
-            st.error(f"Erreur lors de la reprojection de {file} : {e}")
+# Traitement des fichiers TIFF
+for tiff_file in original_tiff_files:
+    output_tiff = shorten_filename(tiff_file)
+    final_tiff = reproject_tiff(tiff_file, output_tiff, TARGET_CRS)
+    reprojected_files.append(final_tiff)
 
-    return reproj_files
+# Création d'une carte Folium
+m = folium.Map(location=[5.35, -4.03], zoom_start=12)
 
-def create_map(tiff_files):
-    """Crée une carte avec une couche OSM et les fichiers TIFF reprojectés."""
-    m = folium.Map(location=[0, 0], zoom_start=2)
-    
-    for tiff in tiff_files:
-        try:
-            with rasterio.open(tiff) as src:
-                bounds = src.bounds
-                folium.Rectangle(
-                    bounds=[
-                        [bounds.bottom, bounds.left],
-                        [bounds.top, bounds.right]
-                    ],
-                    color='blue', fill=True, fill_opacity=0.4, tooltip=tiff
-                ).add_to(m)
-        except Exception as e:
-            st.error(f"Impossible d'afficher {tiff} sur la carte : {e}")
-    
-    return m
+# Dégradé de couleur
+color_map = cm.linear.YlGnBu_09.scale(0, 255)
 
-def main():
-    st.title("Carte Dynamique avec Données d'Élévation")
-    
-    # Vérifier les permissions d'écriture dans le dossier
-    test_path = os.path.join(FOLDER_PATH, "test.txt")
-    try:
-        with open(test_path, "w") as f:
-            f.write("test")
-        os.remove(test_path)
-    except Exception as e:
-        st.error(f"Problème de permission d'écriture dans {FOLDER_PATH} : {e}")
-        return
-    
-    st.write("Chargement et reprojection des fichiers TIFF...")
-    reproj_files = load_tiff_files(FOLDER_PATH)
-    
-    if not reproj_files:
-        st.warning("Aucun fichier TIFF reprojecté disponible.")
-        return
-    
-    st.write("Création de la carte...")
-    map_object = create_map(reproj_files)
-    folium_static(map_object)
+# Ajout des TIFF sur la carte
+for tiff_file in reprojected_files:
+    with rasterio.open(tiff_file) as src:
+        img_array = src.read(1)
+        img_array = np.nan_to_num(img_array)  # Remplace les NaN
+        img_min, img_max = np.min(img_array), np.max(img_array)
+        if img_max == img_min:
+            continue  # Évite d'afficher une image uniforme
 
-if __name__ == "__main__":
-    main()
+        img_normalized = (img_array - img_min) / (img_max - img_min)
+        img_colored = color_map(img_normalized)[:, :, :3]  # Enlever alpha
+
+        bounds = [[src.bounds.bottom, src.bounds.left], [src.bounds.top, src.bounds.right]]
+        ImageOverlay(image=img_colored, bounds=bounds, opacity=0.7).add_to(m)
+
+# Sauvegarde et affichage
+m.save("map.html")
+print("Carte générée : ouvrez 'map.html' dans un navigateur.")
