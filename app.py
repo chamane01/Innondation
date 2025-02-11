@@ -48,7 +48,12 @@ def apply_colormap(tiff_path):
         
         # Vérifier si la valeur nodata est définie
         if src.nodata is not None:
-            data[data == src.nodata] = np.nan  # Masquer les valeurs nodata
+            # Convertir la valeur nodata au même type que les données
+            if np.issubdtype(data.dtype, np.floating):
+                data[data == src.nodata] = np.nan  # Masquer les valeurs nodata
+            else:
+                nodata = np.array(src.nodata).astype(data.dtype)
+                data[data == nodata] = np.nan  # Masquer les valeurs nodata
         else:
             st.warning(f"Aucune valeur nodata définie pour {tiff_path}. Les valeurs nodata ne seront pas masquées.")
 
