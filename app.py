@@ -4,7 +4,9 @@ import rasterio
 import folium
 import numpy as np
 import matplotlib.pyplot as plt
+from PIL import Image
 import io
+import base64
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from streamlit_folium import folium_static
 
@@ -49,70 +51,68 @@ def load_tiff_files(folder_path):
     return reproj_files
 
 def create_map(tiff_files):
-    """Crée une carte avec une couche 'Élévation' unifiée."""
+    """Crée une carte avec les fichiers TIFF affichés en dégradé de couleur."""
     m = folium.Map(location=[0, 0], zoom_start=2)
-    
-    # Création de la couche d'élévation
-    elevation_layer = folium.FeatureGroup(name='Élévation', show=True)
     
     for tiff in tiff_files:
         with rasterio.open(tiff) as src:
             data = src.read(1)
             
-            # Gestion des valeurs nodata
+            # Gérer les valeurs nodata
             if src.nodata is not None:
-                data = np.ma.masked_equal(data, src.nodata)
+                data = np.ma.masked_where(data == src.nodata, data)
             
-            # Normalisation des valeurs
-            valid_data = data[~data.mask] if np.ma.is_masked(data) else data
-            min_val, max_val = valid_data.min(), valid_data.max()
+            # Normaliser les données et appliquer un colormap
+            norm = plt.Normalize(vmin=np.nanmin(data), vmax=np.nanmax(data))
+            cmap = plt.cm.viridis  # Choix du dégradé de couleur
+            image_data = cmap(norm(data))
             
-            if max_val > min_val:
-                normalized = (data - min_val) / (max_val - min_val)
-            else:
-                normalized = np.zeros_like(data, dtype=float)
+            # Convertir en image PNG
+            image_data_uint8 = (image_data * 255).astype(np.uint8)
+            img = Image.fromarray(image_data_uint8)
             
-            # Création de l'image colorée
-            buffer = io.BytesIO()
-            plt.imsave(buffer, normalized, cmap='terrain', format='png', vmin=0, vmax=1)
-            buffer.seek(0)
+            # Sauvegarder l'image dans un buffer
+            img_buffer = io.BytesIO()
+            img.save(img_buffer, format='PNG')
+            img_buffer.seek(0)
+            img_base64 = base64.b64encode(img_buffer.getvalue()).decode('utf-8')
             
-            # Définition des limites
-            bounds = [[src.bounds.bottom, src.bounds.left], 
-                     [src.bounds.top, src.bounds.right]]
+            # Définir les bornes de l'image
+            bounds = [
+                [src.bounds.bottom, src.bounds.left],
+                [src.bounds.top, src.bounds.right]
+            ]
             
-            # Ajout à la couche d'élévation
+            # Ajouter l'image à la carte Folium
             img_overlay = folium.raster_layers.ImageOverlay(
-                image=buffer.read(),
+                name=os.path.basename(tiff),
+                image=f'data:image/png;base64,{img_base64}',
                 bounds=bounds,
-                opacity=0.7,
-                interactive=True
+                opacity=0.6,
+                interactive=True,
+                cross_origin=False
             )
-            img_overlay.add_to(elevation_layer)
+            img_overlay.add_to(m)
     
-    # Ajout des éléments à la carte
-    elevation_layer.add_to(m)
-    folium.TileLayer('openstreetmap').add_to(m)
-    folium.LayerControl(collapsed=False).add_to(m)
-    
+    folium.LayerControl().add_to(m)
     return m
 
 def main():
-    st.title("Visualisation des Données d'Élévation")
-    folder_path = "TIFF"
+    st.title("Carte Dynamique avec Données d'Élévation")
+    folder_path = "TIFF"  # Modifier selon l'emplacement réel du dossier
     
     if not os.path.exists(folder_path):
-        st.error(f"Dossier introuvable : {folder_path}")
+        st.error("Le dossier TIFF n'existe pas.")
         return
     
-    st.write("Traitement des fichiers TIFF...")
+    st.write("Chargement et reprojection des fichiers TIFF...")
     reproj_files = load_tiff_files(folder_path)
     
     if not reproj_files:
-        st.warning("Aucun fichier TIFF trouvé dans le dossier.")
+        st.warning("Aucun fichier TIFF trouvé.")
         return
     
-    st.write("Génération de la carte interactive...")
+    st.write("Création de la carte...")
     map_object = create_map(reproj_files)
     folium_static(map_object)
 
