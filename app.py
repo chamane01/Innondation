@@ -36,7 +36,22 @@ geojson_colors = {
     "Cours d'eau": "lightblue",
     "Polygonale": "pink"
 }
+# 📌 Dossier contenant les fichiers TIFF à charger automatiquement
+TIFF_FOLDER = "TIFF"
 
+# 🔹 Fonction pour obtenir tous les fichiers TIFF dans le dossier
+def get_tiff_files(directory):
+    """Liste tous les fichiers TIFF dans le répertoire donné."""
+    return [os.path.join(directory, f) for f in os.listdir(directory) if f.endswith(".tif") or f.endswith(".tiff")]
+
+# 🔹 Fonction pour charger et transformer les fichiers TIFF (comme ceux téléversés)
+def process_tiff_for_display(tiff_path):
+    """Transforme un TIFF en image affichable avec les mêmes paramètres que les fichiers téléversés."""
+    with rasterio.open(tiff_path) as src:
+        image = reshape_as_image(src.read())
+        bounds = src.bounds  # Obtenir les limites géographiques
+
+    return image, bounds
 # Fonction pour reprojeter un fichier TIFF avec un nom unique
 def reproject_tiff(input_tiff, target_crs):
     """Reproject a TIFF file to a target CRS."""
@@ -491,6 +506,22 @@ folium.TileLayer(
     attr="OpenTopoMap",
     name="Topographique",
 ).add_to(m)  # Carte topographique ajoutée en dernier pour être la carte par défaut
+
+
+# 📌 Chargement et affichage des fichiers TIFF de la couche "Élévation"
+tiff_files = get_tiff_files(TIFF_FOLDER)
+
+if tiff_files:
+    elevation_layer = folium.FeatureGroup(name="Élévation", show=False)  # Crée une couche cachée par défaut
+    for tiff in tiff_files:
+        image, bounds = process_tiff_for_display(tiff)
+        folium.raster_layers.ImageOverlay(
+            image=image,
+            bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
+            name=os.path.basename(tiff),
+            opacity=0.6,
+        ).add_to(elevation_layer)
+    elevation_layer.add_to(m)  # Ajout de la couche "Élévation" à la carte
 
 # Ajout des couches créées à la carte
 for layer, features in st.session_state["layers"].items():
