@@ -6,7 +6,7 @@ import folium
 import math
 import matplotlib.pyplot as plt
 from streamlit_folium import st_folium
-from folium.plugins import Draw
+from folium.plugins import Draw, LayerControl
 
 def load_tiff_files(folder_path):
     """Charge les fichiers TIFF contenus dans un dossier."""
@@ -45,16 +45,27 @@ def build_mosaic(tiff_files, mosaic_path="mosaic.tif"):
         return None
 
 def create_map(mosaic_file):
-    """Crée une carte Folium avec les outils de dessin."""
+    """Crée une carte Folium avec les outils de dessin et les couches OSM et mosaïque."""
     m = folium.Map(location=[0, 0], zoom_start=2)
+    
+    # Ajout de la couche OpenStreetMap
+    folium.TileLayer(
+        tiles='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        attr='OpenStreetMap',
+        name='OpenStreetMap',
+        control=True
+    ).add_to(m)
+    
+    # Ajout de la mosaïque "Élévation CI"
     try:
         with rasterio.open(mosaic_file) as src:
             bounds = src.bounds
-            folium.Rectangle(
+            folium.raster_layers.ImageOverlay(
+                image=src.read(1),  # Lecture de la première bande
                 bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
-                color='blue', 
-                fill=False,
-                tooltip="Emprise de la mosaïque"
+                name="Élévation CI",
+                opacity=0.7,
+                interactive=True
             ).add_to(m)
     except Exception as e:
         st.error(f"Erreur lors de l'ouverture de la mosaïque : {e}")
@@ -71,6 +82,9 @@ def create_map(mosaic_file):
         },
         edit_options={'edit': True, 'remove': True}
     ).add_to(m)
+    
+    # Ajout du contrôle des couches
+    LayerControl().add_to(m)
     
     return m
 
