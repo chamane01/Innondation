@@ -4,37 +4,11 @@ import rasterio
 import folium
 import math
 import matplotlib.pyplot as plt
-from rasterio.warp import calculate_default_transform, reproject, Resampling
 from streamlit_folium import st_folium
 from folium.plugins import Draw
 
-def reproject_tiff(input_path, output_path, dst_crs):
-    """Reprojette un fichier TIFF vers le système de coordonnées spécifié."""
-    with rasterio.open(input_path) as src:
-        transform, width, height = calculate_default_transform(
-            src.crs, dst_crs, src.width, src.height, *src.bounds
-        )
-        kwargs = src.meta.copy()
-        kwargs.update({
-            'crs': dst_crs,
-            'transform': transform,
-            'width': width,
-            'height': height
-        })
-        with rasterio.open(output_path, 'w', **kwargs) as dst:
-            for i in range(1, src.count + 1):
-                reproject(
-                    source=rasterio.band(src, i),
-                    destination=rasterio.band(dst, i),
-                    src_transform=src.transform,
-                    src_crs=src.crs,
-                    dst_transform=transform,
-                    dst_crs=dst_crs,
-                    resampling=Resampling.nearest
-                )
-
 def load_tiff_files(folder_path):
-    """Charge et reprojette les fichiers TIFF contenus dans un dossier."""
+    """Charge les fichiers TIFF contenus dans un dossier sans reprojection."""
     try:
         tiff_files = [f for f in os.listdir(folder_path) if f.endswith('.tif')]
     except Exception as e:
@@ -45,23 +19,17 @@ def load_tiff_files(folder_path):
         st.error("Aucun fichier TIFF trouvé dans le dossier.")
         return []
     
-    reproj_files = []
+    tiff_paths = []
     for file in tiff_files:
         input_path = os.path.join(folder_path, file)
         if not os.path.exists(input_path):
             st.error(f"Le fichier {input_path} n'existe pas.")
             continue
-        output_path_4326 = os.path.join(folder_path, f"reproj_{file}")
-        try:
-            reproject_tiff(input_path, output_path_4326, 'EPSG:4326')
-        except Exception as e:
-            st.error(f"Erreur lors de la reprojection du fichier {input_path}: {e}")
-            continue
-        reproj_files.append(output_path_4326)
-    return reproj_files
+        tiff_paths.append(input_path)
+    return tiff_paths
 
 def create_map(tiff_files):
-    """Crée une carte avec une couche OSM, affiche les TIFF reprojectés et ajoute l'outil de dessin."""
+    """Crée une carte avec une couche OSM, affiche les fichiers TIFF et ajoute l'outil de dessin."""
     m = folium.Map(location=[0, 0], zoom_start=2)
     # Affichage des zones couvertes par chaque TIFF
     for tiff in tiff_files:
@@ -137,18 +105,18 @@ def main():
         st.error("Le dossier TIFF n'existe pas.")
         return
 
-    st.write("Chargement et reprojection des fichiers TIFF...")
-    reproj_files = load_tiff_files(folder_path)
+    st.write("Chargement des fichiers TIFF...")
+    tiff_files = load_tiff_files(folder_path)
 
-    if not reproj_files:
-        st.warning("Aucun fichier TIFF reprojeté n'a été trouvé.")
+    if not tiff_files:
+        st.warning("Aucun fichier TIFF n'a été trouvé.")
         return
 
     # Permettre à l'utilisateur de choisir le fichier TIFF à utiliser pour le profil d'élévation
-    selected_tiff = st.selectbox("Sélectionnez le fichier TIFF pour le profil d'élévation", reproj_files)
+    selected_tiff = st.selectbox("Sélectionnez le fichier TIFF pour le profil d'élévation", tiff_files)
 
     st.write("Création de la carte...")
-    map_object = create_map(reproj_files)
+    map_object = create_map(tiff_files)
     st.write("Dessinez une ligne sur la carte pour tracer le profil d'élévation.")
     
     # Utiliser st_folium pour rendre la carte interactive et récupérer les dessins
