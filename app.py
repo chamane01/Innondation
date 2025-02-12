@@ -13,7 +13,8 @@ def load_tiff_files(folder_path):
     Charge les fichiers TIFF contenus dans un dossier.
     """
     try:
-        tiff_files = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if f.lower().endswith('.tif')]
+        tiff_files = [os.path.join(folder_path, f) 
+                      for f in os.listdir(folder_path) if f.lower().endswith('.tif')]
     except Exception as e:
         st.error(f"Erreur lors de la lecture du dossier {folder_path}: {e}")
         return []
@@ -33,7 +34,7 @@ def load_tiff_files(folder_path):
 def build_mosaic(tiff_files, mosaic_path="mosaic.tif"):
     """
     Construit une mosaïque à partir d'une liste de fichiers TIFF en utilisant rasterio.merge.
-    La mosaïque est sauvegardée dans un fichier GeoTIFF.
+    La mosaïque est sauvegardée sous forme de fichier GeoTIFF.
     """
     try:
         src_files = [rasterio.open(fp) for fp in tiff_files]
@@ -94,7 +95,7 @@ def haversine(lon1, lat1, lon2, lat2):
     lon1, lat1, lon2, lat2 = map(math.radians, [lon1, lat1, lon2, lat2])
     dlon = lon2 - lon1
     dlat = lat2 - lat1
-    a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
+    a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
     c = 2 * math.asin(math.sqrt(a))
     r = 6371000  # Rayon de la Terre en mètres
     return c * r
@@ -106,19 +107,17 @@ def interpolate_line(coords, step=50):
     :param coords: liste de points [lon, lat]
     :param step: distance en mètres entre deux points interpolés
     :return: (sampled_points, cumulative_dist)
-             - sampled_points: liste de points [lon, lat]
-             - cumulative_dist: distance cumulée à chaque point
     """
     if len(coords) < 2:
         return coords, [0]
     sampled_points = [coords[0]]
     cumulative_dist = [0]
-    for i in range(len(coords) - 1):
+    for i in range(len(coords)-1):
         start = coords[i]
-        end = coords[i + 1]
+        end = coords[i+1]
         seg_distance = haversine(start[0], start[1], end[0], end[1])
         num_steps = max(int(seg_distance // step), 1)
-        for j in range(1, num_steps + 1):
+        for j in range(1, num_steps+1):
             fraction = j / num_steps
             lon = start[0] + fraction * (end[0] - start[0])
             lat = start[1] + fraction * (end[1] - start[1])
@@ -135,48 +134,41 @@ def main():
         st.error("Le dossier TIFF n'existe pas.")
         return
 
-    st.write("Chargement des fichiers TIFF...")
     tiff_files = load_tiff_files(folder_path)
     if not tiff_files:
         st.error("Aucun fichier TIFF trouvé.")
         return
 
-    st.write("Création de la mosaïque...")
     mosaic_path = build_mosaic(tiff_files, mosaic_path="mosaic.tif")
     if mosaic_path is None:
         st.error("Erreur lors de la création de la mosaïque.")
         return
 
-    st.write("Création de la carte...")
     map_object = create_map(mosaic_path)
-    st.write("**Dessinez une ou plusieurs lignes sur la carte pour tracer les profils d'élévation.**")
-    
-    # Récupérer les dessins réalisés sur la carte
+    st.write("**Dessinez une ou plusieurs lignes sur la carte pour tracer des profils d'élévation.**")
+
+    # Initialiser le session_state pour les profils si nécessaire
+    if "profiles" not in st.session_state:
+        st.session_state.profiles = []
+
+    # Récupération des dessins effectués
     map_data = st_folium(map_object, width=700, height=500)
+    if map_data and isinstance(map_data, dict):
+        drawings = map_data.get("all_drawings", [])
+        # Pour chaque dessin de type LineString, ajouter ses coordonnées si elles ne sont pas déjà enregistrées
+        for drawing in drawings:
+            if drawing.get("geometry", {}).get("type") == "LineString":
+                coords = drawing["geometry"].get("coordinates", [])
+                if coords and coords not in [p["coords"] for p in st.session_state.profiles]:
+                    st.session_state.profiles.append({"coords": coords})
 
-    if not map_data or not isinstance(map_data, dict):
-        st.info("Aucune donnée de dessin récupérée.")
-        return
-
-    drawings = map_data.get("all_drawings", [])
-    if not drawings or len(drawings) == 0:
-        st.info("Dessinez au moins une ligne pour afficher les profils d'élévation.")
-        return
-
-    # Préparation du graphique pour les profils
-    fig, ax = plt.subplots(figsize=(8, 4))
-    profile_found = False
-
-    # Traitement de chaque dessin (profil) de type LineString
-    for i, drawing in enumerate(drawings):
-        geom = drawing.get("geometry", {})
-        if geom.get("type") == "LineString":
-            coords = geom.get("coordinates", [])
+    # Affichage d'une figure distincte pour chaque profil enregistré
+    if st.session_state.profiles:
+        st.subheader("Profils d'Élévation enregistrés")
+        for idx, profile in enumerate(st.session_state.profiles, start=1):
+            coords = profile.get("coords", [])
             if not coords:
-                st.info(f"Dessin {i+1} : aucune coordonnée trouvée.")
                 continue
-
-            # Interpolation des points le long de la ligne
             sampled_points, distances = interpolate_line(coords, step=50)
             try:
                 with rasterio.open(mosaic_path) as src:
@@ -184,22 +176,17 @@ def main():
                     for point in sampled_points:
                         for val in src.sample([point]):
                             elevations.append(val[0])
-                # Tracé du profil avec une épaisseur réduite
-                ax.plot(distances, elevations, marker='o', linewidth=1, label=f"Profil {i+1}")
-                profile_found = True
+                # Création d'une figure pour ce profil sans marqueurs
+                fig, ax = plt.subplots(figsize=(8, 4))
+                ax.plot(distances, elevations, linewidth=1)  # Pas de markers
+                ax.set_xlabel("Distance (m)")
+                ax.set_ylabel("Altitude")
+                ax.set_title(f"Profil d'Élévation {idx}")
+                st.pyplot(fig)
             except Exception as e:
-                st.error(f"Erreur lors de l'extraction du profil {i+1}: {e}")
-        else:
-            st.info(f"Dessin {i+1} n'est pas une ligne (type: {geom.get('type')}).")
-    
-    if profile_found:
-        ax.set_xlabel("Distance (m)")
-        ax.set_ylabel("Altitude")
-        ax.set_title("Profils d'Élévation")
-        ax.legend()
-        st.pyplot(fig)
+                st.error(f"Erreur lors de l'extraction du profil {idx}: {e}")
     else:
-        st.info("Aucun profil d'élévation valide n'a été dessiné.")
+        st.info("Aucun profil d'élévation n'a été dessiné.")
 
 if __name__ == "__main__":
     main()
