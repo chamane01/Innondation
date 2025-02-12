@@ -59,7 +59,7 @@ def create_map(mosaic_file):
     """
     Crée une carte Folium avec :
       - Un rectangle indiquant l'étendue de la mosaïque.
-      - L'outil de dessin pour tracer une ou plusieurs lignes.
+      - L'outil de dessin pour tracer et éditer des lignes.
     """
     m = folium.Map(location=[0, 0], zoom_start=2)
     try:
@@ -72,7 +72,7 @@ def create_map(mosaic_file):
     except Exception as e:
         st.error(f"Erreur lors de l'ouverture de la mosaïque {mosaic_file}: {e}")
     
-    # Ajout de l'outil de dessin pour tracer des lignes
+    # Activation du mode édition et suppression pour modifier directement les profils sur la carte
     draw = Draw(
         draw_options={
             'polyline': True,
@@ -82,7 +82,7 @@ def create_map(mosaic_file):
             'circlemarker': False,
             'rectangle': False,
         },
-        edit_options={'edit': False}
+        edit_options={'edit': True, 'remove': True}
     )
     draw.add_to(m)
     return m
@@ -145,22 +145,30 @@ def main():
         return
 
     map_object = create_map(mosaic_path)
-    st.write("**Dessinez une ou plusieurs lignes sur la carte pour tracer des profils d'élévation.**")
+    st.write("**Dessinez, éditez ou supprimez des lignes sur la carte pour gérer vos profils d'élévation.**")
 
-    # Initialiser le session_state pour les profils si nécessaire
+    # Initialisation du session_state pour la gestion des profils
     if "profiles" not in st.session_state:
         st.session_state.profiles = []
 
-    # Récupération des dessins effectués
+    # Récupération des dessins depuis la carte
     map_data = st_folium(map_object, width=700, height=500)
+
+    # On s'assure que 'all_drawings' est une liste
+    drawings = []
     if map_data and isinstance(map_data, dict):
-        drawings = map_data.get("all_drawings", [])
-        # Pour chaque dessin de type LineString, ajouter ses coordonnées si elles ne sont pas déjà enregistrées
-        for drawing in drawings:
-            if drawing.get("geometry", {}).get("type") == "LineString":
-                coords = drawing["geometry"].get("coordinates", [])
-                if coords and coords not in [p["coords"] for p in st.session_state.profiles]:
-                    st.session_state.profiles.append({"coords": coords})
+        raw_drawings = map_data.get("all_drawings")
+        if isinstance(raw_drawings, list):
+            drawings = raw_drawings
+
+    # Mise à jour du session_state en synchronisant avec les dessins actuels
+    st.session_state.profiles = []  # Réinitialisation
+    for drawing in drawings:
+        geom = drawing.get("geometry", {})
+        if geom.get("type") == "LineString":
+            coords = geom.get("coordinates", [])
+            if coords:
+                st.session_state.profiles.append({"coords": coords})
 
     # Affichage d'une figure distincte pour chaque profil enregistré
     if st.session_state.profiles:
@@ -178,7 +186,7 @@ def main():
                             elevations.append(val[0])
                 # Création d'une figure pour ce profil sans marqueurs
                 fig, ax = plt.subplots(figsize=(8, 4))
-                ax.plot(distances, elevations, linewidth=1)  # Pas de markers
+                ax.plot(distances, elevations, linewidth=1)  # Courbe fine sans markers
                 ax.set_xlabel("Distance (m)")
                 ax.set_ylabel("Altitude")
                 ax.set_title(f"Profil d'Élévation {idx}")
