@@ -6,7 +6,8 @@ import folium
 import math
 import matplotlib.pyplot as plt
 from streamlit_folium import st_folium
-from folium.plugins import Draw, LayerControl
+from folium.plugins import Draw
+from folium import LayerControl  # Import corrigé
 
 def load_tiff_files(folder_path):
     """Charge les fichiers TIFF contenus dans un dossier."""
@@ -142,18 +143,18 @@ def main():
     m = create_map(mosaic_path)
     st.write("**Dessinez des polylignes pour générer des profils d'élévation**")
     
-    # Gestion des dessins
+    # Affichage de la carte avec gestion des dessins
     map_data = st_folium(m, width=700, height=500)
     
-    # Initialisation des profils
+    # Initialisation des profils dans la session
     if "profiles" not in st.session_state:
         st.session_state.profiles = []
 
     # Vérification et extraction des dessins
     current_drawings = []
-    if isinstance(map_data, dict):  # Vérifie que map_data est un dictionnaire
+    if isinstance(map_data, dict):
         raw_drawings = map_data.get("all_drawings", [])
-        if isinstance(raw_drawings, list):  # Vérifie que all_drawings est une liste
+        if isinstance(raw_drawings, list):
             current_drawings = [
                 d for d in raw_drawings 
                 if isinstance(d, dict) and d.get("geometry", {}).get("type") == "LineString"
