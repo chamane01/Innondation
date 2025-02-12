@@ -4,9 +4,6 @@ import rasterio
 import folium
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from streamlit_folium import folium_static
-import numpy as np
-import matplotlib.pyplot as plt
-from folium.plugins import Draw
 
 def reproject_tiff(input_path, output_path, dst_crs):
     """Reprojette un fichier TIFF vers le système de coordonnées spécifié."""
@@ -41,7 +38,9 @@ def reproject_tiff(input_path, output_path, dst_crs):
 
 def load_tiff_files(folder_path):
     """Charge et reprojette les fichiers TIFF contenus dans un dossier."""
-    tiff_files = [f for f in os.listdir(folder_path) if f.endswith('.tif')]
+    tiff_files = [f for f in os.listdir(folder_path) if f.endswith('.tif') or f.endswith('.tiff')]
+    st.write(f"Fichiers TIFF trouvés : {tiff_files}")  # Debugging statement
+    
     reproj_files = []
     
     for file in tiff_files:
@@ -69,9 +68,6 @@ def create_map(tiff_files):
                 ).add_to(m)
         except rasterio.errors.RasterioIOError as e:
             st.error(f"Erreur lors de l'ouverture du fichier {tiff}: {e}")
-    
-    # Ajouter la fonctionnalité de dessin
-    Draw(export=True).add_to(m)
     
     return m
 
