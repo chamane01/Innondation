@@ -77,11 +77,33 @@ def create_map(mosaic_file):
 
 def haversine(lon1, lat1, lon2, lat2):
     """Calcule la distance en mètres entre deux points GPS."""
-    # (Le reste de la fonction reste inchangé)
+    lon1, lat1, lon2, lat2 = map(math.radians, [lon1, lat1, lon2, lat2])
+    dlon = lon2 - lon1
+    dlat = lat2 - lat1
+    a = math.sin(dlat/2)**2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon/2)**2
+    c = 2 * math.asin(math.sqrt(a))
+    r = 6371000  # Rayon de la Terre en mètres
+    return c * r
 
 def interpolate_line(coords, step=50):
     """Interpole des points sur une ligne."""
-    # (Le reste de la fonction reste inchangé)
+    if len(coords) < 2:
+        return coords, [0]
+    sampled_points = [coords[0]]
+    cumulative_dist = [0]
+    for i in range(len(coords)-1):
+        start = coords[i]
+        end = coords[i+1]
+        seg_distance = haversine(start[0], start[1], end[0], end[1])
+        num_steps = max(int(seg_distance // step), 1)
+        for j in range(1, num_steps+1):
+            fraction = j / num_steps
+            lon = start[0] + fraction * (end[0] - start[0])
+            lat = start[1] + fraction * (end[1] - start[1])
+            dist = haversine(sampled_points[-1][0], sampled_points[-1][1], lon, lat)
+            sampled_points.append([lon, lat])
+            cumulative_dist.append(cumulative_dist[-1] + dist)
+    return sampled_points, cumulative_dist
 
 def main():
     st.title("Carte Dynamique avec Profils d'Élévation")
