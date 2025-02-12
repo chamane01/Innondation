@@ -122,10 +122,14 @@ def main():
     # Utiliser st_folium pour rendre la carte interactive et récupérer les dessins
     map_data = st_folium(map_object, width=700, height=500)
 
-    # Vérifier si une ligne a été dessinée
-    if map_data and "all_drawings" in map_data and len(map_data["all_drawings"]) > 0:
-        # On récupère le dernier dessin effectué
-        drawing = map_data["all_drawings"][-1]
+    if not map_data or not isinstance(map_data, dict):
+        st.info("Aucune donnée de dessin récupérée.")
+        return
+
+    # Utiliser .get() pour récupérer la liste des dessins
+    drawings = map_data.get("all_drawings", [])
+    if drawings and len(drawings) > 0:
+        drawing = drawings[-1]
         if drawing["geometry"]["type"] == "LineString":
             coords = drawing["geometry"]["coordinates"]
             # Interpolation des points pour obtenir un échantillonnage régulier
