@@ -131,10 +131,10 @@ def generate_contours(mosaic_file):
 def main():
     st.title("Carte Dynamique avec Profils d'Élévation")
     
-    # Initialisation de la variable de mode
-    # mode = "none"  -> aucun mode choisi : affichage des 2 boutons
-    # mode = "profiles" -> le menu de tracé de profils est actif
-    # mode = "contours" -> le menu de génération de contours est actif
+    # Initialisation de la variable de mode dans la session :
+    # "none"     -> aucun mode choisi (affichage des 2 boutons)
+    # "profiles" -> le menu de tracé de profils est actif
+    # "contours" -> le menu de génération de contours est actif
     if "mode" not in st.session_state:
         st.session_state.mode = "none"
     
@@ -165,23 +165,24 @@ def main():
     #############################
     options_container = st.container()
     
+    # Affichage du menu principal (deux boutons) si aucun mode n'est sélectionné
     if st.session_state.mode == "none":
-        # Affichage des deux boutons d'options
         col1, col2 = options_container.columns(2)
-        with col1:
-            if st.button("Tracer des profils"):
-                st.session_state.mode = "profiles"
-        with col2:
-            if st.button("Générer des contours"):
-                st.session_state.mode = "contours"
+        if col1.button("Tracer des profils"):
+            st.session_state.mode = "profiles"
+            st.experimental_rerun()
+        if col2.button("Générer des contours"):
+            st.session_state.mode = "contours"
+            st.experimental_rerun()
     
     # Mode "Générer des contours"
     if st.session_state.mode == "contours":
         st.subheader("Générer des contours")
         generate_contours(mosaic_path)
-        # Bouton pour revenir au menu principal
+        # Bouton "Retour" pour revenir au menu principal
         if st.button("Retour", key="retour_contours"):
             st.session_state.mode = "none"
+            st.experimental_rerun()
     
     # Mode "Tracer des profils"
     if st.session_state.mode == "profiles":
@@ -197,8 +198,7 @@ def main():
         else:
             current_drawings = []
         
-        # Chaque dessin de type ligne sera transformé en profil.
-        # Ainsi, si vous dessinez de nouvelles droites, elles seront immédiatement prises en compte.
+        # Transformation des lignes dessinées en profils
         profiles = []
         for i, d in enumerate(current_drawings):
             profiles.append({
@@ -206,9 +206,10 @@ def main():
                 "name": f"{map_name} - Profil {i+1}"
             })
         
-        # Affichage des profils générés
         if profiles:
+            st.write("Les profils dessinés sont affichés ci-dessous. Toute nouvelle droite dessinée sera prise en compte automatiquement.")
             for i, profile in enumerate(profiles):
+                st.markdown(f"#### {profile['name']}")
                 col_a, col_b = st.columns([1, 4])
                 with col_a:
                     # Permet de modifier le nom du profil
@@ -218,6 +219,24 @@ def main():
                         key=f"profile_name_{i}"
                     )
                     profile["name"] = new_name
+                    
+                    # Option de présentation du profil
+                    presentation_mode = st.radio(
+                        "Mode de présentation",
+                        ("Automatique", "Manuel"),
+                        key=f"presentation_mode_{i}"
+                    )
+                    # Si mode manuel, l'utilisateur peut définir l'écart en distance et en altitude.
+                    manual_options = {}
+                    if presentation_mode == "Manuel":
+                        manual_options["ecart_distance"] = st.number_input(
+                            "Ecart distance (m)", min_value=1.0, value=50.0, step=1.0,
+                            key=f"ecart_distance_{i}"
+                        )
+                        manual_options["ecart_altitude"] = st.number_input(
+                            "Ecart altitude (m)", min_value=1.0, value=10.0, step=1.0,
+                            key=f"ecart_altitude_{i}"
+                        )
                 with col_b:
                     try:
                         points, distances = interpolate_line(profile["coords"])
@@ -229,15 +248,27 @@ def main():
                         ax.set_title(profile["name"])
                         ax.set_xlabel("Distance (m)")
                         ax.set_ylabel("Altitude (m)")
+                        
+                        # En mode manuel, on fixe les ticks en fonction des écarts indiqués
+                        if presentation_mode == "Manuel":
+                            ecart_distance = manual_options.get("ecart_distance", 50.0)
+                            ecart_altitude = manual_options.get("ecart_altitude", 10.0)
+                            # On définit les ticks à partir du minimum jusqu'au maximum
+                            xticks = np.arange(0, max(distances) + ecart_distance, ecart_distance)
+                            yticks = np.arange(min(elevations), max(elevations) + ecart_altitude, ecart_altitude)
+                            ax.set_xticks(xticks)
+                            ax.set_yticks(yticks)
+                        
                         st.pyplot(fig)
                     except Exception as e:
                         st.error(f"Erreur de traitement : {e}")
         else:
             st.info("Aucun profil dessiné pour le moment.")
         
-        # Bouton pour revenir au menu principal
+        # Bouton "Retour" pour revenir au menu principal
         if st.button("Retour", key="retour_profiles"):
             st.session_state.mode = "none"
+            st.experimental_rerun()
 
 if __name__ == "__main__":
     main()
