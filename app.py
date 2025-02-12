@@ -7,7 +7,6 @@ import math
 import matplotlib.pyplot as plt
 from streamlit_folium import st_folium
 from folium.plugins import Draw
-from folium import LayerControl  # Import corrigé
 
 def load_tiff_files(folder_path):
     """Charge les fichiers TIFF contenus dans un dossier."""
@@ -46,27 +45,16 @@ def build_mosaic(tiff_files, mosaic_path="mosaic.tif"):
         return None
 
 def create_map(mosaic_file):
-    """Crée une carte Folium avec les outils de dessin et les couches OSM et mosaïque."""
+    """Crée une carte Folium avec les outils de dessin."""
     m = folium.Map(location=[0, 0], zoom_start=2)
-    
-    # Ajout de la couche OpenStreetMap
-    folium.TileLayer(
-        tiles='https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        attr='OpenStreetMap',
-        name='OpenStreetMap',
-        control=True
-    ).add_to(m)
-    
-    # Ajout de la mosaïque "Élévation CI"
     try:
         with rasterio.open(mosaic_file) as src:
             bounds = src.bounds
-            folium.raster_layers.ImageOverlay(
-                image=src.read(1),  # Lecture de la première bande
+            folium.Rectangle(
                 bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
-                name="Élévation CI",
-                opacity=0.7,
-                interactive=True
+                color='blue', 
+                fill=False,
+                tooltip="Emprise de la mosaïque"
             ).add_to(m)
     except Exception as e:
         st.error(f"Erreur lors de l'ouverture de la mosaïque : {e}")
@@ -74,7 +62,7 @@ def create_map(mosaic_file):
     # Ajout de l'outil de dessin
     Draw(
         draw_options={
-            'polyline': True,
+            'polyline': {'allowIntersection': False},
             'polygon': False,
             'circle': False,
             'marker': False,
@@ -83,9 +71,6 @@ def create_map(mosaic_file):
         },
         edit_options={'edit': True, 'remove': True}
     ).add_to(m)
-    
-    # Ajout du contrôle des couches
-    LayerControl().add_to(m)
     
     return m
 
@@ -143,18 +128,18 @@ def main():
     m = create_map(mosaic_path)
     st.write("**Dessinez des polylignes pour générer des profils d'élévation**")
     
-    # Affichage de la carte avec gestion des dessins
+    # Gestion des dessins
     map_data = st_folium(m, width=700, height=500)
     
-    # Initialisation des profils dans la session
+    # Initialisation des profils
     if "profiles" not in st.session_state:
         st.session_state.profiles = []
 
     # Vérification et extraction des dessins
     current_drawings = []
-    if isinstance(map_data, dict):
+    if isinstance(map_data, dict):  # Vérifie que map_data est un dictionnaire
         raw_drawings = map_data.get("all_drawings", [])
-        if isinstance(raw_drawings, list):
+        if isinstance(raw_drawings, list):  # Vérifie que all_drawings est une liste
             current_drawings = [
                 d for d in raw_drawings 
                 if isinstance(d, dict) and d.get("geometry", {}).get("type") == "LineString"
