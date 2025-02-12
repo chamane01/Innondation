@@ -187,7 +187,8 @@ def main():
         
         # Extraction des dessins de type ligne sur la carte
         if isinstance(map_data, dict):
-            raw_drawings = map_data.get("all_drawings", [])
+            # Modification ici pour s'assurer que raw_drawings est une liste
+            raw_drawings = map_data.get("all_drawings") or []
             current_drawings = [
                 d for d in raw_drawings 
                 if isinstance(d, dict) and d.get("geometry", {}).get("type") == "LineString"
