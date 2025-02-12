@@ -50,7 +50,6 @@ def create_map(mosaic_file):
     try:
         with rasterio.open(mosaic_file) as src:
             bounds = src.bounds
-            # Rectangle transparent sans remplissage
             folium.Rectangle(
                 bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
                 color='blue', 
@@ -60,7 +59,7 @@ def create_map(mosaic_file):
     except Exception as e:
         st.error(f"Erreur lors de l'ouverture de la mosaïque : {e}")
     
-    # Configuration de l'outil de dessin
+    # Ajout de l'outil de dessin
     Draw(
         draw_options={
             'polyline': {'allowIntersection': False},
@@ -136,9 +135,15 @@ def main():
     if "profiles" not in st.session_state:
         st.session_state.profiles = []
 
-    # Mise à jour des profils
-    current_drawings = [d for d in map_data.get("all_drawings", []) 
-                      if d.get("geometry", {}).get("type") == "LineString"]
+    # Vérification et extraction des dessins
+    current_drawings = []
+    if isinstance(map_data, dict):  # Vérifie que map_data est un dictionnaire
+        raw_drawings = map_data.get("all_drawings", [])
+        if isinstance(raw_drawings, list):  # Vérifie que all_drawings est une liste
+            current_drawings = [
+                d for d in raw_drawings 
+                if isinstance(d, dict) and d.get("geometry", {}).get("type") == "LineString"
+            ]
     
     # Synchronisation avec les dessins existants
     st.session_state.profiles = [{
