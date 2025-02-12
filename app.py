@@ -1,9 +1,9 @@
 import streamlit as st
 import os
-import math
 import rasterio
 import rasterio.merge
 import folium
+import math
 import matplotlib.pyplot as plt
 from streamlit_folium import st_folium
 from folium.plugins import Draw
@@ -45,56 +45,29 @@ def build_mosaic(tiff_files, mosaic_path="mosaic.tif"):
         return None
 
 def create_map(mosaic_file):
-    """Crée une carte Folium avec le gestionnaire de couches et l'outil de dessin (polyligne uniquement)."""
-    # Créez une carte sans fond par défaut et ajoutez explicitement OSM pour qu'il apparaisse dans le layer control.
-    m = folium.Map(location=[0, 0], zoom_start=2, tiles=None, control_scale=True)
-    folium.TileLayer('OpenStreetMap', name='OSM').add_to(m)
-
+    """Crée une carte Folium avec les outils de dessin et le gestionnaire de couches.
+    
+    La mosaïque est intégrée dans un groupe de couches nommé "élevation cote d'ivoire".
+    """
+    m = folium.Map(location=[0, 0], zoom_start=2)
+    
+    # Création d'un groupe de couches pour la mosaïque
+    mosaic_group = folium.FeatureGroup(name="élevation cote d'ivoire")
     try:
         with rasterio.open(mosaic_file) as src:
-            # Lecture de la mosaïque (on suppose qu'elle comporte une seule bande d'altitude)
-            mosaic_array = src.read(1)
-            bounds = [[src.bounds.bottom, src.bounds.left], [src.bounds.top, src.bounds.right]]
-            
-            # Transformation en image colorée à l'aide d'une colormap (ici "terrain")
-            import numpy as np
-            norm = plt.Normalize(vmin=np.nanmin(mosaic_array), vmax=np.nanmax(mosaic_array))
-            cmap = plt.get_cmap('terrain')
-            colored = cmap(norm(mosaic_array))
-            # Convertir le résultat RGBA en image RGB (8 bits)
-            colored = (colored[:, :, :3] * 255).astype(np.uint8)
-            from io import BytesIO
-            import base64
-            from PIL import Image
-            im = Image.fromarray(colored)
-            buffer = BytesIO()
-            im.save(buffer, format="PNG")
-            buffer.seek(0)
-            img_data = base64.b64encode(buffer.read()).decode()
-            image_url = f"data:image/png;base64,{img_data}"
-            
-            # Ajout de la mosaïque en tant que couche (overlay)
-            folium.raster_layers.ImageOverlay(
-                image=image_url,
-                bounds=bounds,
-                name="élévation cote d'ivoire",
-                opacity=0.6,
-                interactive=True,
-                cross_origin=False,
-                zindex=1,
-            ).add_to(m)
-            
-            # Affichage en option de l'emprise de la mosaïque sous forme de rectangle
+            bounds = src.bounds
             folium.Rectangle(
-                bounds=bounds,
-                color='blue',
+                bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
+                color='blue', 
                 fill=False,
                 tooltip="Emprise de la mosaïque"
-            ).add_to(m)
+            ).add_to(mosaic_group)
     except Exception as e:
         st.error(f"Erreur lors de l'ouverture de la mosaïque : {e}")
     
-    # Ajout de l'outil de dessin limité aux polylignes
+    mosaic_group.add_to(m)
+    
+    # Ajout de l'outil de dessin (seulement pour les polylignes)
     Draw(
         draw_options={
             'polyline': {'allowIntersection': False},
@@ -107,7 +80,7 @@ def create_map(mosaic_file):
         edit_options={'edit': True, 'remove': True}
     ).add_to(m)
     
-    # Ajout du gestionnaire de couches (LayerControl)
+    # Ajout du gestionnaire de couches
     folium.LayerControl().add_to(m)
     
     return m
@@ -145,10 +118,10 @@ def interpolate_line(coords, step=50):
 def main():
     st.title("Carte Dynamique avec Profils d'Élévation")
     
-    # Saisie du nom de la carte par l'utilisateur
+    # Configuration du nom de la carte
     map_name = st.text_input("Nom de votre carte", value="Ma Carte")
     
-    # Chargement des fichiers TIFF contenus dans le dossier "TIFF"
+    # Gestion des fichiers TIFF
     folder_path = "TIFF"
     if not os.path.exists(folder_path):
         st.error("Dossier TIFF introuvable")
@@ -162,34 +135,34 @@ def main():
     if not mosaic_path:
         return
 
-    # Création de la carte interactive avec la mosaïque et les outils de dessin
+    # Création de la carte interactive
     m = create_map(mosaic_path)
     st.write("**Dessinez des polylignes pour générer des profils d'élévation**")
     
-    # Affichage de la carte et récupération des dessins
+    # Gestion des dessins
     map_data = st_folium(m, width=700, height=500)
     
-    # Initialisation de la liste des profils dans la session Streamlit
+    # Initialisation des profils
     if "profiles" not in st.session_state:
         st.session_state.profiles = []
 
-    # Extraction des dessins réalisés (uniquement les LineString)
+    # Vérification et extraction des dessins
     current_drawings = []
-    if isinstance(map_data, dict):
+    if isinstance(map_data, dict):  # Vérifie que map_data est un dictionnaire
         raw_drawings = map_data.get("all_drawings", [])
-        if isinstance(raw_drawings, list):
+        if isinstance(raw_drawings, list):  # Vérifie que all_drawings est une liste
             current_drawings = [
                 d for d in raw_drawings 
                 if isinstance(d, dict) and d.get("geometry", {}).get("type") == "LineString"
             ]
     
-    # Synchronisation des dessins avec la session
+    # Synchronisation avec les dessins existants
     st.session_state.profiles = [{
         "coords": d["geometry"]["coordinates"],
         "name": f"{map_name} - Ligne {i+1}"
     } for i, d in enumerate(current_drawings)]
 
-    # Affichage des profils et génération des graphiques d'élévation
+    # Affichage des profils
     if st.session_state.profiles:
         st.subheader("Profils générés")
         for i, profile in enumerate(st.session_state.profiles):
@@ -201,15 +174,15 @@ def main():
                     key=f"profile_name_{i}"
                 )
                 profile["name"] = new_name
+            
             with col2:
                 try:
-                    # Interpolation des points le long de la polyligne
+                    # Calcul des élévations
                     points, distances = interpolate_line(profile["coords"])
-                    # Échantillonnage des élévations depuis la mosaïque
                     with rasterio.open(mosaic_path) as src:
                         elevations = [list(src.sample([p]))[0][0] for p in points]
                     
-                    # Création du graphique du profil d'élévation
+                    # Création du graphique
                     fig, ax = plt.subplots(figsize=(8, 3))
                     ax.plot(distances, elevations, 'b-', linewidth=1.5)
                     ax.set_title(profile["name"])
