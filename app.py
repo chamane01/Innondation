@@ -9,6 +9,10 @@ import numpy as np
 from streamlit_folium import st_folium
 from folium.plugins import Draw
 
+#########################
+# Fonctions utilitaires #
+#########################
+
 def load_tiff_files(folder_path):
     """Charge les fichiers TIFF contenus dans un dossier."""
     try:
@@ -46,12 +50,13 @@ def build_mosaic(tiff_files, mosaic_path="mosaic.tif"):
         return None
 
 def create_map(mosaic_file):
-    """Crée une carte Folium avec l'outil de dessin (uniquement pour les polylignes)
+    """
+    Crée une carte Folium avec l'outil de dessin (seulement pour les polylignes)
     et intègre un calque indiquant l'emprise de la mosaïque.
     """
     m = folium.Map(location=[0, 0], zoom_start=2)
     
-    # Création d'un groupe de couches pour la mosaïque
+    # Calque indiquant l'emprise de la mosaïque
     mosaic_group = folium.FeatureGroup(name="élevation cote d'ivoire")
     try:
         with rasterio.open(mosaic_file) as src:
@@ -67,7 +72,7 @@ def create_map(mosaic_file):
     
     mosaic_group.add_to(m)
     
-    # Ajout de l'outil de dessin (seulement pour les polylignes)
+    # Ajout de l'outil de dessin (uniquement pour dessiner des lignes)
     Draw(
         draw_options={
             'polyline': {'allowIntersection': False},
@@ -96,7 +101,7 @@ def haversine(lon1, lat1, lon2, lat2):
     return c * r
 
 def interpolate_line(coords, step=50):
-    """Interpole des points sur une ligne."""
+    """Interpole des points sur une ligne pour obtenir des échantillons réguliers."""
     if len(coords) < 2:
         return coords, [0]
     sampled_points = [coords[0]]
@@ -116,39 +121,27 @@ def interpolate_line(coords, step=50):
     return sampled_points, cumulative_dist
 
 def generate_contours(mosaic_file):
-    """Génère et affiche un graphique de contours à partir de la mosaïque."""
-    try:
-        with rasterio.open(mosaic_file) as src:
-            elevation = src.read(1)
-            bounds = src.bounds
-            width = src.width
-            height = src.height
-        # Création des axes X et Y à partir des limites géographiques
-        xs = np.linspace(bounds.left, bounds.right, width)
-        ys = np.linspace(bounds.bottom, bounds.top, height)
-        X, Y = np.meshgrid(xs, ys)
-        
-        fig, ax = plt.subplots(figsize=(8,6))
-        contour = ax.contour(X, Y, elevation, levels=10, cmap='viridis')
-        ax.clabel(contour, inline=True, fontsize=8)
-        ax.set_title("Contours d'altitude")
-        ax.set_xlabel("Longitude")
-        ax.set_ylabel("Latitude")
-        st.pyplot(fig)
-    except Exception as e:
-        st.error(f"Erreur lors de la génération des contours : {e}")
+    """Affiche un message indiquant que la fonctionnalité est en cours de développement."""
+    st.write("En cours de développement")
+
+##################
+# Fonction main  #
+##################
 
 def main():
     st.title("Carte Dynamique avec Profils d'Élévation")
     
-    # Initialisation de la session pour stocker les profils (s'il n'existe pas déjà)
-    if "profiles" not in st.session_state:
-        st.session_state.profiles = []
+    # Initialisation de la variable de mode
+    # mode = "none"  -> aucun mode choisi : affichage des 2 boutons
+    # mode = "profiles" -> le menu de tracé de profils est actif
+    # mode = "contours" -> le menu de génération de contours est actif
+    if "mode" not in st.session_state:
+        st.session_state.mode = "none"
     
-    # Saisie du nom de la carte
+    # Saisie du nom de la carte (pour nommer les profils)
     map_name = st.text_input("Nom de votre carte", value="Ma Carte")
     
-    # Gestion des fichiers TIFF
+    # Chargement et construction de la mosaïque
     folder_path = "TIFF"
     if not os.path.exists(folder_path):
         st.error("Dossier TIFF introuvable")
@@ -162,40 +155,63 @@ def main():
     if not mosaic_path:
         return
 
-    # Création et affichage de la carte interactive
+    # Création de la carte interactive
     m = create_map(mosaic_path)
     st.write("**Utilisez les outils de dessin sur la carte ci-dessus.**")
     map_data = st_folium(m, width=700, height=500)
     
-    # Affichage de deux boutons d'action sous la carte
-    col1, col2 = st.columns(2)
+    #############################
+    # Espace d'options sous la carte
+    #############################
+    options_container = st.container()
     
-    with col1:
-        if st.button("Tracer des profils"):
-            # Extraction des polylignes dessinées sur la carte
-            if isinstance(map_data, dict):
-                raw_drawings = map_data.get("all_drawings", [])
-                current_drawings = [
-                    d for d in raw_drawings 
-                    if isinstance(d, dict) and d.get("geometry", {}).get("type") == "LineString"
-                ]
-                if not current_drawings:
-                    st.warning("Aucun profil dessiné trouvé.")
-                else:
-                    st.session_state.profiles = [{
-                        "coords": d["geometry"]["coordinates"],
-                        "name": f"{map_name} - Ligne {i+1}"
-                    } for i, d in enumerate(current_drawings)]
-                    st.success("Profils enregistrés. Les graphiques sont générés ci-dessous.")
-            else:
-                st.warning("Données de dessin indisponibles.")
+    if st.session_state.mode == "none":
+        # Affichage des deux boutons d'options
+        col1, col2 = options_container.columns(2)
+        with col1:
+            if st.button("Tracer des profils"):
+                st.session_state.mode = "profiles"
+        with col2:
+            if st.button("Générer des contours"):
+                st.session_state.mode = "contours"
+    
+    # Mode "Générer des contours"
+    if st.session_state.mode == "contours":
+        st.subheader("Générer des contours")
+        generate_contours(mosaic_path)
+        # Bouton pour revenir au menu principal
+        if st.button("Retour", key="retour_contours"):
+            st.session_state.mode = "none"
+    
+    # Mode "Tracer des profils"
+    if st.session_state.mode == "profiles":
+        st.subheader("Tracer des profils")
         
-        # Affichage des profils enregistrés
-        if st.session_state.profiles:
-            st.subheader("Profils générés")
-            for i, profile in enumerate(st.session_state.profiles):
+        # Extraction des dessins de type ligne sur la carte
+        if isinstance(map_data, dict):
+            raw_drawings = map_data.get("all_drawings", [])
+            current_drawings = [
+                d for d in raw_drawings 
+                if isinstance(d, dict) and d.get("geometry", {}).get("type") == "LineString"
+            ]
+        else:
+            current_drawings = []
+        
+        # Chaque dessin de type ligne sera transformé en profil.
+        # Ainsi, si vous dessinez de nouvelles droites, elles seront immédiatement prises en compte.
+        profiles = []
+        for i, d in enumerate(current_drawings):
+            profiles.append({
+                "coords": d["geometry"]["coordinates"],
+                "name": f"{map_name} - Profil {i+1}"
+            })
+        
+        # Affichage des profils générés
+        if profiles:
+            for i, profile in enumerate(profiles):
                 col_a, col_b = st.columns([1, 4])
                 with col_a:
+                    # Permet de modifier le nom du profil
                     new_name = st.text_input(
                         "Nom du profil", 
                         value=profile["name"],
@@ -216,10 +232,12 @@ def main():
                         st.pyplot(fig)
                     except Exception as e:
                         st.error(f"Erreur de traitement : {e}")
-    
-    with col2:
-        if st.button("Générer des contours"):
-            generate_contours(mosaic_path)
+        else:
+            st.info("Aucun profil dessiné pour le moment.")
+        
+        # Bouton pour revenir au menu principal
+        if st.button("Retour", key="retour_profiles"):
+            st.session_state.mode = "none"
 
 if __name__ == "__main__":
     main()
