@@ -264,7 +264,7 @@ def main():
                     except Exception as e:
                         st.error(f"Erreur de traitement : {e}")
         else:
-            st.info("Aucun profil dessiné pour le moment.")
+            st.info("Vous n'avez pas encore dessiné de ligne. Utilisez l'outil de dessin sur la carte pour tracer un profil.")
         
         # Bouton "Retour" pour revenir au menu principal
         if st.button("Retour", key="retour_profiles"):
