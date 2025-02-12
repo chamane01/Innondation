@@ -38,8 +38,15 @@ def reproject_tiff(input_path, output_path, dst_crs):
 
 def load_tiff_files(folder_path):
     """Charge et reprojette les fichiers TIFF contenus dans un dossier."""
-    tiff_files = [f for f in os.listdir(folder_path) if f.endswith('.tif') or f.endswith('.tiff')]
-    st.write(f"Fichiers TIFF trouvés : {tiff_files}")  # Debugging statement
+    # Supprimer les fichiers reprojetés existants
+    for file in os.listdir(folder_path):
+        if file.startswith("reproj_") and file.endswith(".tif"):
+            os.remove(os.path.join(folder_path, file))
+            st.write(f"Fichier supprimé : {file}")
+
+    # Charger uniquement les fichiers originaux (non reprojetés)
+    tiff_files = [f for f in os.listdir(folder_path) if f.endswith('.tif') and not f.startswith('reproj_')]
+    st.write(f"Fichiers TIFF originaux trouvés : {tiff_files}")  # Debugging statement
     
     reproj_files = []
     
