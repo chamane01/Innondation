@@ -16,10 +16,10 @@ from folium.plugins import Draw
 def load_tiff_files(folder_path):
     """Charge les fichiers TIFF contenus dans un dossier."""
     try:
-        tiff_files = [os.path.join(folder_path, f)
+        tiff_files = [os.path.join(folder_path, f) 
                       for f in os.listdir(folder_path) if f.lower().endswith('.tif')]
     except Exception as e:
-        st.error(f"Erreur lors de la lecture du dossier {folder_path} : {e}")
+        st.error(f"Erreur lors de la lecture du dossier {folder_path}: {e}")
         return []
     
     if not tiff_files:
@@ -63,7 +63,7 @@ def create_map(mosaic_file):
             bounds = src.bounds
             folium.Rectangle(
                 bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
-                color='blue',
+                color='blue', 
                 fill=False,
                 tooltip="Emprise de la mosaïque"
             ).add_to(mosaic_group)
@@ -106,12 +106,12 @@ def interpolate_line(coords, step=50):
         return coords, [0]
     sampled_points = [coords[0]]
     cumulative_dist = [0]
-    for i in range(len(coords) - 1):
+    for i in range(len(coords)-1):
         start = coords[i]
         end = coords[i+1]
         seg_distance = haversine(start[0], start[1], end[0], end[1])
         num_steps = max(int(seg_distance // step), 1)
-        for j in range(1, num_steps + 1):
+        for j in range(1, num_steps+1):
             fraction = j / num_steps
             lon = start[0] + fraction * (end[0] - start[0])
             lat = start[1] + fraction * (end[1] - start[1])
@@ -131,10 +131,7 @@ def generate_contours(mosaic_file):
 def main():
     st.title("Carte Dynamique avec Profils d'Élévation")
     
-    # Initialisation de la variable de mode dans la session :
-    # "none"     -> aucun mode choisi (affichage des 2 boutons)
-    # "profiles" -> le menu de tracé de profils est actif
-    # "contours" -> le menu de génération de contours est actif
+    # Initialisation de la variable de mode
     if "mode" not in st.session_state:
         st.session_state.mode = "none"
     
@@ -165,19 +162,21 @@ def main():
     #############################
     options_container = st.container()
     
-    # Affichage du menu principal (deux boutons) si aucun mode n'est sélectionné
     if st.session_state.mode == "none":
+        # Affichage des deux boutons d'options
         col1, col2 = options_container.columns(2)
-        if col1.button("Tracer des profils"):
-            st.session_state.mode = "profiles"
-        if col2.button("Générer des contours"):
-            st.session_state.mode = "contours"
+        with col1:
+            if st.button("Tracer des profils"):
+                st.session_state.mode = "profiles"
+        with col2:
+            if st.button("Générer des contours"):
+                st.session_state.mode = "contours"
     
     # Mode "Générer des contours"
     if st.session_state.mode == "contours":
         st.subheader("Générer des contours")
         generate_contours(mosaic_path)
-        # Bouton "Retour" pour revenir au menu principal
+        # Bouton pour revenir au menu principal
         if st.button("Retour", key="retour_contours"):
             st.session_state.mode = "none"
     
@@ -186,16 +185,18 @@ def main():
         st.subheader("Tracer des profils")
         
         # Extraction des dessins de type ligne sur la carte
+        current_drawings = []
         if isinstance(map_data, dict):
             raw_drawings = map_data.get("all_drawings", [])
+            # Ensure raw_drawings is a list to prevent iteration errors
+            if not isinstance(raw_drawings, list):
+                raw_drawings = []
             current_drawings = [
                 d for d in raw_drawings 
                 if isinstance(d, dict) and d.get("geometry", {}).get("type") == "LineString"
             ]
-        else:
-            current_drawings = []
         
-        # Transformation des lignes dessinées en profils
+        # Chaque dessin de type ligne sera transformé en profil.
         profiles = []
         for i, d in enumerate(current_drawings):
             profiles.append({
@@ -203,10 +204,9 @@ def main():
                 "name": f"{map_name} - Profil {i+1}"
             })
         
+        # Affichage des profils générés
         if profiles:
-            st.write("Les profils dessinés sont affichés ci-dessous. Toute nouvelle droite dessinée sera prise en compte automatiquement.")
             for i, profile in enumerate(profiles):
-                st.markdown(f"#### {profile['name']}")
                 col_a, col_b = st.columns([1, 4])
                 with col_a:
                     # Permet de modifier le nom du profil
@@ -216,29 +216,6 @@ def main():
                         key=f"profile_name_{i}"
                     )
                     profile["name"] = new_name
-                    
-                    # Option de présentation du profil
-                    presentation_mode = st.radio(
-                        "Mode de présentation",
-                        ("Automatique", "Manuel"),
-                        key=f"presentation_mode_{i}"
-                    )
-                    manual_options = {}
-                    if presentation_mode == "Manuel":
-                        manual_options["ecart_distance"] = st.number_input(
-                            "Ecart distance (m)",
-                            min_value=1.0,
-                            value=50.0,
-                            step=1.0,
-                            key=f"ecart_distance_{i}"
-                        )
-                        manual_options["ecart_altitude"] = st.number_input(
-                            "Ecart altitude (m)",
-                            min_value=1.0,
-                            value=10.0,
-                            step=1.0,
-                            key=f"ecart_altitude_{i}"
-                        )
                 with col_b:
                     try:
                         points, distances = interpolate_line(profile["coords"])
@@ -250,23 +227,13 @@ def main():
                         ax.set_title(profile["name"])
                         ax.set_xlabel("Distance (m)")
                         ax.set_ylabel("Altitude (m)")
-                        
-                        # En mode manuel, on fixe les ticks en fonction des écarts indiqués
-                        if presentation_mode == "Manuel":
-                            ecart_distance = manual_options.get("ecart_distance", 50.0)
-                            ecart_altitude = manual_options.get("ecart_altitude", 10.0)
-                            xticks = np.arange(0, max(distances) + ecart_distance, ecart_distance)
-                            yticks = np.arange(min(elevations), max(elevations) + ecart_altitude, ecart_altitude)
-                            ax.set_xticks(xticks)
-                            ax.set_yticks(yticks)
-                        
                         st.pyplot(fig)
                     except Exception as e:
                         st.error(f"Erreur de traitement : {e}")
         else:
             st.info("Aucun profil dessiné pour le moment.")
         
-        # Bouton "Retour" pour revenir au menu principal
+        # Bouton pour revenir au menu principal
         if st.button("Retour", key="retour_profiles"):
             st.session_state.mode = "none"
 
