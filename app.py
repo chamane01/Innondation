@@ -5,6 +5,7 @@ import rasterio.merge
 import folium
 import math
 import matplotlib.pyplot as plt
+import numpy as np
 from streamlit_folium import st_folium
 from folium.plugins import Draw
 
@@ -45,9 +46,8 @@ def build_mosaic(tiff_files, mosaic_path="mosaic.tif"):
         return None
 
 def create_map(mosaic_file):
-    """Crée une carte Folium avec les outils de dessin et le gestionnaire de couches.
-    
-    La mosaïque est intégrée dans un groupe de couches nommé "élevation cote d'ivoire".
+    """Crée une carte Folium avec l'outil de dessin (uniquement pour les polylignes)
+    et intègre un calque indiquant l'emprise de la mosaïque.
     """
     m = folium.Map(location=[0, 0], zoom_start=2)
     
@@ -115,10 +115,37 @@ def interpolate_line(coords, step=50):
             cumulative_dist.append(cumulative_dist[-1] + dist)
     return sampled_points, cumulative_dist
 
+def generate_contours(mosaic_file):
+    """Génère et affiche un graphique de contours à partir de la mosaïque."""
+    try:
+        with rasterio.open(mosaic_file) as src:
+            elevation = src.read(1)
+            bounds = src.bounds
+            width = src.width
+            height = src.height
+        # Création des axes X et Y à partir des limites géographiques
+        xs = np.linspace(bounds.left, bounds.right, width)
+        ys = np.linspace(bounds.bottom, bounds.top, height)
+        X, Y = np.meshgrid(xs, ys)
+        
+        fig, ax = plt.subplots(figsize=(8,6))
+        contour = ax.contour(X, Y, elevation, levels=10, cmap='viridis')
+        ax.clabel(contour, inline=True, fontsize=8)
+        ax.set_title("Contours d'altitude")
+        ax.set_xlabel("Longitude")
+        ax.set_ylabel("Latitude")
+        st.pyplot(fig)
+    except Exception as e:
+        st.error(f"Erreur lors de la génération des contours : {e}")
+
 def main():
     st.title("Carte Dynamique avec Profils d'Élévation")
     
-    # Configuration du nom de la carte
+    # Initialisation de la session pour stocker les profils (s'il n'existe pas déjà)
+    if "profiles" not in st.session_state:
+        st.session_state.profiles = []
+    
+    # Saisie du nom de la carte
     map_name = st.text_input("Nom de votre carte", value="Ma Carte")
     
     # Gestion des fichiers TIFF
@@ -135,62 +162,64 @@ def main():
     if not mosaic_path:
         return
 
-    # Création de la carte interactive
+    # Création et affichage de la carte interactive
     m = create_map(mosaic_path)
-    st.write("**Dessinez des polylignes pour générer des profils d'élévation**")
-    
-    # Gestion des dessins
+    st.write("**Utilisez les outils de dessin sur la carte ci-dessus.**")
     map_data = st_folium(m, width=700, height=500)
     
-    # Initialisation des profils
-    if "profiles" not in st.session_state:
-        st.session_state.profiles = []
-
-    # Vérification et extraction des dessins
-    current_drawings = []
-    if isinstance(map_data, dict):  # Vérifie que map_data est un dictionnaire
-        raw_drawings = map_data.get("all_drawings", [])
-        if isinstance(raw_drawings, list):  # Vérifie que all_drawings est une liste
-            current_drawings = [
-                d for d in raw_drawings 
-                if isinstance(d, dict) and d.get("geometry", {}).get("type") == "LineString"
-            ]
+    # Affichage de deux boutons d'action sous la carte
+    col1, col2 = st.columns(2)
     
-    # Synchronisation avec les dessins existants
-    st.session_state.profiles = [{
-        "coords": d["geometry"]["coordinates"],
-        "name": f"{map_name} - Ligne {i+1}"
-    } for i, d in enumerate(current_drawings)]
-
-    # Affichage des profils
-    if st.session_state.profiles:
-        st.subheader("Profils générés")
-        for i, profile in enumerate(st.session_state.profiles):
-            col1, col2 = st.columns([1, 4])
-            with col1:
-                new_name = st.text_input(
-                    "Nom du profil", 
-                    value=profile["name"],
-                    key=f"profile_name_{i}"
-                )
-                profile["name"] = new_name
-            
-            with col2:
-                try:
-                    # Calcul des élévations
-                    points, distances = interpolate_line(profile["coords"])
-                    with rasterio.open(mosaic_path) as src:
-                        elevations = [list(src.sample([p]))[0][0] for p in points]
-                    
-                    # Création du graphique
-                    fig, ax = plt.subplots(figsize=(8, 3))
-                    ax.plot(distances, elevations, 'b-', linewidth=1.5)
-                    ax.set_title(profile["name"])
-                    ax.set_xlabel("Distance (m)")
-                    ax.set_ylabel("Altitude (m)")
-                    st.pyplot(fig)
-                except Exception as e:
-                    st.error(f"Erreur de traitement : {e}")
+    with col1:
+        if st.button("Tracer des profils"):
+            # Extraction des polylignes dessinées sur la carte
+            if isinstance(map_data, dict):
+                raw_drawings = map_data.get("all_drawings", [])
+                current_drawings = [
+                    d for d in raw_drawings 
+                    if isinstance(d, dict) and d.get("geometry", {}).get("type") == "LineString"
+                ]
+                if not current_drawings:
+                    st.warning("Aucun profil dessiné trouvé.")
+                else:
+                    st.session_state.profiles = [{
+                        "coords": d["geometry"]["coordinates"],
+                        "name": f"{map_name} - Ligne {i+1}"
+                    } for i, d in enumerate(current_drawings)]
+                    st.success("Profils enregistrés. Les graphiques sont générés ci-dessous.")
+            else:
+                st.warning("Données de dessin indisponibles.")
+        
+        # Affichage des profils enregistrés
+        if st.session_state.profiles:
+            st.subheader("Profils générés")
+            for i, profile in enumerate(st.session_state.profiles):
+                col_a, col_b = st.columns([1, 4])
+                with col_a:
+                    new_name = st.text_input(
+                        "Nom du profil", 
+                        value=profile["name"],
+                        key=f"profile_name_{i}"
+                    )
+                    profile["name"] = new_name
+                with col_b:
+                    try:
+                        points, distances = interpolate_line(profile["coords"])
+                        with rasterio.open(mosaic_path) as src:
+                            elevations = [list(src.sample([p]))[0][0] for p in points]
+                        
+                        fig, ax = plt.subplots(figsize=(8, 3))
+                        ax.plot(distances, elevations, 'b-', linewidth=1.5)
+                        ax.set_title(profile["name"])
+                        ax.set_xlabel("Distance (m)")
+                        ax.set_ylabel("Altitude (m)")
+                        st.pyplot(fig)
+                    except Exception as e:
+                        st.error(f"Erreur de traitement : {e}")
+    
+    with col2:
+        if st.button("Générer des contours"):
+            generate_contours(mosaic_path)
 
 if __name__ == "__main__":
     main()
