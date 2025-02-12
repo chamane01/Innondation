@@ -1,8 +1,4 @@
 import streamlit as st
-# Si st.experimental_rerun n'existe pas (versions anciennes de Streamlit), on définit une fonction factice.
-if not hasattr(st, "experimental_rerun"):
-    st.experimental_rerun = lambda: None
-
 import os
 import rasterio
 import rasterio.merge
@@ -174,10 +170,8 @@ def main():
         col1, col2 = options_container.columns(2)
         if col1.button("Tracer des profils"):
             st.session_state.mode = "profiles"
-            st.experimental_rerun()
         if col2.button("Générer des contours"):
             st.session_state.mode = "contours"
-            st.experimental_rerun()
     
     # Mode "Générer des contours"
     if st.session_state.mode == "contours":
@@ -186,7 +180,6 @@ def main():
         # Bouton "Retour" pour revenir au menu principal
         if st.button("Retour", key="retour_contours"):
             st.session_state.mode = "none"
-            st.experimental_rerun()
     
     # Mode "Tracer des profils"
     if st.session_state.mode == "profiles":
@@ -276,7 +269,6 @@ def main():
         # Bouton "Retour" pour revenir au menu principal
         if st.button("Retour", key="retour_profiles"):
             st.session_state.mode = "none"
-            st.experimental_rerun()
 
 if __name__ == "__main__":
     main()
