@@ -1,19 +1,19 @@
 import streamlit as st
 import os
 import rasterio
+import rasterio.merge
 import folium
 import math
 import matplotlib.pyplot as plt
 from streamlit_folium import st_folium
 from folium.plugins import Draw
-from osgeo import gdal
 
 def load_tiff_files(folder_path):
     """
     Charge les fichiers TIFF contenus dans un dossier.
     """
     try:
-        tiff_files = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if f.endswith('.tif')]
+        tiff_files = [os.path.join(folder_path, f) for f in os.listdir(folder_path) if f.lower().endswith('.tif')]
     except Exception as e:
         st.error(f"Erreur lors de la lecture du dossier {folder_path}: {e}")
         return []
@@ -22,7 +22,6 @@ def load_tiff_files(folder_path):
         st.error("Aucun fichier TIFF trouvé dans le dossier.")
         return []
     
-    # Vérifier l'existence de chaque fichier
     valid_files = []
     for file in tiff_files:
         if os.path.exists(file):
@@ -31,36 +30,46 @@ def load_tiff_files(folder_path):
             st.error(f"Le fichier {file} n'existe pas.")
     return valid_files
 
-def build_vrt(tiff_files, vrt_path="mosaic.vrt"):
+def build_mosaic(tiff_files, mosaic_path="mosaic.tif"):
     """
-    Construit un VRT (Virtual Raster) à partir d'une liste de fichiers TIFF.
+    Construit une mosaïque à partir d'une liste de fichiers TIFF en utilisant rasterio.merge.
+    La mosaïque est sauvegardée dans un fichier GeoTIFF.
     """
     try:
-        vrt = gdal.BuildVRT(vrt_path, tiff_files)
-        if vrt is None:
-            raise Exception("La création du VRT a échoué.")
-        vrt = None  # Libération du dataset VRT
-        return vrt_path
+        src_files = [rasterio.open(fp) for fp in tiff_files]
+        mosaic, out_trans = rasterio.merge.merge(src_files)
+        out_meta = src_files[0].meta.copy()
+        out_meta.update({
+            "driver": "GTiff",
+            "height": mosaic.shape[1],
+            "width": mosaic.shape[2],
+            "transform": out_trans
+        })
+        with rasterio.open(mosaic_path, "w", **out_meta) as dest:
+            dest.write(mosaic)
+        for src in src_files:
+            src.close()
+        return mosaic_path
     except Exception as e:
-        st.error(f"Erreur lors de la création du VRT: {e}")
+        st.error(f"Erreur lors de la création de la mosaïque : {e}")
         return None
 
-def create_map(mosaic_vrt):
+def create_map(mosaic_file):
     """
-    Crée une carte avec une couche OSM, affiche la zone de la mosaïque VRT,
-    et ajoute l'outil de dessin pour tracer une ou plusieurs lignes.
+    Crée une carte Folium avec :
+      - Un rectangle indiquant l'étendue de la mosaïque.
+      - L'outil de dessin pour tracer une ou plusieurs lignes.
     """
     m = folium.Map(location=[0, 0], zoom_start=2)
     try:
-        with rasterio.open(mosaic_vrt) as src:
+        with rasterio.open(mosaic_file) as src:
             bounds = src.bounds
-            # Affichage d'un rectangle représentant l'étendu de la mosaïque
             folium.Rectangle(
                 bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
-                color='blue', fill=True, fill_opacity=0.4, tooltip="Mosaic VRT"
+                color='blue', fill=True, fill_opacity=0.4, tooltip="Mosaïque"
             ).add_to(m)
     except Exception as e:
-        st.error(f"Erreur lors de l'ouverture du VRT {mosaic_vrt}: {e}")
+        st.error(f"Erreur lors de l'ouverture de la mosaïque {mosaic_file}: {e}")
     
     # Ajout de l'outil de dessin pour tracer des lignes
     draw = Draw(
@@ -85,7 +94,7 @@ def haversine(lon1, lat1, lon2, lat2):
     lon1, lat1, lon2, lat2 = map(math.radians, [lon1, lat1, lon2, lat2])
     dlon = lon2 - lon1
     dlat = lat2 - lat1
-    a = math.sin(dlat/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(dlon/2)**2
+    a = math.sin(dlat / 2) ** 2 + math.cos(lat1) * math.cos(lat2) * math.sin(dlon / 2) ** 2
     c = 2 * math.asin(math.sqrt(a))
     r = 6371000  # Rayon de la Terre en mètres
     return c * r
@@ -104,12 +113,12 @@ def interpolate_line(coords, step=50):
         return coords, [0]
     sampled_points = [coords[0]]
     cumulative_dist = [0]
-    for i in range(len(coords)-1):
+    for i in range(len(coords) - 1):
         start = coords[i]
-        end = coords[i+1]
+        end = coords[i + 1]
         seg_distance = haversine(start[0], start[1], end[0], end[1])
         num_steps = max(int(seg_distance // step), 1)
-        for j in range(1, num_steps+1):
+        for j in range(1, num_steps + 1):
             fraction = j / num_steps
             lon = start[0] + fraction * (end[0] - start[0])
             lat = start[1] + fraction * (end[1] - start[1])
@@ -120,8 +129,8 @@ def interpolate_line(coords, step=50):
 
 def main():
     st.title("Carte Dynamique avec Profils d'Élévation")
-    folder_path = "TIFF"  # Modifier si nécessaire
-    
+    folder_path = "TIFF"  # Modifiez si nécessaire
+
     if not os.path.exists(folder_path):
         st.error("Le dossier TIFF n'existe pas.")
         return
@@ -129,17 +138,17 @@ def main():
     st.write("Chargement des fichiers TIFF...")
     tiff_files = load_tiff_files(folder_path)
     if not tiff_files:
-        st.warning("Aucun fichier TIFF n'a été trouvé.")
+        st.error("Aucun fichier TIFF trouvé.")
         return
 
-    st.write("Création du VRT (mosaïque)...")
-    vrt_path = build_vrt(tiff_files, vrt_path="mosaic.vrt")
-    if vrt_path is None:
-        st.error("Erreur lors de la création du VRT.")
+    st.write("Création de la mosaïque...")
+    mosaic_path = build_mosaic(tiff_files, mosaic_path="mosaic.tif")
+    if mosaic_path is None:
+        st.error("Erreur lors de la création de la mosaïque.")
         return
 
     st.write("Création de la carte...")
-    map_object = create_map(vrt_path)
+    map_object = create_map(mosaic_path)
     st.write("**Dessinez une ou plusieurs lignes sur la carte pour tracer les profils d'élévation.**")
     
     # Récupérer les dessins réalisés sur la carte
@@ -154,10 +163,11 @@ def main():
         st.info("Dessinez au moins une ligne pour afficher les profils d'élévation.")
         return
 
-    # Extraction des profils pour chaque dessin de type LineString
+    # Préparation du graphique pour les profils
     fig, ax = plt.subplots(figsize=(8, 4))
     profile_found = False
 
+    # Traitement de chaque dessin (profil) de type LineString
     for i, drawing in enumerate(drawings):
         geom = drawing.get("geometry", {})
         if geom.get("type") == "LineString":
@@ -166,16 +176,15 @@ def main():
                 st.info(f"Dessin {i+1} : aucune coordonnée trouvée.")
                 continue
 
-            # Interpolation des points le long du trait
+            # Interpolation des points le long de la ligne
             sampled_points, distances = interpolate_line(coords, step=50)
             try:
-                with rasterio.open(vrt_path) as src:
+                with rasterio.open(mosaic_path) as src:
                     elevations = []
                     for point in sampled_points:
-                        # Extraire la valeur d'altitude pour le point donné
                         for val in src.sample([point]):
                             elevations.append(val[0])
-                # Tracer le profil avec un trait de faible épaisseur
+                # Tracé du profil avec une épaisseur réduite
                 ax.plot(distances, elevations, marker='o', linewidth=1, label=f"Profil {i+1}")
                 profile_found = True
             except Exception as e:
