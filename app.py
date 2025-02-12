@@ -1,4 +1,8 @@
 import streamlit as st
+# Si st.experimental_rerun n'existe pas (versions anciennes de Streamlit), on définit une fonction factice.
+if not hasattr(st, "experimental_rerun"):
+    st.experimental_rerun = lambda: None
+
 import os
 import rasterio
 import rasterio.merge
@@ -16,10 +20,10 @@ from folium.plugins import Draw
 def load_tiff_files(folder_path):
     """Charge les fichiers TIFF contenus dans un dossier."""
     try:
-        tiff_files = [os.path.join(folder_path, f) 
+        tiff_files = [os.path.join(folder_path, f)
                       for f in os.listdir(folder_path) if f.lower().endswith('.tif')]
     except Exception as e:
-        st.error(f"Erreur lors de la lecture du dossier {folder_path}: {e}")
+        st.error(f"Erreur lors de la lecture du dossier {folder_path} : {e}")
         return []
     
     if not tiff_files:
@@ -63,7 +67,7 @@ def create_map(mosaic_file):
             bounds = src.bounds
             folium.Rectangle(
                 bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
-                color='blue', 
+                color='blue',
                 fill=False,
                 tooltip="Emprise de la mosaïque"
             ).add_to(mosaic_group)
@@ -106,12 +110,12 @@ def interpolate_line(coords, step=50):
         return coords, [0]
     sampled_points = [coords[0]]
     cumulative_dist = [0]
-    for i in range(len(coords)-1):
+    for i in range(len(coords) - 1):
         start = coords[i]
         end = coords[i+1]
         seg_distance = haversine(start[0], start[1], end[0], end[1])
         num_steps = max(int(seg_distance // step), 1)
-        for j in range(1, num_steps+1):
+        for j in range(1, num_steps + 1):
             fraction = j / num_steps
             lon = start[0] + fraction * (end[0] - start[0])
             lat = start[1] + fraction * (end[1] - start[1])
@@ -226,15 +230,20 @@ def main():
                         ("Automatique", "Manuel"),
                         key=f"presentation_mode_{i}"
                     )
-                    # Si mode manuel, l'utilisateur peut définir l'écart en distance et en altitude.
                     manual_options = {}
                     if presentation_mode == "Manuel":
                         manual_options["ecart_distance"] = st.number_input(
-                            "Ecart distance (m)", min_value=1.0, value=50.0, step=1.0,
+                            "Ecart distance (m)",
+                            min_value=1.0,
+                            value=50.0,
+                            step=1.0,
                             key=f"ecart_distance_{i}"
                         )
                         manual_options["ecart_altitude"] = st.number_input(
-                            "Ecart altitude (m)", min_value=1.0, value=10.0, step=1.0,
+                            "Ecart altitude (m)",
+                            min_value=1.0,
+                            value=10.0,
+                            step=1.0,
                             key=f"ecart_altitude_{i}"
                         )
                 with col_b:
@@ -253,7 +262,6 @@ def main():
                         if presentation_mode == "Manuel":
                             ecart_distance = manual_options.get("ecart_distance", 50.0)
                             ecart_altitude = manual_options.get("ecart_altitude", 10.0)
-                            # On définit les ticks à partir du minimum jusqu'au maximum
                             xticks = np.arange(0, max(distances) + ecart_distance, ecart_distance)
                             yticks = np.arange(min(elevations), max(elevations) + ecart_altitude, ecart_altitude)
                             ax.set_xticks(xticks)
