@@ -73,7 +73,7 @@ def create_map(mosaic_file):
     # Ajout de l'outil de dessin
     Draw(
         draw_options={
-            'polyline': {'allowIntersection': False},
+            'polyline': True,
             'polygon': False,
             'circle': False,
             'marker': False,
