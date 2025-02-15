@@ -2,7 +2,7 @@ import streamlit as st
 import os
 import rasterio
 import rasterio.merge
-from rasterio.windows import Window
+import rasterio.mask
 import folium
 import numpy as np
 import matplotlib.pyplot as plt
@@ -16,11 +16,8 @@ from folium.plugins import Draw
 def load_tiff_files(folder_path):
     """Charge les fichiers TIFF contenus dans un dossier."""
     try:
-        tiff_files = [
-            os.path.join(folder_path, f)
-            for f in os.listdir(folder_path)
-            if f.lower().endswith('.tif')
-        ]
+        tiff_files = [os.path.join(folder_path, f)
+                      for f in os.listdir(folder_path) if f.lower().endswith('.tif')]
     except Exception as e:
         st.error(f"Erreur lors de la lecture du dossier {folder_path} : {e}")
         return []
@@ -29,7 +26,7 @@ def load_tiff_files(folder_path):
         st.error("Aucun fichier TIFF trouvé dans le dossier.")
         return []
     
-    return tiff_files
+    return [f for f in tiff_files if os.path.exists(f)]
 
 def build_mosaic(tiff_files, mosaic_path="mosaic.tif"):
     """Construit une mosaïque à partir de fichiers TIFF."""
@@ -55,11 +52,11 @@ def build_mosaic(tiff_files, mosaic_path="mosaic.tif"):
 def create_map(mosaic_file):
     """
     Crée une carte Folium avec l'outil de dessin (rectangle pour sélectionner une emprise)
-    et ajoute un calque indiquant l'emprise de la mosaïque.
+    et intègre un calque indiquant l'emprise de la mosaïque.
     """
     m = folium.Map(location=[0, 0], zoom_start=2)
     
-    # Ajout d'un calque pour l'emprise de la mosaïque
+    # Calque indiquant l'emprise de la mosaïque
     mosaic_group = folium.FeatureGroup(name="Mosaïque")
     try:
         with rasterio.open(mosaic_file) as src:
@@ -75,7 +72,7 @@ def create_map(mosaic_file):
     
     mosaic_group.add_to(m)
     
-    # Ajout de l'outil de dessin (uniquement des rectangles)
+    # Ajout de l'outil de dessin (uniquement pour dessiner des rectangles)
     Draw(
         draw_options={
             'rectangle': True,
@@ -92,72 +89,55 @@ def create_map(mosaic_file):
     
     return m
 
-def generate_contour_figure(mosaic_file, drawing_geometry=None, title="Contours d'élévation"):
+def generate_contours(mosaic_file, drawing_geometry=None):
     """
-    Génère une figure matplotlib avec les courbes de niveau (contours) à partir du fichier TIFF.
-    Si drawing_geometry est fourni (un rectangle dessiné), on découpe l'image en utilisant sa bounding box.
+    Génère et affiche les courbes de niveau (contours) à partir du fichier TIFF.
+    Si drawing_geometry est fourni (GeoJSON d'un rectangle dessiné), on ne
+    génère les contours que sur cette zone.
     """
     try:
         with rasterio.open(mosaic_file) as src:
             if drawing_geometry is not None:
-                # Récupération de la bounding box du rectangle dessiné
-                coords = drawing_geometry.get("coordinates", [[]])[0]
-                xs = [pt[0] for pt in coords]
-                ys = [pt[1] for pt in coords]
-                min_x, max_x = min(xs), max(xs)
-                min_y, max_y = min(ys), max(ys)
-                
-                # Conversion des coordonnées géospatiales en indices (utilisation de src.index)
-                row_min, col_min = src.index(min_x, max_y)
-                row_max, col_max = src.index(max_x, min_y)
-                # S'assurer que row_min est bien au-dessus de row_max, etc.
-                if row_min > row_max:
-                    row_min, row_max = row_max, row_min
-                if col_min > col_max:
-                    col_min, col_max = col_max, col_min
-                
-                width = col_max - col_min + 1
-                height = row_max - row_min + 1
-                window = Window(col_off=col_min, row_off=row_min, width=width, height=height)
-                data = src.read(1, window=window)
-                new_transform = rasterio.windows.transform(window, src.transform)
+                # Utiliser l'emprise dessinée pour découper la mosaïque
+                out_image, out_transform = rasterio.mask.mask(src, [drawing_geometry], crop=True)
+                data = out_image[0]
             else:
                 data = src.read(1)
-                new_transform = src.transform
-            nodata = src.nodata
+                out_transform = src.transform
     except Exception as e:
         st.error(f"Erreur lors de la lecture du fichier TIFF : {e}")
-        return None
+        return
     
+    # Masquer les valeurs nodata le cas échéant
+    nodata = src.nodata
     if nodata is not None:
         data = np.where(data == nodata, np.nan, data)
     
-    # Création de la grille de coordonnées
+    # Création d'une grille de coordonnées en se basant sur la transformation affine
     nrows, ncols = data.shape
-    x_coords = np.arange(ncols) * new_transform.a + new_transform.c + new_transform.a/2
-    y_coords = np.arange(nrows) * new_transform.e + new_transform.f + new_transform.e/2
+    # Coordonnées des centres de pixels
+    x_coords = np.arange(ncols) * out_transform.a + out_transform.c + out_transform.a/2
+    y_coords = np.arange(nrows) * out_transform.e + out_transform.f + out_transform.e/2
     X, Y = np.meshgrid(x_coords, y_coords)
     
+    # Détermination automatique des niveaux de contour
     try:
         vmin = np.nanmin(data)
         vmax = np.nanmax(data)
     except Exception as e:
         st.error(f"Erreur lors du calcul des valeurs min et max : {e}")
-        return None
+        return
     
     levels = np.linspace(vmin, vmax, 15)
     
-    # Tracé des contours avec légende (colorbar)
+    # Tracé des courbes de niveau
     fig, ax = plt.subplots(figsize=(8, 6))
-    cf = ax.contourf(X, Y, data, levels=levels, cmap='terrain', alpha=0.8)
-    cs = ax.contour(X, Y, data, levels=levels, colors='black', linewidths=0.5)
-    ax.clabel(cs, inline=True, fontsize=8, fmt="%.0f")
-    ax.set_title(title)
+    contour = ax.contour(X, Y, data, levels=levels, cmap='terrain')
+    ax.clabel(contour, inline=True, fontsize=8)
+    ax.set_title("Contours d'élévation")
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
-    fig.colorbar(cf, ax=ax, label="Élévation (m)")
-    
-    return fig
+    st.pyplot(fig)
 
 ##################
 # Fonction main  #
@@ -166,7 +146,7 @@ def generate_contour_figure(mosaic_file, drawing_geometry=None, title="Contours 
 def main():
     st.title("Génération de Contours à partir d'un TIFF")
     
-    # Saisie du nom de la carte
+    # Saisie du nom de la carte (affiché en titre, par exemple)
     map_name = st.text_input("Nom de votre carte", value="Ma Carte")
     
     # Chargement et construction de la mosaïque
@@ -174,56 +154,31 @@ def main():
     if not os.path.exists(folder_path):
         st.error("Dossier TIFF introuvable")
         return
-    
+
     tiff_files = load_tiff_files(folder_path)
     if not tiff_files:
         return
-    
+
     mosaic_path = build_mosaic(tiff_files)
     if not mosaic_path:
         return
-    
-    # Création de la carte interactive avec outil de dessin
+
+    # Création de la carte interactive avec outil de dessin pour sélectionner l'emprise
     m = create_map(mosaic_path)
-    st.write("**Utilisez l'outil de dessin pour sélectionner une ou plusieurs zones (rectangles) sur la carte.**")
+    st.write("**Utilisez l'outil de dessin pour sélectionner une zone (rectangle) sur la carte.**")
     map_data = st_folium(m, width=700, height=500)
     
-    # Affichage des données renvoyées par st_folium (pour le débogage)
-    st.write("Données de la carte :", map_data)
-    
-    # Extraction des zones dessinées
-    drawing_geometries = []
+    # Vérifier si une zone a été dessinée
+    drawing_geometry = None
     if isinstance(map_data, dict):
-        raw_drawings = map_data.get("all_drawings")
-        if not isinstance(raw_drawings, list):
-            raw_drawings = []
+        raw_drawings = map_data.get("all_drawings", [])
         for drawing in raw_drawings:
             if isinstance(drawing, dict) and drawing.get("geometry", {}).get("type") == "Polygon":
-                drawing_geometries.append(drawing.get("geometry"))
-    
-    st.subheader("Résultat des contours")
-    if drawing_geometries:
-        # Pour chaque zone dessinée, générer une carte de contours
-        for i, geom in enumerate(drawing_geometries):
-            fig = generate_contour_figure(
-                mosaic_path,
-                drawing_geometry=geom,
-                title=f"{map_name} - Contours zone {i+1}"
-            )
-            if fig:
-                st.pyplot(fig)
-    else:
-        # Si aucune zone n'est dessinée, générer les contours sur l'ensemble de la mosaïque
-        fig = generate_contour_figure(
-            mosaic_path,
-            drawing_geometry=None,
-            title=f"{map_name} - Contours (ensemble de la mosaïque)"
-        )
-        if fig:
-            st.pyplot(fig)
+                drawing_geometry = drawing.get("geometry")
+                break
 
+    st.subheader("Résultat des contours")
+    generate_contours(mosaic_path, drawing_geometry)
+    
 if __name__ == "__main__":
-    try:
-        main()
-    except Exception as e:
-        st.error(f"Erreur dans l'application : {e}")
+    main()
