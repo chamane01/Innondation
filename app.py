@@ -1,67 +1,142 @@
 import streamlit as st
-from datetime import datetime
 import pandas as pd
-import random
-from PIL import Image, ImageDraw
+import numpy as np
+import folium
+from streamlit_folium import st_folium
+from datetime import datetime
 
-# Titre principal
-st.title("Rapport de Topographie")
+# Configuration de la page
+st.set_page_config(page_title="Rapport Topographique", layout="wide")
 
-# Informations générales
-st.header("Informations Générales")
-col1, col2 = st.columns(2)
+# Style CSS personnalisé
+st.markdown("""
+    <style>
+    .header {
+        font-size:24px;
+        font-weight:bold;
+        color:#2e5266;
+        padding-bottom:20px;
+    }
+    .preview-mode {
+        color: red;
+        border: 2px solid red;
+        padding: 10px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+
+# Fonctions pour générer des données fictives
+def generate_sample_map():
+    m = folium.Map(location=[48.8566, 2.3522], zoom_start=13)
+    folium.Marker([48.8566, 2.3522], tooltip='Point de référence').add_to(m)
+    return m
+
+def generate_sample_profile():
+    return pd.DataFrame({
+        'Distance (m)': np.arange(0, 100, 1),
+        'Altitude (m)': np.sin(np.arange(0, 100, 1)) * 10 + 50
+    })
+
+# Initialisation des variables de session
+if 'preview_mode' not in st.session_state:
+    st.session_state.preview_mode = False
+
+# Sidebar pour la configuration
+with st.sidebar:
+    st.header("Paramètres du rapport")
+    report_date = st.date_input("Date du rapport", datetime.now())
+    map_center = st.text_input("Centre de la carte (lat,lon)", "48.8566, 2.3522")
+    st.session_state.preview_mode = st.checkbox("Mode Prévisualisation PDF")
+
+# Entête du rapport
+col1, col2 = st.columns([1, 4])
 with col1:
-    date_rapport = st.date_input("Date du rapport", datetime.today())
-    heure_rapport = st.time_input("Heure du rapport", datetime.now().time())
-    numero_rapport = st.text_input("Numéro du rapport", "RPT-001")
+    logo = st.file_uploader("Logo de l'entreprise", type=['png', 'jpg'], disabled=st.session_state.preview_mode)
+    if logo:
+        st.image(logo, width=150)
+
 with col2:
-    lieu = st.text_input("Lieu du relevé", "Site Alpha")
-    titre_rapport = st.text_input("Titre du rapport", "Étude topographique du terrain X")
+    st.title("Rapport Topographique" if not st.session_state.preview_mode else "Rapport Topographique - Version PDF")
+    st.subheader("Analyse et relevés techniques")
 
-# Section Cartes
-st.header("Cartes et Plans")
-st.write("Ajoutez vos cartes en les téléchargeant ci-dessous.")
-uploaded_maps = st.file_uploader("Téléchargez une carte", type=["jpg", "png", "pdf"], accept_multiple_files=True)
+# Mode prévisualisation
+if st.session_state.preview_mode:
+    st.markdown('<div class="preview-mode">MODE PRÉVISUALISATION PDF</div>', unsafe_allow_html=True)
 
-# Section Profils
-st.header("Profils Topographiques")
-st.write("Ajoutez vos profils topographiques.")
-uploaded_profiles = st.file_uploader("Téléchargez un profil topographique", type=["jpg", "png", "pdf"], accept_multiple_files=True)
+# Section des informations de base
+if not st.session_state.preview_mode:
+    with st.form("basic_info"):
+        cols = st.columns(4)
+        report_number = cols[0].text_input("Numéro du rapport", "TR-2023-001")
+        location = cols[1].text_input("Localisation", "Paris, France")
+        project_name = cols[2].text_input("Nom du projet", "Projet X")
+        client_name = cols[3].text_input("Client", "Société Y")
+        st.form_submit_button("Enregistrer les informations")
+else:
+    st.write(f"**Numéro du rapport:** {report_number}")
+    st.write(f"**Localisation:** {location}")
+    st.write(f"**Nom du projet:** {project_name}")
+    st.write(f"**Client:** {client_name}")
 
-# Section Légendes
-st.header("Légendes et Explications")
-legendes = st.text_area("Ajoutez vos légendes ici", "Description des symboles et codes utilisés...")
+# Section carte géographique
+st.markdown('<div class="header">Carte topographique</div>', unsafe_allow_html=True)
+with st.container():
+    map_col, legend_col = st.columns([3, 1])
+    
+    with map_col:
+        sample_map = generate_sample_map()
+        st_folium(sample_map, width=800, height=500)
+    
+    with legend_col:
+        st.subheader("Légende")
+        legend_data = {
+            "Symbole": ["📍", "🟥", "🟦"],
+            "Description": ["Point de référence", "Zone critique", "Cours d'eau"]
+        }
+        st.table(pd.DataFrame(legend_data))
 
-# Informations techniques fictives pour test
-st.header("Informations Techniques")
-nb_points = st.number_input("Nombre de points relevés", min_value=1, value=random.randint(10, 100))
-precision = st.slider("Précision des relevés (cm)", min_value=0.1, max_value=5.0, value=1.0, step=0.1)
-altitude_moyenne = st.number_input("Altitude moyenne (m)", min_value=0.0, value=random.uniform(50, 300))
+# Section des profils topographiques
+st.markdown('<div class="header">Profils topographiques</div>', unsafe_allow_html=True)
+tab1, tab2, tab3 = st.tabs(["Profil longitudinal", "Profil transversal", "Analyse 3D"])
 
-# Tableau de données fictives
-data = {
-    "Point": [f"PT-{i+1}" for i in range(nb_points)],
-    "Latitude": [round(random.uniform(-90, 90), 6) for _ in range(nb_points)],
-    "Longitude": [round(random.uniform(-180, 180), 6) for _ in range(nb_points)],
-    "Altitude (m)": [round(random.uniform(altitude_moyenne - 10, altitude_moyenne + 10), 2) for _ in range(nb_points)],
-}
-df = pd.DataFrame(data)
+with tab1:
+    df = generate_sample_profile()
+    st.line_chart(df, x='Distance (m)', y='Altitude (m)')
 
-# Génération d'un aperçu visuel du rapport
-st.header("Aperçu Visuel du Rapport")
-canvas_width, canvas_height = 800, 600
-image = Image.new("RGB", (canvas_width, canvas_height), "white")
-draw = ImageDraw.Draw(image)
-draw.text((50, 50), f"Rapport de Topographie - {titre_rapport}", fill="black")
-draw.text((50, 100), f"Date: {date_rapport}", fill="black")
-draw.text((50, 150), f"Heure: {heure_rapport}", fill="black")
-draw.text((50, 200), f"Lieu: {lieu}", fill="black")
-draw.text((50, 250), f"Numéro du rapport: {numero_rapport}", fill="black")
-draw.text((50, 300), f"Légendes: {legendes}", fill="black")
+with tab2:
+    df = generate_sample_profile()
+    st.area_chart(df, x='Distance (m)', y='Altitude (m)')
 
-st.image(image, caption="Aperçu du rapport", use_column_width=True)
+with tab3:
+    st.write("Visualisation 3D (simulation)")
+    # Correction des valeurs pour la visualisation
+    arr = np.random.rand(100, 100)  # Génère des valeurs entre 0 et 1
+    st.image(arr, use_column_width=True, clamp=True, caption="Modèle numérique de terrain")
 
-# Bouton d'export
-st.header("Export du rapport")
-if st.button("Générer le rapport PDF"):
-    st.success("Le rapport a été généré avec succès !")
+# Section des informations techniques
+with st.expander("Données techniques détaillées", expanded=st.session_state.preview_mode):
+    tech_col1, tech_col2 = st.columns(2)
+    
+    with tech_col1:
+        st.subheader("Spécifications")
+        st.metric("Précision horizontale", "2.5 cm")
+        st.metric("Précision verticale", "1.8 cm")
+        st.metric("Système de coordonnées", "WGS 84")
+    
+    with tech_col2:
+        st.subheader("Équipement utilisé")
+        st.write("- Station totale Leica TS16")
+        st.write("- Récepteur GNSS Trimble R12")
+        st.write("- Logiciel de traitement TBC")
+
+# Pied de page
+st.markdown("---")
+st.caption(f"Rapport généré le {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+
+# Bouton de génération de PDF
+if st.button("Générer le PDF", disabled=not st.session_state.preview_mode):
+    # Implémenter la logique PDF ici
+    st.success("Génération PDF réussie!")
+    st.balloons()
