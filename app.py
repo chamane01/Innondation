@@ -1,9 +1,11 @@
 import streamlit as st
 import os
 import rasterio
+import geopandas as gpd
 import folium
 from rasterio.warp import calculate_default_transform, reproject, Resampling
 from streamlit_folium import folium_static
+from pyproj import CRS
 
 def reproject_tiff(input_path, output_path, dst_crs):
     """Reprojette un fichier TIFF vers le système de coordonnées spécifié."""
@@ -83,3 +85,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    
