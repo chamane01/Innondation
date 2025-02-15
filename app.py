@@ -86,11 +86,21 @@ def create_report():
                     st.image(logo, use_container_width=True)
                     st.caption(logo_text)
 
+            
+
             with header_cols[1]:
                 st.markdown(f"<h1 class='report-title'>Rapport {report_id}</h1>", unsafe_allow_html=True)
-                st.markdown(f"**Entreprise:** {company_name}  
-                            **Rédacteur:** {report_author}  
-                            **Date:** {report_date.strftime('%d/%m/%Y')}")
+                st.markdown(
+                    f"**Entreprise:** {company_name}<br>"
+                    f"**Rédacteur:** {report_author}<br>"
+                    f"**Date:** {report_date.strftime('%d/%m/%Y')}",
+                    unsafe_allow_html=True
+                )
+    
+    
+     
+    
+
 
             st.divider()
 
