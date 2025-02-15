@@ -8,7 +8,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from streamlit_folium import st_folium
 from folium.plugins import Draw
-from shapely.geometry import shape, mapping  # Nécessaire pour la fusion des géométries
 
 #########################
 # Fonctions utilitaires #
@@ -90,17 +89,16 @@ def create_map(mosaic_file):
     
     return m
 
-def generate_contours(mosaic_file, drawing_geometry=None, title="Contours d'élévation"):
+def generate_contours(mosaic_file, drawing_geometry=None):
     """
     Génère et affiche les courbes de niveau (contours) à partir du fichier TIFF.
-    Si drawing_geometry est fourni (GeoJSON d'une zone dessinée), on ne
+    Si drawing_geometry est fourni (GeoJSON d'un rectangle dessiné), on ne
     génère les contours que sur cette zone.
-    Le titre du graphique est personnalisé via le paramètre title.
     """
     try:
         with rasterio.open(mosaic_file) as src:
             if drawing_geometry is not None:
-                # Découper la mosaïque selon l'emprise dessinée
+                # Utiliser l'emprise dessinée pour découper la mosaïque
                 out_image, out_transform = rasterio.mask.mask(src, [drawing_geometry], crop=True)
                 data = out_image[0]
             else:
@@ -110,13 +108,14 @@ def generate_contours(mosaic_file, drawing_geometry=None, title="Contours d'él�
         st.error(f"Erreur lors de la lecture du fichier TIFF : {e}")
         return
     
-    # Masquer les valeurs nodata
+    # Masquer les valeurs nodata le cas échéant
     nodata = src.nodata
     if nodata is not None:
         data = np.where(data == nodata, np.nan, data)
     
     # Création d'une grille de coordonnées en se basant sur la transformation affine
     nrows, ncols = data.shape
+    # Coordonnées des centres de pixels
     x_coords = np.arange(ncols) * out_transform.a + out_transform.c + out_transform.a/2
     y_coords = np.arange(nrows) * out_transform.e + out_transform.f + out_transform.e/2
     X, Y = np.meshgrid(x_coords, y_coords)
@@ -135,7 +134,7 @@ def generate_contours(mosaic_file, drawing_geometry=None, title="Contours d'él�
     fig, ax = plt.subplots(figsize=(8, 6))
     contour = ax.contour(X, Y, data, levels=levels, cmap='terrain')
     ax.clabel(contour, inline=True, fontsize=8)
-    ax.set_title(title)
+    ax.set_title("Contours d'élévation")
     ax.set_xlabel("Longitude")
     ax.set_ylabel("Latitude")
     st.pyplot(fig)
@@ -147,11 +146,8 @@ def generate_contours(mosaic_file, drawing_geometry=None, title="Contours d'él�
 def main():
     st.title("Génération de Contours à partir d'un TIFF")
     
-    # Saisie du nom de la carte
+    # Saisie du nom de la carte (affiché en titre, par exemple)
     map_name = st.text_input("Nom de votre carte", value="Ma Carte")
-    
-    # Option pour fusionner les profils dessinés sur la même carte
-    merge_profiles = st.checkbox("Fusionner les profils dessinés sur la même carte", value=False)
     
     # Chargement et construction de la mosaïque
     folder_path = "TIFF"
@@ -167,12 +163,12 @@ def main():
     if not mosaic_path:
         return
 
-    # Création de la carte interactive avec l'outil de dessin
+    # Création de la carte interactive avec outil de dessin pour sélectionner l'emprise
     m = create_map(mosaic_path)
     st.write("**Utilisez l'outil de dessin pour sélectionner une zone (rectangle) sur la carte.**")
     map_data = st_folium(m, width=700, height=500)
     
-    # Récupération des emprises dessinées
+    # Gestion des emprises dessinées (possibilité de multiples rectangles)
     drawing_geometries = []
     if isinstance(map_data, dict):
         raw_drawings = map_data.get("all_drawings", [])
@@ -184,23 +180,10 @@ def main():
     if not drawing_geometries:
         st.warning("Veuillez dessiner une emprise")
     else:
-        # Si fusion des profils est activée, on calcule l'union des géométries
-        if merge_profiles:
-            union_geom = None
-            for geom in drawing_geometries:
-                poly = shape(geom)
-                if union_geom is None:
-                    union_geom = poly
-                else:
-                    union_geom = union_geom.union(poly)
-            union_geojson = mapping(union_geom)
-            st.subheader(f"Contours fusionnés pour la carte : {map_name}")
-            generate_contours(mosaic_path, union_geojson, title=f"Contours fusionnés pour {map_name}")
-        else:
-            # Sinon, afficher les contours pour chaque emprise dessinée séparément
-            for i, geom in enumerate(drawing_geometries, start=1):
-                st.subheader(f"Contours d'élévation - Emprise {i} pour {map_name}")
-                generate_contours(mosaic_path, geom, title=f"Contours d'élévation - Emprise {i} pour {map_name}")
+        # Pour chaque rectangle dessiné, générer et afficher les contours correspondants
+        for i, geom in enumerate(drawing_geometries, start=1):
+            st.subheader(f"Résultat des contours - Emprise {i}")
+            generate_contours(mosaic_path, geom)
     
 if __name__ == "__main__":
     main()
