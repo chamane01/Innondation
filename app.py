@@ -2,7 +2,6 @@ import streamlit as st
 import os
 import rasterio
 import rasterio.merge
-from rasterio.transform import rowcol
 from rasterio.windows import Window
 import folium
 import numpy as np
@@ -30,7 +29,7 @@ def load_tiff_files(folder_path):
         st.error("Aucun fichier TIFF trouvé dans le dossier.")
         return []
     
-    return [f for f in tiff_files if os.path.exists(f)]
+    return tiff_files
 
 def build_mosaic(tiff_files, mosaic_path="mosaic.tif"):
     """Construit une mosaïque à partir de fichiers TIFF."""
@@ -56,11 +55,11 @@ def build_mosaic(tiff_files, mosaic_path="mosaic.tif"):
 def create_map(mosaic_file):
     """
     Crée une carte Folium avec l'outil de dessin (rectangle pour sélectionner une emprise)
-    et intègre un calque indiquant l'emprise de la mosaïque.
+    et ajoute un calque indiquant l'emprise de la mosaïque.
     """
     m = folium.Map(location=[0, 0], zoom_start=2)
     
-    # Calque indiquant l'emprise de la mosaïque
+    # Ajout d'un calque pour l'emprise de la mosaïque
     mosaic_group = folium.FeatureGroup(name="Mosaïque")
     try:
         with rasterio.open(mosaic_file) as src:
@@ -76,7 +75,7 @@ def create_map(mosaic_file):
     
     mosaic_group.add_to(m)
     
-    # Ajout de l'outil de dessin (seulement pour dessiner des rectangles)
+    # Ajout de l'outil de dessin (uniquement des rectangles)
     Draw(
         draw_options={
             'rectangle': True,
@@ -96,7 +95,7 @@ def create_map(mosaic_file):
 def generate_contour_figure(mosaic_file, drawing_geometry=None, title="Contours d'élévation"):
     """
     Génère une figure matplotlib avec les courbes de niveau (contours) à partir du fichier TIFF.
-    Si drawing_geometry est fourni (un rectangle dessiné), la zone est découpée en utilisant sa bounding box.
+    Si drawing_geometry est fourni (un rectangle dessiné), on découpe l'image en utilisant sa bounding box.
     """
     try:
         with rasterio.open(mosaic_file) as src:
@@ -108,11 +107,10 @@ def generate_contour_figure(mosaic_file, drawing_geometry=None, title="Contours 
                 min_x, max_x = min(xs), max(xs)
                 min_y, max_y = min(ys), max(ys)
                 
-                # Conversion des coordonnées géospatiales en indices de pixels
-                # (rowcol renvoie row puis col)
-                row_min, col_min = rowcol(src.transform, min_x, max_y)
-                row_max, col_max = rowcol(src.transform, max_x, min_y)
-                # S'assurer que les indices sont dans l'ordre (top-left et bottom-right)
+                # Conversion des coordonnées géospatiales en indices (utilisation de src.index)
+                row_min, col_min = src.index(min_x, max_y)
+                row_max, col_max = src.index(max_x, min_y)
+                # S'assurer que row_min est bien au-dessus de row_max, etc.
                 if row_min > row_max:
                     row_min, row_max = row_max, row_min
                 if col_min > col_max:
@@ -134,10 +132,10 @@ def generate_contour_figure(mosaic_file, drawing_geometry=None, title="Contours 
     if nodata is not None:
         data = np.where(data == nodata, np.nan, data)
     
-    # Création d'une grille de coordonnées en se basant sur la transformation affine
+    # Création de la grille de coordonnées
     nrows, ncols = data.shape
-    x_coords = np.arange(ncols) * new_transform.a + new_transform.c + new_transform.a / 2
-    y_coords = np.arange(nrows) * new_transform.e + new_transform.f + new_transform.e / 2
+    x_coords = np.arange(ncols) * new_transform.a + new_transform.c + new_transform.a/2
+    y_coords = np.arange(nrows) * new_transform.e + new_transform.f + new_transform.e/2
     X, Y = np.meshgrid(x_coords, y_coords)
     
     try:
@@ -149,7 +147,7 @@ def generate_contour_figure(mosaic_file, drawing_geometry=None, title="Contours 
     
     levels = np.linspace(vmin, vmax, 15)
     
-    # Tracé des courbes de niveau avec légende (colorbar)
+    # Tracé des contours avec légende (colorbar)
     fig, ax = plt.subplots(figsize=(8, 6))
     cf = ax.contourf(X, Y, data, levels=levels, cmap='terrain', alpha=0.8)
     cs = ax.contour(X, Y, data, levels=levels, colors='black', linewidths=0.5)
@@ -168,7 +166,7 @@ def generate_contour_figure(mosaic_file, drawing_geometry=None, title="Contours 
 def main():
     st.title("Génération de Contours à partir d'un TIFF")
     
-    # Saisie du nom de la carte (affiché en titre, par exemple)
+    # Saisie du nom de la carte
     map_name = st.text_input("Nom de votre carte", value="Ma Carte")
     
     # Chargement et construction de la mosaïque
@@ -176,25 +174,28 @@ def main():
     if not os.path.exists(folder_path):
         st.error("Dossier TIFF introuvable")
         return
-
+    
     tiff_files = load_tiff_files(folder_path)
     if not tiff_files:
         return
-
+    
     mosaic_path = build_mosaic(tiff_files)
     if not mosaic_path:
         return
-
-    # Création de la carte interactive avec outil de dessin pour sélectionner l'emprise
+    
+    # Création de la carte interactive avec outil de dessin
     m = create_map(mosaic_path)
     st.write("**Utilisez l'outil de dessin pour sélectionner une ou plusieurs zones (rectangles) sur la carte.**")
     map_data = st_folium(m, width=700, height=500)
     
-    # Extraction des zones dessinées (vérifier que raw_drawings est une liste)
+    # Affichage des données renvoyées par st_folium (pour le débogage)
+    st.write("Données de la carte :", map_data)
+    
+    # Extraction des zones dessinées
     drawing_geometries = []
     if isinstance(map_data, dict):
         raw_drawings = map_data.get("all_drawings")
-        if raw_drawings is None or not isinstance(raw_drawings, list):
+        if not isinstance(raw_drawings, list):
             raw_drawings = []
         for drawing in raw_drawings:
             if isinstance(drawing, dict) and drawing.get("geometry", {}).get("type") == "Polygon":
@@ -205,8 +206,8 @@ def main():
         # Pour chaque zone dessinée, générer une carte de contours
         for i, geom in enumerate(drawing_geometries):
             fig = generate_contour_figure(
-                mosaic_path, 
-                drawing_geometry=geom, 
+                mosaic_path,
+                drawing_geometry=geom,
                 title=f"{map_name} - Contours zone {i+1}"
             )
             if fig:
@@ -214,12 +215,15 @@ def main():
     else:
         # Si aucune zone n'est dessinée, générer les contours sur l'ensemble de la mosaïque
         fig = generate_contour_figure(
-            mosaic_path, 
-            drawing_geometry=None, 
+            mosaic_path,
+            drawing_geometry=None,
             title=f"{map_name} - Contours (ensemble de la mosaïque)"
         )
         if fig:
             st.pyplot(fig)
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        st.error(f"Erreur dans l'application : {e}")
