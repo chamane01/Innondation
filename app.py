@@ -146,7 +146,7 @@ def generate_contours(mosaic_file, drawing_geometry=None):
 def main():
     st.title("Génération de Contours à partir d'un TIFF")
     
-    # Saisie du nom de la carte (affiché en titre, par exemple)
+    # Saisie du nom de la carte
     map_name = st.text_input("Nom de votre carte", value="Ma Carte")
     
     # Chargement et construction de la mosaïque
@@ -163,27 +163,30 @@ def main():
     if not mosaic_path:
         return
 
-    # Création de la carte interactive avec outil de dessin pour sélectionner l'emprise
+    # Création de la carte interactive avec outil de dessin
     m = create_map(mosaic_path)
-    st.write("**Utilisez l'outil de dessin pour sélectionner une zone (rectangle) sur la carte.**")
+    st.write("**Utilisez l'outil de dessin pour sélectionner une ou plusieurs zones (rectangles) sur la carte.**")
     map_data = st_folium(m, width=700, height=500)
     
-    # Gestion des emprises dessinées (possibilité de multiples rectangles)
+    # Récupération de toutes les emprises dessinées
     drawing_geometries = []
     if isinstance(map_data, dict):
         raw_drawings = map_data.get("all_drawings", [])
-        if raw_drawings:
-            for drawing in raw_drawings:
-                if isinstance(drawing, dict) and drawing.get("geometry", {}).get("type") == "Polygon":
-                    drawing_geometries.append(drawing.get("geometry"))
-    
+        for drawing in raw_drawings:
+            if (isinstance(drawing, dict) and 
+                drawing.get("geometry", {}).get("type") == "Polygon"):
+                drawing_geometries.append(drawing.get("geometry"))
+
+    # Vérification des emprises dessinées
     if not drawing_geometries:
-        st.warning("Veuillez dessiner une emprise")
-    else:
-        # Pour chaque rectangle dessiné, générer et afficher les contours correspondants
-        for i, geom in enumerate(drawing_geometries, start=1):
-            st.subheader(f"Résultat des contours - Emprise {i}")
-            generate_contours(mosaic_path, geom)
+        st.error("Veuillez dessiner au moins une emprise")
+        return
+
+    # Génération des contours pour chaque emprise
+    st.subheader("Résultats des contours")
+    for i, geometry in enumerate(drawing_geometries):
+        st.write(f"### Carte pour l'emprise #{i+1}")
+        generate_contours(mosaic_path, geometry)
     
 if __name__ == "__main__":
     main()
