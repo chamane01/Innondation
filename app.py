@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit as st 
 import os
 import rasterio
 import rasterio.merge
@@ -168,17 +168,22 @@ def main():
     st.write("**Utilisez l'outil de dessin pour sélectionner une zone (rectangle) sur la carte.**")
     map_data = st_folium(m, width=700, height=500)
     
-    # Vérifier si une zone a été dessinée
-    drawing_geometry = None
+    # Gestion des emprises dessinées (possibilité de multiples rectangles)
+    drawing_geometries = []
     if isinstance(map_data, dict):
         raw_drawings = map_data.get("all_drawings", [])
-        for drawing in raw_drawings:
-            if isinstance(drawing, dict) and drawing.get("geometry", {}).get("type") == "Polygon":
-                drawing_geometry = drawing.get("geometry")
-                break
-
-    st.subheader("Résultat des contours")
-    generate_contours(mosaic_path, drawing_geometry)
+        if raw_drawings:
+            for drawing in raw_drawings:
+                if isinstance(drawing, dict) and drawing.get("geometry", {}).get("type") == "Polygon":
+                    drawing_geometries.append(drawing.get("geometry"))
+    
+    if not drawing_geometries:
+        st.warning("Veuillez dessiner une emprise")
+    else:
+        # Pour chaque rectangle dessiné, générer et afficher les contours correspondants
+        for i, geom in enumerate(drawing_geometries, start=1):
+            st.subheader(f"Résultat des contours - Emprise {i}")
+            generate_contours(mosaic_path, geom)
     
 if __name__ == "__main__":
     main()
