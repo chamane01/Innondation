@@ -3,12 +3,12 @@ import os
 import rasterio
 import rasterio.merge
 from rasterio.transform import rowcol
+from rasterio.windows import Window
 import folium
 import numpy as np
 import matplotlib.pyplot as plt
 from streamlit_folium import st_folium
 from folium.plugins import Draw
-from affine import Affine
 
 #########################
 # Fonctions utilitaires #
@@ -76,7 +76,7 @@ def create_map(mosaic_file):
     
     mosaic_group.add_to(m)
     
-    # Ajout de l'outil de dessin (uniquement pour dessiner des rectangles)
+    # Ajout de l'outil de dessin (seulement pour dessiner des rectangles)
     Draw(
         draw_options={
             'rectangle': True,
@@ -96,7 +96,7 @@ def create_map(mosaic_file):
 def generate_contour_figure(mosaic_file, drawing_geometry=None, title="Contours d'élévation"):
     """
     Génère une figure matplotlib avec les courbes de niveau (contours) à partir du fichier TIFF.
-    Si drawing_geometry est fourni (un rectangle dessiné), l'image est découpée en utilisant sa bounding box.
+    Si drawing_geometry est fourni (un rectangle dessiné), la zone est découpée en utilisant sa bounding box.
     """
     try:
         with rasterio.open(mosaic_file) as src:
@@ -109,12 +109,20 @@ def generate_contour_figure(mosaic_file, drawing_geometry=None, title="Contours 
                 min_y, max_y = min(ys), max(ys)
                 
                 # Conversion des coordonnées géospatiales en indices de pixels
-                # Attention : l'indice top-left correspond à (min_x, max_y)
+                # (rowcol renvoie row puis col)
                 row_min, col_min = rowcol(src.transform, min_x, max_y)
                 row_max, col_max = rowcol(src.transform, max_x, min_y)
-                data = src.read(1)[row_min:row_max+1, col_min:col_max+1]
-                # Nouveau transform pour la zone découpée
-                new_transform = src.transform * Affine.translation(col_min, row_min)
+                # S'assurer que les indices sont dans l'ordre (top-left et bottom-right)
+                if row_min > row_max:
+                    row_min, row_max = row_max, row_min
+                if col_min > col_max:
+                    col_min, col_max = col_max, col_min
+                
+                width = col_max - col_min + 1
+                height = row_max - row_min + 1
+                window = Window(col_off=col_min, row_off=row_min, width=width, height=height)
+                data = src.read(1, window=window)
+                new_transform = rasterio.windows.transform(window, src.transform)
             else:
                 data = src.read(1)
                 new_transform = src.transform
@@ -128,8 +136,8 @@ def generate_contour_figure(mosaic_file, drawing_geometry=None, title="Contours 
     
     # Création d'une grille de coordonnées en se basant sur la transformation affine
     nrows, ncols = data.shape
-    x_coords = np.arange(ncols) * new_transform.a + new_transform.c + new_transform.a/2
-    y_coords = np.arange(nrows) * new_transform.e + new_transform.f + new_transform.e/2
+    x_coords = np.arange(ncols) * new_transform.a + new_transform.c + new_transform.a / 2
+    y_coords = np.arange(nrows) * new_transform.e + new_transform.f + new_transform.e / 2
     X, Y = np.meshgrid(x_coords, y_coords)
     
     try:
@@ -182,7 +190,7 @@ def main():
     st.write("**Utilisez l'outil de dessin pour sélectionner une ou plusieurs zones (rectangles) sur la carte.**")
     map_data = st_folium(m, width=700, height=500)
     
-    # Extraction des zones dessinées (vérification que raw_drawings est une liste)
+    # Extraction des zones dessinées (vérifier que raw_drawings est une liste)
     drawing_geometries = []
     if isinstance(map_data, dict):
         raw_drawings = map_data.get("all_drawings")
