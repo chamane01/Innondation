@@ -28,7 +28,7 @@ SECTION_HEIGHT = PAGE_HEIGHT / 3
 COLUMN_WIDTH = PAGE_WIDTH / 2
 
 # ==============================
-# Fonctions utilitaires ANALYSE SPATIALE
+# Fonctions utilitaires - ANALYSE SPATIALE
 # ==============================
 
 def load_tiff_files(folder_path):
@@ -109,7 +109,7 @@ def create_map(mosaic_file):
 
 def generate_contours(mosaic_file, drawing_geometry):
     """
-    Génère les courbes de niveau à partir d'une zone (découpée par drawing_geometry).
+    Génère les courbes de niveau à partir d'une zone définie par drawing_geometry.
     Retourne la figure matplotlib.
     """
     try:
@@ -201,10 +201,10 @@ def generate_profile(mosaic_file, coords, profile_title):
     ax.set_ylabel("Altitude (m)")
     return fig
 
-# Fonctions pour capturer et stocker les figures dans la session
 def store_figure(fig, result_type, title):
     """
-    Sauvegarde la figure matplotlib dans un buffer et stocke le résultat dans st.session_state["analysis_results"].
+    Sauvegarde la figure matplotlib dans un buffer et stocke le résultat
+    dans st.session_state["analysis_results"].
     """
     buf = BytesIO()
     fig.savefig(buf, format="png", bbox_inches="tight")
@@ -218,14 +218,14 @@ def store_figure(fig, result_type, title):
     })
 
 # ==============================
-# Interface Analyse Spatiale
+# Interface - Analyse Spatiale
 # ==============================
 
 def run_analysis_spatiale():
     st.title("🔍 Analyse Spatiale")
     st.info("Ce module vous permet de générer des contours (à partir de rectangles dessinés) ou des profils d'élévation (à partir de lignes).")
     
-    # Initialisation d'un mode spécifique pour cette partie (id unique)
+    # Initialisation du mode pour cette partie (id unique)
     if "analysis_mode" not in st.session_state:
         st.session_state["analysis_mode"] = "none"
     
@@ -249,7 +249,7 @@ def run_analysis_spatiale():
     st.write("**Utilisez l'outil de dessin sur la carte ci-dessous.**")
     map_data = st_folium(m, width=700, height=500, key="analysis_map")
     
-    # Zone d'options sous la carte (dans un container avec id unique)
+    # Zone d'options sous la carte
     options_container = st.container()
     if st.session_state["analysis_mode"] == "none":
         col1, col2 = options_container.columns(2)
@@ -258,7 +258,7 @@ def run_analysis_spatiale():
         if col2.button("Générer des contours", key="btn_contours"):
             st.session_state["analysis_mode"] = "contours"
     
-    # Mode Générer des contours (recherche des rectangles dessinés)
+    # Mode Générer des contours (rectangle)
     if st.session_state["analysis_mode"] == "contours":
         st.subheader("Générer des contours")
         drawing_geometries = []
@@ -280,7 +280,7 @@ def run_analysis_spatiale():
         if st.button("Retour", key="retour_contours"):
             st.session_state["analysis_mode"] = "none"
     
-    # Mode Tracer des profils (recherche des lignes dessinées)
+    # Mode Tracer des profils (ligne)
     if st.session_state["analysis_mode"] == "profiles":
         st.subheader("Tracer des profils")
         current_drawings = []
@@ -304,7 +304,7 @@ def run_analysis_spatiale():
             st.session_state["analysis_mode"] = "none"
 
 # ==============================
-# Fonctions utilitaires RAPPORT
+# Fonctions utilitaires - RAPPORT
 # ==============================
 
 def create_element_controller():
@@ -499,13 +499,13 @@ def display_elements_preview(elements):
         st.markdown("---")
 
 # ==============================
-# Interface Rapport
+# Interface - Rapport
 # ==============================
 
 def run_report():
     st.title("📄 Génération de Rapport")
     
-    # Sidebar dédiée au rapport avec un id unique
+    # Sidebar dédiée au rapport (identifiant unique)
     with st.sidebar:
         st.header("📝 Métadonnées du Rapport")
         titre = st.text_input("Titre principal", key="rapport_titre")
@@ -535,14 +535,13 @@ def run_report():
     
     st.markdown("### 📌 Sélectionner des cartes issues de l'analyse spatiale")
     if "analysis_results" in st.session_state and st.session_state["analysis_results"]:
-        # Propose une sélection multiple des résultats d'analyse spatiale
+        # Sélection multiple des résultats d'analyse spatiale
         options = {f"{i+1} - {res['title']}": i for i, res in enumerate(st.session_state["analysis_results"])}
         selected = st.multiselect("Choisissez les cartes à ajouter au rapport", options.keys(), key="rapport_select_analysis")
         for opt in selected:
             idx = options[opt]
-            # On ajoute l'image comme élément (si elle n'est pas déjà présente)
             image_data = st.session_state["analysis_results"][idx]["image"]
-            # Vérification pour éviter les doublons
+            # Ajout de l'image en évitant les doublons
             if not any(el.get("analysis_ref") == idx for el in elements if el["type"] == "Image"):
                 elements.append({
                     "type": "Image",
