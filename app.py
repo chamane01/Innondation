@@ -315,7 +315,7 @@ def run_analysis_spatiale():
 # ==============================
 
 def create_element_controller():
-    # Remarque : suppression de l'argument "key" de l'expander pour éviter d'éventuels conflits.
+    # L'expander n'utilise plus de clé pour éviter d'éventuels conflits.
     with st.expander("➕ Ajouter un élément", expanded=True):
         col1, col2 = st.columns(2)
         with col1:
@@ -540,6 +540,10 @@ def run_report():
     
     st.markdown("### 📌 Sélectionner des cartes issues de l'analyse spatiale")
     if "analysis_results" in st.session_state and st.session_state["analysis_results"]:
+        st.markdown("#### Paramètres de position pour les cartes d'analyse")
+        analysis_v_pos = st.selectbox("Position verticale", ["Haut", "Milieu", "Bas"], key="analysis_v_pos")
+        analysis_h_pos = st.selectbox("Position horizontale", ["Gauche", "Droite", "Centre"], key="analysis_h_pos")
+        
         # Sélection multiple des résultats d'analyse spatiale
         options = {f"{i+1} - {res['title']}": i for i, res in enumerate(st.session_state["analysis_results"])}
         selected = st.multiselect("Choisissez les cartes à ajouter au rapport", list(options.keys()), key="rapport_select_analysis")
@@ -551,8 +555,8 @@ def run_report():
                 elements.append({
                     "type": "Image",
                     "size": "Grand",
-                    "v_pos": "Haut",
-                    "h_pos": "Gauche",
+                    "v_pos": analysis_v_pos,
+                    "h_pos": analysis_h_pos,
                     "content": image_data,
                     "image_title": st.session_state["analysis_results"][idx]["title"],
                     "description": "Carte générée depuis l'analyse spatiale",
