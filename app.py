@@ -6,6 +6,7 @@ from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph
+from reportlab.lib import colors
 
 # Configuration de la page
 st.set_page_config(page_title="Générateur Structuré", layout="centered")
@@ -64,8 +65,12 @@ def calculate_position(element):
 def draw_metadata(c, metadata):
     margin = 50
     x_right = PAGE_WIDTH - margin
-    y_top = PAGE_HEIGHT - margin
-    line_height = 14
+    y_top = PAGE_HEIGHT - margin - 20
+    line_height = 16
+    
+    # Encadré principal
+    c.setFillColor(colors.lightblue)
+    c.rect(x_right - 210, y_top - 140, 200, 140, fill=1, stroke=0)
     
     # Logo
     if metadata['logo']:
@@ -73,27 +78,52 @@ def draw_metadata(c, metadata):
             img = ImageReader(metadata['logo'])
             img_width, img_height = img.getSize()
             aspect = img_height / img_width
-            desired_width = 50
+            desired_width = 60
             desired_height = desired_width * aspect
-            c.drawImage(img, x_right - desired_width, y_top - desired_height, 
-                       width=desired_width, height=desired_height, preserveAspectRatio=True)
-            y_top -= desired_height + 10
+            
+            # Fond du logo
+            c.setFillColor(colors.white)
+            c.rect(x_right - desired_width - 15, y_top - desired_height - 15, 
+                   desired_width + 30, desired_height + 30, fill=1, stroke=0)
+            
+            c.drawImage(img, x_right - desired_width - 5, y_top - desired_height - 5, 
+                       width=desired_width, height=desired_height, 
+                       preserveAspectRatio=True, mask='auto')
+            y_top -= desired_height + 40
         except Exception as e:
             st.error(f"Erreur de chargement du logo: {str(e)}")
 
-    # Métadonnées textuelles
-    c.setFont("Helvetica", 9)
-    elements = [
-        f"ID: {metadata['report_id']}",
-        f"Date: {metadata['date'].strftime('%d/%m/%Y')} {metadata['time'].strftime('%H:%M')}",
-        f"Lieu: {metadata['location']}",
-        f"Rédacteur: {metadata['editor']}",
-        f"Société: {metadata['company']}"
+    # Titre section
+    c.setFont("Helvetica-Bold", 12)
+    c.setFillColor(colors.darkblue)
+    c.drawString(x_right - 190, y_top - 20, "MÉTADONNÉES")
+    
+    # Ligne séparatrice
+    c.setStrokeColor(colors.darkblue)
+    c.line(x_right - 190, y_top - 30, x_right - 10, y_top - 30)
+    
+    # Liste des métadonnées
+    infos = [
+        ("ID", metadata['report_id']),
+        ("Date", f"{metadata['date'].strftime('%d/%m/%Y')} {metadata['time'].strftime('%H:%M')}"),
+        ("Lieu", metadata['location']),
+        ("Rédacteur", metadata['editor']),
+        ("Société", metadata['company'])
     ]
     
-    for text in elements:
-        c.drawRightString(x_right, y_top, text)
-        y_top -= line_height
+    y_pos = y_top - 50
+    for label, value in infos:
+        # Label
+        c.setFont("Helvetica-Bold", 9)
+        c.setFillColor(colors.darkblue)
+        c.drawString(x_right - 190, y_pos, label)
+        
+        # Valeur
+        c.setFont("Helvetica", 9)
+        c.setFillColor(colors.black)
+        c.drawString(x_right - 190 + 45, y_pos, value)
+        
+        y_pos -= line_height
 
 def generate_pdf(elements, metadata):
     buffer = BytesIO()
@@ -173,7 +203,7 @@ def main():
                         st.markdown(f"**{element['size']}** ({element['v_pos']}-{element['h_pos']})")
                     with cols[1]:
                         if element['type'] == "Image":
-                            st.image(element['content'], use_column_width=True)
+                            st.image(element['content'], use_container_width=True)
                         else:
                             st.markdown(element['content'])
         
