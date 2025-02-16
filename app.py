@@ -225,7 +225,7 @@ def run_analysis_spatiale():
     st.title("🔍 Analyse Spatiale")
     st.info("Ce module vous permet de générer des contours (à partir de rectangles dessinés) ou des profils d'élévation (à partir de lignes).")
     
-    # Initialisation du mode pour cette partie (id unique)
+    # Initialisation du mode pour cette partie
     if "analysis_mode" not in st.session_state:
         st.session_state["analysis_mode"] = "none"
     
@@ -315,7 +315,7 @@ def run_analysis_spatiale():
 # ==============================
 
 def create_element_controller():
-    # L'expander n'utilise plus de clé pour éviter d'éventuels conflits.
+    # Expander sans clé pour éviter des conflits
     with st.expander("➕ Ajouter un élément", expanded=True):
         col1, col2 = st.columns(2)
         with col1:
@@ -540,27 +540,37 @@ def run_report():
     
     st.markdown("### 📌 Sélectionner des cartes issues de l'analyse spatiale")
     if "analysis_results" in st.session_state and st.session_state["analysis_results"]:
-        st.markdown("#### Paramètres de position pour les cartes d'analyse")
+        st.markdown("#### Paramètres pour les cartes d'analyse")
         analysis_v_pos = st.selectbox("Position verticale", ["Haut", "Milieu", "Bas"], key="analysis_v_pos")
         analysis_h_pos = st.selectbox("Position horizontale", ["Gauche", "Droite", "Centre"], key="analysis_h_pos")
+        analysis_size  = st.selectbox("Taille", ["Grand", "Moyen", "Petit"], key="analysis_size")
         
-        # Sélection multiple des résultats d'analyse spatiale
-        options = {f"{i+1} - {res['title']}": i for i, res in enumerate(st.session_state["analysis_results"])}
+        # Filtrer les doublons dans les résultats d'analyse
+        unique_results = []
+        unique_keys = set()
+        for idx, res in enumerate(st.session_state["analysis_results"]):
+            # On utilise le titre et la taille de l'image comme indicateur de doublon
+            key = res["title"] + "_" + str(len(res["image"]))
+            if key not in unique_keys:
+                unique_keys.add(key)
+                unique_results.append((idx, res))
+        
+        options = {f"{i+1} - {res['title']}": idx for i, (idx, res) in enumerate(unique_results)}
         selected = st.multiselect("Choisissez les cartes à ajouter au rapport", list(options.keys()), key="rapport_select_analysis")
         for opt in selected:
-            idx = options[opt]
-            image_data = st.session_state["analysis_results"][idx]["image"]
-            # Ajout de l'image en évitant les doublons
-            if not any(el.get("analysis_ref") == idx for el in elements if el["type"] == "Image"):
+            orig_idx = options[opt]
+            image_data = st.session_state["analysis_results"][orig_idx]["image"]
+            # Ajout de l'image si elle n'a pas déjà été ajoutée
+            if not any(el.get("analysis_ref") == orig_idx for el in elements if el["type"] == "Image"):
                 elements.append({
                     "type": "Image",
-                    "size": "Grand",
+                    "size": analysis_size,
                     "v_pos": analysis_v_pos,
                     "h_pos": analysis_h_pos,
                     "content": image_data,
-                    "image_title": st.session_state["analysis_results"][idx]["title"],
+                    "image_title": st.session_state["analysis_results"][orig_idx]["title"],
                     "description": "Carte générée depuis l'analyse spatiale",
-                    "analysis_ref": idx
+                    "analysis_ref": orig_idx
                 })
         st.success("Les cartes sélectionnées ont été ajoutées aux éléments du rapport.")
     else:
