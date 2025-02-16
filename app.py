@@ -57,7 +57,7 @@ def calculate_position(element):
         x = 0
     elif element['h_pos'] == "Droite":
         x = COLUMN_WIDTH
-    else: # Centre
+    else:  # Centre
         x = COLUMN_WIDTH / 2 - calculate_dimensions(element['size'])[0] / 2
     
     return (x, PAGE_HEIGHT - vertical_offset - SECTION_HEIGHT)
@@ -66,48 +66,70 @@ def draw_metadata(c, metadata):
     margin = 40
     x_left = margin
     y_top = PAGE_HEIGHT - margin
-    line_height = 14
-    
-    # Logo compact
+    line_height = 16  # Espacement vertical renforcé
+
+    # Affichage du logo (si fourni) et préparation du titre principal
+    logo_drawn = False
     if metadata['logo']:
         try:
             img = ImageReader(metadata['logo'])
             img_width, img_height = img.getSize()
             aspect = img_height / img_width
-            desired_width = 40  # Taille réduite
+            desired_width = 40  # Taille réduite pour le logo
             desired_height = desired_width * aspect
             
             c.drawImage(img, x_left, y_top - desired_height, 
-                       width=desired_width, height=desired_height, 
-                       preserveAspectRatio=True, mask='auto')
-            y_top -= desired_height + 10
+                        width=desired_width, height=desired_height, 
+                        preserveAspectRatio=True, mask='auto')
+            logo_drawn = True
         except Exception as e:
             st.error(f"Erreur de chargement du logo: {str(e)}")
-
-    # Style minimaliste
-    c.setFont("Helvetica", 8)
-    c.setFillColor(colors.darkgray)
     
-    # Ligne de séparation fine
-    c.line(x_left, y_top - 5, x_left + 150, y_top - 5)
-    y_top -= 15
+    # Position du titre principal
+    if logo_drawn:
+        x_title = x_left + 50  # largeur du logo + marge
+        y_title = y_top - 20
+    else:
+        x_title = x_left
+        y_title = y_top - 20
     
-    # Métadonnées structurées
+    # Affichage du titre principal en grand
+    c.setFont("Helvetica-Bold", 20)
+    c.setFillColor(colors.black)
+    if metadata.get('titre'):
+        c.drawString(x_title, y_title, metadata['titre'])
+    
+    # Affichage du nom de la société juste en dessous du titre (sans libellé)
+    c.setFont("Helvetica", 14)
+    y_company = y_title - 25
+    if metadata.get('company'):
+        c.drawString(x_title, y_company, metadata['company'])
+    
+    # Trait gris en gras
+    y_line = y_company - 10
+    c.setStrokeColor(colors.darkgray)
+    c.setLineWidth(2)
+    c.line(x_left, y_line, x_left + 150, y_line)
+    c.setLineWidth(1)  # Réinitialisation de l'épaisseur
+    
+    # Affichage des autres métadonnées sous le trait
+    y_text = y_line - 20
     infos = [
         ("ID Rapport", metadata['report_id']),
-        ("Date", metadata['date'].strftime('%d/%m/%Y')),
-        ("Heure", metadata['time'].strftime('%H:%M')),
+        ("Date", metadata['date'].strftime('%d/%m/%Y') if hasattr(metadata['date'], "strftime") else metadata['date']),
+        ("Heure", metadata['time'].strftime('%H:%M') if hasattr(metadata['time'], "strftime") else metadata['time']),
         ("Éditeur", metadata['editor']),
-        ("Localisation", metadata['location']),
-        ("Société", metadata['company'])
+        ("Localisation", metadata['location'])
     ]
     
+    value_x_offset = x_left + 70  # Décalage augmenté pour séparer libellés et valeurs
     for label, value in infos:
-        c.setFont("Helvetica-Bold", 8)
-        c.drawString(x_left, y_top, label + ":")
-        c.setFont("Helvetica", 8)
-        c.drawString(x_left + 45, y_top, value)
-        y_top -= line_height
+        c.setFont("Helvetica-Bold", 10)
+        c.setFillColor(colors.black)
+        c.drawString(x_left, y_text, label + ":")
+        c.setFont("Helvetica", 10)
+        c.drawString(value_x_offset, y_text, str(value))
+        y_text -= line_height
 
 def generate_pdf(elements, metadata):
     buffer = BytesIO()
@@ -117,7 +139,7 @@ def generate_pdf(elements, metadata):
     c.setAuthor(metadata['editor'])
     c.setTitle(metadata['report_id'])
     
-    # Éléments principaux
+    # Placement des éléments principaux
     for element in elements:
         width, height = calculate_dimensions(element['size'])
         x, y = calculate_position(element)
@@ -136,7 +158,7 @@ def generate_pdf(elements, metadata):
             p.wrapOn(c, width, height)
             p.drawOn(c, x, y)
     
-    # Métadonnées visuelles
+    # Insertion des métadonnées visuelles
     draw_metadata(c, metadata)
     
     c.save()
@@ -146,9 +168,10 @@ def generate_pdf(elements, metadata):
 def main():
     st.title("📐 Conception de Rapport Structuré")
     
-    # Configuration des métadonnées
+    # Configuration des métadonnées dans la sidebar
     with st.sidebar:
         st.header("📝 Métadonnées")
+        titre = st.text_input("Titre principal")  # Nouveau champ pour le titre principal
         report_id = st.text_input("ID du rapport")
         report_date = st.date_input("Date du rapport", date.today())
         report_time = st.time_input("Heure du rapport", datetime.now().time())
@@ -158,6 +181,7 @@ def main():
         logo = st.file_uploader("Logo", type=["png", "jpg", "jpeg"])
     
     metadata = {
+        'titre': titre,
         'report_id': report_id,
         'date': report_date,
         'time': report_time,
@@ -175,7 +199,7 @@ def main():
         elements.append(new_element)
         st.session_state['elements'] = elements
     
-    # Aperçu et génération
+    # Aperçu et génération du PDF
     if elements:
         if st.button("Générer le PDF"):
             pdf = generate_pdf(elements, metadata)
