@@ -551,9 +551,12 @@ def run_report():
     
     st.markdown("### 📌 Sélectionner des cartes issues de l'analyse spatiale")
     if "analysis_results" in st.session_state and st.session_state["analysis_results"]:
-        st.markdown("#### Paramètres de position pour les cartes d'analyse")
+        st.markdown("#### Paramètres de position et d'affichage pour les cartes d'analyse")
         analysis_v_pos = st.selectbox("Position verticale", ["Haut", "Milieu", "Bas"], key="analysis_v_pos")
         analysis_h_pos = st.selectbox("Position horizontale", ["Gauche", "Droite", "Centre"], key="analysis_h_pos")
+        analysis_size = st.selectbox("Taille", ["Grand", "Moyen", "Petit"], key="analysis_size")
+        analysis_image_title = st.text_input("Titre pour la carte d'analyse", key="analysis_image_title")
+        analysis_description = st.text_input("Description pour la carte d'analyse", key="analysis_description")
         
         # Sélection multiple des résultats d'analyse spatiale
         options = {f"{i+1} - {res['title']}": i for i, res in enumerate(st.session_state["analysis_results"])}
@@ -565,12 +568,12 @@ def run_report():
             if not any(el.get("analysis_ref") == idx for el in elements if el["type"] == "Image"):
                 elements.append({
                     "type": "Image",
-                    "size": "Grand",
+                    "size": analysis_size,
                     "v_pos": analysis_v_pos,
                     "h_pos": analysis_h_pos,
                     "content": image_data,
-                    "image_title": st.session_state["analysis_results"][idx]["title"],
-                    "description": "Carte générée depuis l'analyse spatiale",
+                    "image_title": analysis_image_title if analysis_image_title else st.session_state["analysis_results"][idx]["title"],
+                    "description": analysis_description if analysis_description else "Carte générée depuis l'analyse spatiale",
                     "analysis_ref": idx
                 })
         st.success("Les cartes sélectionnées ont été ajoutées aux éléments du rapport.")
