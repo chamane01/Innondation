@@ -225,7 +225,7 @@ def run_analysis_spatiale():
     st.title("🔍 Analyse Spatiale")
     st.info("Ce module vous permet de générer des contours (à partir de rectangles dessinés) ou des profils d'élévation (à partir de lignes).")
     
-    # Initialisation du mode pour cette partie (id unique)
+    # Initialisation du mode pour cette partie
     if "analysis_mode" not in st.session_state:
         st.session_state["analysis_mode"] = "none"
     
@@ -311,11 +311,50 @@ def run_analysis_spatiale():
             st.session_state["analysis_mode"] = "none"
 
 # ==============================
+# Menu pour ajouter une carte d'analyse spatiale
+# (Similaire au formulaire pour les images téléversées)
+# ==============================
+
+def create_analysis_card_controller():
+    with st.expander("➕ Ajouter une carte d'analyse spatiale", expanded=True):
+        if "analysis_results" not in st.session_state or not st.session_state["analysis_results"]:
+            st.info("Aucune carte d'analyse spatiale n'est disponible pour le moment.")
+            return None
+        
+        # Sélection d'une carte issue des résultats d'analyse
+        options = {f"{i+1} - {res['title']}": i for i, res in enumerate(st.session_state["analysis_results"])}
+        chosen = st.selectbox("Choisissez une carte", list(options.keys()), key="analysis_card_select")
+        idx = options[chosen]
+        
+        # Paramètres similaires à ceux du téléversement d'images
+        col1, col2 = st.columns(2)
+        with col1:
+            size = st.selectbox("Taille", ["Grand", "Moyen", "Petit"], key="analysis_card_size")
+        with col2:
+            v_pos = st.selectbox("Position verticale", ["Haut", "Milieu", "Bas"], key="analysis_card_v_pos")
+            h_pos = st.selectbox("Position horizontale", ["Gauche", "Droite", "Centre"], key="analysis_card_h_pos")
+        
+        title_input = st.text_input("Titre pour la carte", key="analysis_card_title", value=st.session_state["analysis_results"][idx]["title"])
+        description_input = st.text_input("Description pour la carte", key="analysis_card_description", value="Carte générée depuis l'analyse spatiale")
+        
+        if st.button("Valider la carte d'analyse", key="validate_analysis_card"):
+            return {
+                "type": "Image",
+                "size": size,
+                "v_pos": v_pos,
+                "h_pos": h_pos,
+                "content": st.session_state["analysis_results"][idx]["image"],
+                "image_title": title_input,
+                "description": description_input,
+                "analysis_ref": idx
+            }
+    return None
+
+# ==============================
 # Fonctions utilitaires - RAPPORT
 # ==============================
 
 def create_element_controller():
-    # L'expander n'utilise plus de clé pour éviter d'éventuels conflits.
     with st.expander("➕ Ajouter un élément", expanded=True):
         col1, col2 = st.columns(2)
         with col1:
@@ -382,7 +421,6 @@ def draw_metadata(c, metadata):
     logo_drawn = False
     if metadata['logo']:
         try:
-            # Vérification du type pour le logo
             if isinstance(metadata['logo'], bytes):
                 logo_stream = BytesIO(metadata['logo'])
             else:
@@ -453,7 +491,6 @@ def generate_pdf(elements, metadata):
         if element['type'] == "Image":
             if element["content"] is not None:
                 try:
-                    # Encapsulation de l'image si nécessaire
                     if isinstance(element["content"], bytes):
                         image_stream = BytesIO(element["content"])
                     else:
@@ -521,7 +558,7 @@ def display_elements_preview(elements):
 def run_report():
     st.title("📄 Génération de Rapport")
     
-    # Sidebar dédiée au rapport (identifiant unique)
+    # Sidebar dédiée au rapport
     with st.sidebar:
         st.header("📝 Métadonnées du Rapport")
         titre = st.text_input("Titre principal", key="rapport_titre")
@@ -544,43 +581,18 @@ def run_report():
         'logo': logo
     }
     
-    # Initialisation des éléments du rapport dans la session
+    # Initialisation des éléments du rapport
     if "elements" not in st.session_state:
         st.session_state["elements"] = []
     elements = st.session_state["elements"]
     
-    st.markdown("### 📌 Sélectionner des cartes issues de l'analyse spatiale")
-    if "analysis_results" in st.session_state and st.session_state["analysis_results"]:
-        st.markdown("#### Paramètres de position et d'affichage pour les cartes d'analyse")
-        analysis_v_pos = st.selectbox("Position verticale", ["Haut", "Milieu", "Bas"], key="analysis_v_pos")
-        analysis_h_pos = st.selectbox("Position horizontale", ["Gauche", "Droite", "Centre"], key="analysis_h_pos")
-        analysis_size = st.selectbox("Taille", ["Grand", "Moyen", "Petit"], key="analysis_size")
-        analysis_image_title = st.text_input("Titre pour la carte d'analyse", key="analysis_image_title")
-        analysis_description = st.text_input("Description pour la carte d'analyse", key="analysis_description")
-        
-        # Sélection multiple des résultats d'analyse spatiale
-        options = {f"{i+1} - {res['title']}": i for i, res in enumerate(st.session_state["analysis_results"])}
-        selected = st.multiselect("Choisissez les cartes à ajouter au rapport", list(options.keys()), key="rapport_select_analysis")
-        
-        if st.button("Valider les cartes sélectionnées"):
-            for opt in selected:
-                idx = options[opt]
-                image_data = st.session_state["analysis_results"][idx]["image"]
-                # Ajout de l'image en évitant les doublons
-                if not any(el.get("analysis_ref") == idx for el in elements if el["type"] == "Image"):
-                    elements.append({
-                        "type": "Image",
-                        "size": analysis_size,
-                        "v_pos": analysis_v_pos,
-                        "h_pos": analysis_h_pos,
-                        "content": image_data,
-                        "image_title": analysis_image_title if analysis_image_title else st.session_state["analysis_results"][idx]["title"],
-                        "description": analysis_description if analysis_description else "Carte générée depuis l'analyse spatiale",
-                        "analysis_ref": idx
-                    })
-            st.success("Les cartes sélectionnées ont été ajoutées aux éléments du rapport.")
-    else:
-        st.info("Aucune carte issue de l'analyse spatiale n'est disponible pour le moment.")
+    st.markdown("### 📌 Ajouter une carte d'analyse spatiale")
+    analysis_card = create_analysis_card_controller()
+    if analysis_card:
+        # Vérifier pour éviter les doublons (basé sur l'indice de référence)
+        if not any(el.get("analysis_ref") == analysis_card.get("analysis_ref") for el in elements if el["type"] == "Image"):
+            elements.append(analysis_card)
+            st.success("Carte d'analyse ajoutée avec succès !")
     
     st.markdown("### Ajouter d'autres éléments")
     new_element = create_element_controller()
