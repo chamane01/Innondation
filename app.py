@@ -12,6 +12,7 @@ from folium.plugins import Draw
 from io import BytesIO
 from datetime import date, datetime
 import base64
+import contextily as ctx  # pour le fond de carte
 
 # ------------------------------
 # Partie ReportLab pour le rapport
@@ -138,9 +139,10 @@ def generate_contours(mosaic_file, drawing_geometry):
     Génère une figure matplotlib affichant les contours d'élévation
     pour la zone définie par drawing_geometry, en convertissant
     les données en coordonnées UTM. La figure est limitée à l'emprise
-    dessinée avec une marge de 5%, et tous les autres dessins (polygones,
-    lignes, marqueurs, etc.) sont tracés pour la partie qui se trouve
-    dans cette emprise.
+    dessinée (avec 5% de marge) et affiche, en arrière-plan, le fond de carte
+    (avec une opacité de 50%). Par ailleurs, pour chaque autre dessin (polygone,
+    ligne, marqueur, etc.) présent dans cette emprise, seule la partie intérieure
+    est tracée en noir (trait continu).
     """
     try:
         with rasterio.open(mosaic_file) as src:
@@ -185,7 +187,7 @@ def generate_contours(mosaic_file, drawing_geometry):
             # Conversion de la zone dessinée (en EPSG:4326) vers UTM
             from rasterio.warp import transform_geom
             geom_utm = transform_geom("EPSG:4326", utm_crs, drawing_geometry)
-            # Création de la forme shapely de la zone sélectionnée
+            # Création de l'enveloppe shapely de la zone dessinée
             envelope = shape(geom_utm)
 
             # Remplacement des pixels nodata par NaN
@@ -199,24 +201,23 @@ def generate_contours(mosaic_file, drawing_geometry):
 
             # Création de la figure en UTM
             fig, ax = plt.subplots(figsize=(8, 6))
-            cs = ax.contour(X_utm, Y_utm, data, levels=levels, cmap='terrain')
+            cs = ax.contour(X_utm, Y_utm, data, levels=levels, cmap='terrain', zorder=3)
             ax.clabel(cs, inline=True, fontsize=8)
             ax.set_title("Contours d'élévation (UTM)")
             ax.set_xlabel("UTM Easting")
             ax.set_ylabel("UTM Northing")
 
-            # Tracé de l'emprise dessinée en rouge
-            x_env, y_env = envelope.exterior.xy
-            ax.plot(x_env, y_env, color='red', linewidth=2, label="Zone dessinée")
-
-            # Définir les limites de l'affichage à l'emprise avec 5% de marge
+            # Limitation de l'affichage à l'enveloppe avec 5% de marge
             minx, miny, maxx, maxy = envelope.bounds
             dx = (maxx - minx) * 0.05
             dy = (maxy - miny) * 0.05
             ax.set_xlim(minx - dx, maxx + dx)
             ax.set_ylim(miny - dy, maxy + dy)
 
-            # Parcours de tous les dessins enregistrés et tracé (clippé à l'emprise)
+            # Ajout du fond de carte (basé sur le fond présent au moment de la génération)
+            ctx.add_basemap(ax, crs=utm_crs, source=ctx.providers.OpenStreetMap.Mapnik, alpha=0.5)
+
+            # Parcours de tous les dessins enregistrés et tracé de leur intersection avec l'enveloppe
             labels_plotted = {"Polygon": False, "LineString": False, "Point": False}
             if "raw_drawings" in st.session_state:
                 for d in st.session_state["raw_drawings"]:
@@ -225,10 +226,9 @@ def generate_contours(mosaic_file, drawing_geometry):
                             # Transformation de la géométrie du dessin depuis EPSG:4326 vers UTM
                             geom_other_utm = transform_geom("EPSG:4326", utm_crs, d["geometry"])
                             shapely_other = shape(geom_other_utm)
-                            # Calcul de l'intersection avec l'emprise dessinée
+                            # Calcul de l'intersection avec l'enveloppe dessinée
                             if shapely_other.intersects(envelope):
                                 clipped = shapely_other.intersection(envelope)
-                                # On trace selon le type de la géométrie clippée
                                 if clipped.is_empty:
                                     continue
                                 if clipped.geom_type in ["Polygon", "MultiPolygon"]:
@@ -236,31 +236,35 @@ def generate_contours(mosaic_file, drawing_geometry):
                                     labels_plotted["Polygon"] = True
                                     if clipped.geom_type == "Polygon":
                                         x_other, y_other = clipped.exterior.xy
-                                        ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=lbl)
+                                        ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=lbl, zorder=4)
                                     else:
                                         for part in clipped.geoms:
                                             x_other, y_other = part.exterior.xy
-                                            ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=lbl)
+                                            ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=lbl, zorder=4)
                                 elif clipped.geom_type in ["LineString", "MultiLineString"]:
                                     lbl = "Autre ligne" if not labels_plotted["LineString"] else None
                                     labels_plotted["LineString"] = True
                                     if clipped.geom_type == "LineString":
                                         x_other, y_other = clipped.xy
-                                        ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=lbl)
+                                        ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=lbl, zorder=4)
                                     else:
                                         for part in clipped.geoms:
                                             x_other, y_other = part.xy
-                                            ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=lbl)
+                                            ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=lbl, zorder=4)
                                 elif clipped.geom_type in ["Point", "MultiPoint"]:
                                     lbl = "Point" if not labels_plotted["Point"] else None
                                     labels_plotted["Point"] = True
                                     if clipped.geom_type == "Point":
-                                        ax.plot(clipped.x, clipped.y, 'o', color='black', markersize=8, label=lbl)
+                                        ax.plot(clipped.x, clipped.y, 'o', color='black', markersize=8, label=lbl, zorder=4)
                                     else:
                                         for part in clipped.geoms:
-                                            ax.plot(part.x, part.y, 'o', color='black', markersize=8, label=lbl)
+                                            ax.plot(part.x, part.y, 'o', color='black', markersize=8, label=lbl, zorder=4)
                         except Exception as e:
                             st.error(f"Erreur lors du tracé d'un dessin supplémentaire : {e}")
+
+            # Re-affichage de l'enveloppe dessinée en rouge pour garantir sa visibilité
+            x_env, y_env = envelope.exterior.xy
+            ax.plot(x_env, y_env, color='red', linewidth=2, label="Zone dessinée", zorder=5)
 
             ax.legend()
             return fig
