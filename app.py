@@ -74,7 +74,7 @@ def draw_metadata(c, metadata):
             img = ImageReader(metadata['logo'])
             img_width, img_height = img.getSize()
             aspect = img_height / img_width
-            desired_width = 40
+            desired_width = 40  # Taille réduite
             desired_height = desired_width * aspect
             
             c.drawImage(img, x_left, y_top - desired_height, 
@@ -88,7 +88,7 @@ def draw_metadata(c, metadata):
     c.setFont("Helvetica", 8)
     c.setFillColor(colors.darkgray)
     
-    # Ligne de séparation
+    # Ligne de séparation fine
     c.line(x_left, y_top - 5, x_left + 150, y_top - 5)
     y_top -= 15
     
@@ -97,8 +97,8 @@ def draw_metadata(c, metadata):
         ("ID Rapport", metadata['report_id']),
         ("Date", metadata['date'].strftime('%d/%m/%Y')),
         ("Heure", metadata['time'].strftime('%H:%M')),
-        ("Localisation", metadata['location']),
         ("Éditeur", metadata['editor']),
+        ("Localisation", metadata['location']),
         ("Société", metadata['company'])
     ]
     
@@ -115,7 +115,7 @@ def generate_pdf(elements, metadata):
     
     # Métadonnées techniques
     c.setAuthor(metadata['editor'])
-    c.setTitle(f"{metadata['report_id']} - {metadata['location']}")
+    c.setTitle(metadata['report_id'])
     
     # Éléments principaux
     for element in elements:
@@ -147,51 +147,40 @@ def main():
     st.title("📐 Conception de Rapport Structuré")
     
     # Configuration des métadonnées
-    with st.expander("⚙️ Métadonnées", expanded=True):
-        cols = st.columns(3)
-        with cols[0]:
-            report_id = st.text_input("ID Rapport")
-            report_date = st.date_input("Date", date.today())
-        with cols[1]:
-            location = st.text_input("Localisation")
-            company = st.text_input("Société")
-        with cols[2]:
-            editor = st.text_input("Éditeur")
-            logo = st.file_uploader("Logo", type=["png", "jpg", "jpeg"])
-            report_time = st.time_input("Heure", datetime.now().time())
-
+    with st.sidebar:
+        st.header("📝 Métadonnées")
+        report_id = st.text_input("ID du rapport")
+        report_date = st.date_input("Date du rapport", date.today())
+        report_time = st.time_input("Heure du rapport", datetime.now().time())
+        editor = st.text_input("Éditeur")
+        location = st.text_input("Localisation")
+        company = st.text_input("Société")
+        logo = st.file_uploader("Logo", type=["png", "jpg", "jpeg"])
+    
     metadata = {
         'report_id': report_id,
         'date': report_date,
         'time': report_time,
-        'location': location,
         'editor': editor,
+        'location': location,
         'company': company,
         'logo': logo
     }
     
     # Gestion des éléments
-    elements = []
-    while True:
-        element = create_element_controller()
-        if element:
-            elements.append(element)
-        else:
-            break
+    elements = st.session_state.get('elements', [])
     
-    # Génération du PDF
-    if st.button("🛠 Générer le PDF"):
-        if len(elements) == 0:
-            st.warning("Ajoutez au moins un élément avant de générer le PDF")
-        else:
+    new_element = create_element_controller()
+    if new_element:
+        elements.append(new_element)
+        st.session_state['elements'] = elements
+    
+    # Aperçu et génération
+    if elements:
+        if st.button("Générer le PDF"):
             pdf = generate_pdf(elements, metadata)
-            st.success("✅ PDF généré avec succès!")
-            st.download_button(
-                label="📥 Télécharger le PDF",
-                data=pdf,
-                file_name=f"{metadata['report_id']}_{metadata['location']}.pdf",
-                mime="application/pdf"
-            )
+            st.success("✅ Rapport généré avec succès!")
+            st.download_button("Télécharger le PDF", pdf, "rapport_structuré.pdf", "application/pdf")
 
 if __name__ == "__main__":
     main()
