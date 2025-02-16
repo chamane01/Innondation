@@ -71,6 +71,8 @@ def create_map(mosaic_file):
     """
     Crée une carte Folium affichant l'emprise de la mosaïque et intégrant
     l'outil de dessin pour pouvoir tracer à la fois des rectangles et des lignes.
+    Les dessins persistants (stockés dans st.session_state["raw_drawings"]) sont
+    ajoutés à la carte sous forme de GeoJSON.
     """
     m = folium.Map(location=[0, 0], zoom_start=2)
     
@@ -90,7 +92,15 @@ def create_map(mosaic_file):
     
     mosaic_group.add_to(m)
     
-    # Outils de dessin : rectangle pour contours, polyline pour profils
+    # Réaffichage des dessins persistants
+    if "raw_drawings" in st.session_state and st.session_state["raw_drawings"]:
+        for drawing in st.session_state["raw_drawings"]:
+            try:
+                folium.GeoJson(drawing, name="Dessin persistant").add_to(m)
+            except Exception as e:
+                st.error(f"Erreur lors de l'ajout d'un dessin persistant : {e}")
+    
+    # Outils de dessin
     Draw(
         draw_options={
             'rectangle': True,
@@ -225,13 +235,9 @@ def run_analysis_spatiale():
     st.title("🔍 Analyse Spatiale")
     st.info("Ce module vous permet de générer des contours (à partir de rectangles dessinés) ou des profils d'élévation (à partir de lignes).")
     
-    # Initialisation du mode pour cette partie (id unique)
+    # Initialisation du mode pour cette partie
     if "analysis_mode" not in st.session_state:
         st.session_state["analysis_mode"] = "none"
-    
-    # Initialisation pour conserver les dessins
-    if "raw_drawings" not in st.session_state:
-        st.session_state["raw_drawings"] = []
     
     # Saisie du nom de la carte
     map_name = st.text_input("Nom de votre carte", value="Ma Carte", key="analysis_map_name")
@@ -316,7 +322,8 @@ def run_analysis_spatiale():
 # ==============================
 
 def create_element_controller():
-    with st.expander("➕ Ajouter un élément", expanded=True, key="rapport_elem_expander"):
+    # Pour éviter des conflits de clés, nous n'utilisons pas ici de paramètre key dans l'expander
+    with st.expander("➕ Ajouter un élément", expanded=True):
         col1, col2 = st.columns(2)
         with col1:
             elem_type = st.selectbox("Type", ["Image", "Texte"], key="elem_type")
@@ -510,7 +517,7 @@ def display_elements_preview(elements):
 def run_report():
     st.title("📄 Génération de Rapport")
     
-    # Sidebar dédiée au rapport (identifiant unique)
+    # Sidebar dédiée au rapport
     with st.sidebar:
         st.header("📝 Métadonnées du Rapport")
         titre = st.text_input("Titre principal", key="rapport_titre")
