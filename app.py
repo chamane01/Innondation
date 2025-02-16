@@ -63,67 +63,50 @@ def calculate_position(element):
     return (x, PAGE_HEIGHT - vertical_offset - SECTION_HEIGHT)
 
 def draw_metadata(c, metadata):
-    margin = 50
-    x_right = PAGE_WIDTH - margin
-    y_top = PAGE_HEIGHT - margin - 20
-    line_height = 16
+    margin = 40
+    x_left = margin
+    y_top = PAGE_HEIGHT - margin
+    line_height = 14
     
-    # Encadré principal
-    c.setFillColor(colors.lightblue)
-    c.rect(x_right - 210, y_top - 140, 200, 140, fill=1, stroke=0)
-    
-    # Logo
+    # Logo compact
     if metadata['logo']:
         try:
             img = ImageReader(metadata['logo'])
             img_width, img_height = img.getSize()
             aspect = img_height / img_width
-            desired_width = 60
+            desired_width = 40  # Taille réduite
             desired_height = desired_width * aspect
             
-            # Fond du logo
-            c.setFillColor(colors.white)
-            c.rect(x_right - desired_width - 15, y_top - desired_height - 15, 
-                   desired_width + 30, desired_height + 30, fill=1, stroke=0)
-            
-            c.drawImage(img, x_right - desired_width - 5, y_top - desired_height - 5, 
+            c.drawImage(img, x_left, y_top - desired_height, 
                        width=desired_width, height=desired_height, 
                        preserveAspectRatio=True, mask='auto')
-            y_top -= desired_height + 40
+            y_top -= desired_height + 10
         except Exception as e:
             st.error(f"Erreur de chargement du logo: {str(e)}")
 
-    # Titre section
-    c.setFont("Helvetica-Bold", 12)
-    c.setFillColor(colors.darkblue)
-    c.drawString(x_right - 190, y_top - 20, "MÉTADONNÉES")
+    # Style minimaliste
+    c.setFont("Helvetica", 8)
+    c.setFillColor(colors.darkgray)
     
-    # Ligne séparatrice
-    c.setStrokeColor(colors.darkblue)
-    c.line(x_right - 190, y_top - 30, x_right - 10, y_top - 30)
+    # Ligne de séparation fine
+    c.line(x_left, y_top - 5, x_left + 150, y_top - 5)
+    y_top -= 15
     
-    # Liste des métadonnées
+    # Métadonnées essentielles
     infos = [
         ("ID", metadata['report_id']),
-        ("Date", f"{metadata['date'].strftime('%d/%m/%Y')} {metadata['time'].strftime('%H:%M')}"),
-        ("Lieu", metadata['location']),
-        ("Rédacteur", metadata['editor']),
-        ("Société", metadata['company'])
+        ("Date", metadata['date'].strftime('%d/%m/%Y')),
+        ("Heure", metadata['time'].strftime('%H:%M')),
+        (metadata['location'], metadata['editor']),
+        (metadata['company'], "")
     ]
     
-    y_pos = y_top - 50
-    for label, value in infos:
-        # Label
-        c.setFont("Helvetica-Bold", 9)
-        c.setFillColor(colors.darkblue)
-        c.drawString(x_right - 190, y_pos, label)
-        
-        # Valeur
-        c.setFont("Helvetica", 9)
-        c.setFillColor(colors.black)
-        c.drawString(x_right - 190 + 45, y_pos, value)
-        
-        y_pos -= line_height
+    for line in infos:
+        c.setFont("Helvetica-Bold", 8)
+        c.drawString(x_left, y_top, line[0])
+        c.setFont("Helvetica", 8)
+        c.drawString(x_left + 60, y_top, line[1])
+        y_top -= line_height
 
 def generate_pdf(elements, metadata):
     buffer = BytesIO()
@@ -132,7 +115,6 @@ def generate_pdf(elements, metadata):
     # Métadonnées techniques
     c.setAuthor(metadata['editor'])
     c.setTitle(metadata['report_id'])
-    c.setSubject(f"Rapport {metadata['company']} - {metadata['date']}")
     
     # Éléments principaux
     for element in elements:
@@ -167,13 +149,13 @@ def main():
     with st.expander("⚙️ Métadonnées", expanded=True):
         col1, col2 = st.columns(2)
         with col1:
-            report_id = st.text_input("ID du rapport", value=f"RAPPORT-{datetime.now().strftime('%Y%m%d%H%M')}")
-            company = st.text_input("Société", value="ENTREPRISE SARL")
-            location = st.text_input("Lieu", value="Paris")
+            report_id = st.text_input("ID du rapport", value=f"RPT-{datetime.now().strftime('%y%m%d%H%M')}")
+            company = st.text_input("Société", value="SARL")
         with col2:
             report_date = st.date_input("Date", value=date.today())
             report_time = st.time_input("Heure", value=datetime.now().time())
-            editor = st.text_input("Rédacteur", value="John Doe")
+            location = st.text_input("Lieu", value="VILLE")
+            editor = st.text_input("Rédacteur", value="NOM")
             logo = st.file_uploader("Logo", type=["png", "jpg", "jpeg"])
     
     metadata = {
@@ -195,7 +177,7 @@ def main():
     # Affichage et génération
     if elements:
         with st.container():
-            st.markdown("### Prévisualisation Structurée")
+            st.markdown("### Prévisualisation")
             for element in elements:
                 with st.container(border=True):
                     cols = st.columns([1,4])
@@ -209,7 +191,7 @@ def main():
         
         pdf_buffer = generate_pdf(elements, metadata)
         st.download_button(
-            label="📤 Exporter le PDF",
+            label="📤 Exporter PDF",
             data=pdf_buffer,
             file_name=f"{report_id}.pdf",
             mime="application/pdf"
