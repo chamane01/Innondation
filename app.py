@@ -140,9 +140,9 @@ def generate_contours(mosaic_file, drawing_geometry):
     pour la zone définie par drawing_geometry, en convertissant
     les données en coordonnées UTM. La figure est limitée à l'emprise
     dessinée (avec 5% de marge) et affiche, en arrière-plan, le fond de carte
-    (avec une opacité de 50%). Par ailleurs, pour chaque autre dessin (polygone,
-    ligne, marqueur, etc.) présent dans cette emprise, seule la partie intérieure
-    est tracée en noir (trait continu).
+    (avec une opacité de 50%). Pour chaque autre dessin présent dans cette
+    emprise, seule la partie intérieure est tracée en noir (trait continu) et
+    est annotée avec son nom (par défaut "polygone" ou "profils").
     """
     try:
         with rasterio.open(mosaic_file) as src:
@@ -214,7 +214,7 @@ def generate_contours(mosaic_file, drawing_geometry):
             ax.set_xlim(minx - dx, maxx + dx)
             ax.set_ylim(miny - dy, maxy + dy)
 
-            # Ajout du fond de carte (basé sur le fond présent au moment de la génération)
+            # Ajout du fond de carte (basé sur le fond présent) avec opacité 50%
             ctx.add_basemap(ax, crs=utm_crs, source=ctx.providers.OpenStreetMap.Mapnik, alpha=0.5)
 
             # Parcours de tous les dessins enregistrés et tracé de leur intersection avec l'enveloppe
@@ -231,26 +231,37 @@ def generate_contours(mosaic_file, drawing_geometry):
                                 clipped = shapely_other.intersection(envelope)
                                 if clipped.is_empty:
                                     continue
+                                # Pour les polygones : label "polygone"
                                 if clipped.geom_type in ["Polygon", "MultiPolygon"]:
-                                    lbl = "Autre polygone" if not labels_plotted["Polygon"] else None
+                                    lbl = "polygone" if not labels_plotted["Polygon"] else None
                                     labels_plotted["Polygon"] = True
                                     if clipped.geom_type == "Polygon":
                                         x_other, y_other = clipped.exterior.xy
                                         ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=lbl, zorder=4)
+                                        centroid = clipped.centroid
+                                        ax.text(centroid.x, centroid.y, "polygone", fontsize=8, color='black', ha='center', va='center', zorder=6)
                                     else:
                                         for part in clipped.geoms:
                                             x_other, y_other = part.exterior.xy
                                             ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=lbl, zorder=4)
+                                            centroid = part.centroid
+                                            ax.text(centroid.x, centroid.y, "polygone", fontsize=8, color='black', ha='center', va='center', zorder=6)
+                                # Pour les lignes : label "profils"
                                 elif clipped.geom_type in ["LineString", "MultiLineString"]:
-                                    lbl = "Autre ligne" if not labels_plotted["LineString"] else None
+                                    lbl = "profils" if not labels_plotted["LineString"] else None
                                     labels_plotted["LineString"] = True
                                     if clipped.geom_type == "LineString":
                                         x_other, y_other = clipped.xy
                                         ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=lbl, zorder=4)
+                                        centroid = clipped.centroid
+                                        ax.text(centroid.x, centroid.y, "profils", fontsize=8, color='black', ha='center', va='center', zorder=6)
                                     else:
                                         for part in clipped.geoms:
                                             x_other, y_other = part.xy
                                             ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=lbl, zorder=4)
+                                            centroid = part.centroid
+                                            ax.text(centroid.x, centroid.y, "profils", fontsize=8, color='black', ha='center', va='center', zorder=6)
+                                # Pour les points : on laisse le label par défaut
                                 elif clipped.geom_type in ["Point", "MultiPoint"]:
                                     lbl = "Point" if not labels_plotted["Point"] else None
                                     labels_plotted["Point"] = True
@@ -262,11 +273,15 @@ def generate_contours(mosaic_file, drawing_geometry):
                         except Exception as e:
                             st.error(f"Erreur lors du tracé d'un dessin supplémentaire : {e}")
 
-            # Re-affichage de l'enveloppe dessinée en rouge pour garantir sa visibilité
+            # Re-affichage de l'enveloppe dessinée en rouge pour garantir sa visibilité (le contour doit rester rouge)
             x_env, y_env = envelope.exterior.xy
             ax.plot(x_env, y_env, color='red', linewidth=2, label="Zone dessinée", zorder=5)
 
-            ax.legend()
+            # Placement de la légende en bas à droite, avec fond blanc et taille réduite de 20%
+            leg = ax.legend(loc='lower right', framealpha=1, facecolor='white', fontsize=8)
+            # Optionnel : on peut ajuster la taille du cadre si nécessaire
+            for text in leg.get_texts():
+                text.set_fontsize(8)
             return fig
     except Exception as e:
         st.error(f"Erreur lors de la génération des contours : {e}")
