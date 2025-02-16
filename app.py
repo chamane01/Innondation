@@ -1,4 +1,4 @@
-import streamlit as st 
+import streamlit as st
 import os
 import rasterio
 import rasterio.merge
@@ -270,10 +270,8 @@ def run_analysis_spatiale():
     map_data = st_folium(m, width=700, height=500, key="analysis_map")
     
     # Sauvegarder les dessins dans la session pour persistance
-    raw_drawings = st.session_state.get("raw_drawings", [])
-    if not isinstance(raw_drawings, list):
-        raw_drawings = []
-    st.session_state["raw_drawings"] = raw_drawings
+    if map_data is not None and isinstance(map_data, dict) and "all_drawings" in map_data:
+        st.session_state["raw_drawings"] = map_data["all_drawings"]
     
     # Menu de sélection du mode
     options_container = st.container()
@@ -288,45 +286,44 @@ def run_analysis_spatiale():
     if st.session_state["analysis_mode"] == "contours":
         st.subheader("Générer des contours")
         drawing_geometries = []
-        # Sélectionner uniquement les dessins de type Polygon
+        raw_drawings = st.session_state.get("raw_drawings") or []  # Correction ici
+        # Sélectionner uniquement les dessins de type Polygon (issus du rectangle ou autres polygones)
         for drawing in raw_drawings:
             if isinstance(drawing, dict) and drawing.get("geometry", {}).get("type") == "Polygon":
                 drawing_geometries.append(drawing.get("geometry"))
         if not drawing_geometries:
             st.warning("Veuillez dessiner au moins un rectangle sur la carte pour définir une zone.")
         else:
+            # Permettre de sélectionner parmi les rectangles dessinés
             options_list = [f"Rectangle {i+1}" for i in range(len(drawing_geometries))]
             selected_indices = st.multiselect("Sélectionnez les rectangles pour générer des contours", options=options_list)
             if st.button("Générer les contours sélectionnés", key="generate_selected_contours"):
-                # Créer une nouvelle carte avec overlays
                 updated_map = create_map(mosaic_path)
-                # Créer un groupe de calques pour les contours
-                contours_group = folium.FeatureGroup(name="Contours")
+                # Créer un groupe de couche pour les contours
+                contour_group = folium.FeatureGroup(name="Contours")
                 for sel in selected_indices:
                     idx = int(sel.split()[1]) - 1  # extraire l'indice
                     geometry = drawing_geometries[idx]
                     fig = generate_contours(mosaic_path, geometry)
                     if fig is not None:
-                        st.pyplot(fig)  # afficher la figure dans Streamlit
+                        st.pyplot(fig)  # afficher la figure
                         store_figure(fig, "contour", f"Contours - Emprise {idx+1}")
-                        # Convertir la figure en image et créer un overlay
                         buf = BytesIO()
                         fig.savefig(buf, format="png", bbox_inches="tight")
                         buf.seek(0)
                         image_data = buf.getvalue()
                         data_url = image_bytes_to_data_url(image_data)
                         bounds = get_bounds_from_geometry(geometry)
-                        overlay = folium.raster_layers.ImageOverlay(
+                        folium.raster_layers.ImageOverlay(
                             image=data_url,
                             bounds=bounds,
                             opacity=0.6,
                             interactive=True,
                             cross_origin=False,
-                            zindex=1,
-                            name=f"Contours {idx+1}"
-                        )
-                        overlay.add_to(contours_group)
-                contours_group.add_to(updated_map)
+                            zindex=1
+                        ).add_to(contour_group)
+                # Ajouter le groupe de contours à la carte
+                updated_map.add_child(contour_group)
                 st_folium(updated_map, width=700, height=500, key="analysis_map_updated")
         if st.button("Retour", key="retour_contours"):
             st.session_state["analysis_mode"] = "none"
@@ -334,10 +331,10 @@ def run_analysis_spatiale():
     # Mode Tracer des profils (ligne)
     if st.session_state["analysis_mode"] == "profiles":
         st.subheader("Tracer des profils")
-        raw_drawings = st.session_state.get("raw_drawings", [])
-        if not isinstance(raw_drawings, list):
-            raw_drawings = []
-        current_drawings = [d for d in raw_drawings if isinstance(d, dict) and d.get("geometry", {}).get("type") == "LineString"]
+        raw_drawings = st.session_state.get("raw_drawings") or []
+        current_drawings = []
+        if isinstance(raw_drawings, list):
+            current_drawings = [d for d in raw_drawings if isinstance(d, dict) and d.get("geometry", {}).get("type") == "LineString"]
         if not current_drawings:
             st.info("Aucune ligne tracée pour le moment. Veuillez dessiner une ligne sur la carte.")
         else:
@@ -365,10 +362,12 @@ def create_analysis_card_controller():
             st.info("Aucune carte d'analyse spatiale n'est disponible pour le moment.")
             return None
         
+        # Sélection d'une carte issue des résultats d'analyse
         options = {f"{i+1} - {res['title']}": i for i, res in enumerate(st.session_state["analysis_results"])}
         chosen = st.selectbox("Choisissez une carte", list(options.keys()), key="analysis_card_select")
         idx = options[chosen]
         
+        # Paramètres similaires à ceux du téléversement d'images
         col1, col2 = st.columns(2)
         with col1:
             size = st.selectbox("Taille", ["Grand", "Moyen", "Petit"], key="analysis_card_size")
@@ -631,6 +630,7 @@ def run_report():
     st.markdown("### 📌 Ajouter une carte d'analyse spatiale")
     analysis_card = create_analysis_card_controller()
     if analysis_card:
+        # Éviter les doublons en se basant sur 'analysis_ref'
         if not any(el.get("analysis_ref") == analysis_card.get("analysis_ref") for el in elements if el["type"] == "Image"):
             elements.append(analysis_card)
             st.success("Carte d'analyse ajoutée avec succès !")
@@ -667,3 +667,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    run_analysis_spatiale()
