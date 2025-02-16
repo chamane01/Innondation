@@ -230,8 +230,7 @@ def run_analysis_spatiale():
         st.session_state["analysis_mode"] = "none"
     
     # Initialisation pour conserver les dessins
-    if "raw_drawings" not in st.session_state:
-        st.session_state["raw_drawings"] = []
+    st.session_state.setdefault("raw_drawings", [])
     
     # Saisie du nom de la carte
     map_name = st.text_input("Nom de votre carte", value="Ma Carte", key="analysis_map_name")
@@ -319,21 +318,21 @@ def create_element_controller():
     with st.expander("➕ Ajouter un élément", expanded=True, key="rapport_elem_expander"):
         col1, col2 = st.columns(2)
         with col1:
-            elem_type = st.selectbox("Type", ["Image", "Texte"], key="elem_type")
-            size = st.selectbox("Taille", ["Grand", "Moyen", "Petit"], key="elem_size")
+            elem_type = st.selectbox("Type", ["Image", "Texte"], key="rapport_elem_type")
+            size = st.selectbox("Taille", ["Grand", "Moyen", "Petit"], key="rapport_elem_size")
         with col2:
-            vertical_pos = st.selectbox("Position verticale", ["Haut", "Milieu", "Bas"], key="v_pos")
+            vertical_pos = st.selectbox("Position verticale", ["Haut", "Milieu", "Bas"], key="rapport_v_pos")
             horizontal_options = ["Gauche", "Droite", "Centre"] if size == "Petit" else ["Gauche", "Droite"]
-            horizontal_pos = st.selectbox("Position horizontale", horizontal_options, key="h_pos")
+            horizontal_pos = st.selectbox("Position horizontale", horizontal_options, key="rapport_h_pos")
         
         if elem_type == "Image":
-            content = st.file_uploader("Contenu (image)", type=["png", "jpg", "jpeg"], key="content_image")
-            image_title = st.text_input("Titre de l'image", max_chars=50, key="image_title")
-            description = st.text_input("Description brève (max 100 caractères)", max_chars=100, key="image_desc")
+            content = st.file_uploader("Contenu (image)", type=["png", "jpg", "jpeg"], key="rapport_content_image")
+            image_title = st.text_input("Titre de l'image", max_chars=50, key="rapport_image_title")
+            description = st.text_input("Description brève (max 100 caractères)", max_chars=100, key="rapport_image_desc")
         else:
-            content = st.text_area("Contenu", key="content_text")
+            content = st.text_area("Contenu", key="rapport_content_text")
         
-        if st.button("Valider l'élément", key="validate_element"):
+        if st.button("Valider l'élément", key="rapport_validate_element"):
             if elem_type == "Image" and content is None:
                 st.error("Veuillez charger une image pour cet élément.")
                 return None
