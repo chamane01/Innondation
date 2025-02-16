@@ -137,9 +137,10 @@ def generate_contours(mosaic_file, drawing_geometry):
     """
     Génère une figure matplotlib affichant les contours d'élévation
     pour la zone définie par drawing_geometry, en convertissant
-    les données en coordonnées UTM. En plus de la zone sélectionnée,
-    tous les autres dessins (polygones, lignes, marqueurs, etc.) qui
-    se trouvent dans cette emprise sont tracés.
+    les données en coordonnées UTM. La figure est limitée à l'emprise
+    dessinée avec une marge de 5%, et tous les autres dessins (polygones,
+    lignes, marqueurs, etc.) sont tracés pour la partie qui se trouve
+    dans cette emprise.
     """
     try:
         with rasterio.open(mosaic_file) as src:
@@ -185,7 +186,7 @@ def generate_contours(mosaic_file, drawing_geometry):
             from rasterio.warp import transform_geom
             geom_utm = transform_geom("EPSG:4326", utm_crs, drawing_geometry)
             # Création de la forme shapely de la zone sélectionnée
-            poly = shape(geom_utm)
+            envelope = shape(geom_utm)
 
             # Remplacement des pixels nodata par NaN
             if nodata is not None:
@@ -204,11 +205,18 @@ def generate_contours(mosaic_file, drawing_geometry):
             ax.set_xlabel("UTM Easting")
             ax.set_ylabel("UTM Northing")
 
-            # Tracé de la zone sélectionnée (en rouge)
-            x_poly, y_poly = poly.exterior.xy
-            ax.plot(x_poly, y_poly, color='red', linewidth=2, label="Zone dessinée")
+            # Tracé de l'emprise dessinée en rouge
+            x_env, y_env = envelope.exterior.xy
+            ax.plot(x_env, y_env, color='red', linewidth=2, label="Zone dessinée")
 
-            # Parcours de tous les dessins enregistrés et tracés s'ils intersectent la zone
+            # Définir les limites de l'affichage à l'emprise avec 5% de marge
+            minx, miny, maxx, maxy = envelope.bounds
+            dx = (maxx - minx) * 0.05
+            dy = (maxy - miny) * 0.05
+            ax.set_xlim(minx - dx, maxx + dx)
+            ax.set_ylim(miny - dy, maxy + dy)
+
+            # Parcours de tous les dessins enregistrés et tracé (clippé à l'emprise)
             labels_plotted = {"Polygon": False, "LineString": False, "Point": False}
             if "raw_drawings" in st.session_state:
                 for d in st.session_state["raw_drawings"]:
@@ -217,40 +225,40 @@ def generate_contours(mosaic_file, drawing_geometry):
                             # Transformation de la géométrie du dessin depuis EPSG:4326 vers UTM
                             geom_other_utm = transform_geom("EPSG:4326", utm_crs, d["geometry"])
                             shapely_other = shape(geom_other_utm)
-                            # Si le dessin intersecte la zone sélectionnée
-                            if shapely_other.intersects(poly):
-                                # Éviter de retracer la zone sélectionnée (exactement identique)
-                                if shapely_other.equals(poly):
+                            # Calcul de l'intersection avec l'emprise dessinée
+                            if shapely_other.intersects(envelope):
+                                clipped = shapely_other.intersection(envelope)
+                                # On trace selon le type de la géométrie clippée
+                                if clipped.is_empty:
                                     continue
-                                # Tracé selon le type géométrique
-                                if shapely_other.geom_type in ["Polygon", "MultiPolygon"]:
-                                    lbl = "Autre polygon" if not labels_plotted["Polygon"] else None
+                                if clipped.geom_type in ["Polygon", "MultiPolygon"]:
+                                    lbl = "Autre polygone" if not labels_plotted["Polygon"] else None
                                     labels_plotted["Polygon"] = True
-                                    if shapely_other.geom_type == "Polygon":
-                                        x_other, y_other = shapely_other.exterior.xy
-                                        ax.plot(x_other, y_other, color='green', linestyle='--', linewidth=2, label=lbl)
+                                    if clipped.geom_type == "Polygon":
+                                        x_other, y_other = clipped.exterior.xy
+                                        ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=lbl)
                                     else:
-                                        for part in shapely_other.geoms:
+                                        for part in clipped.geoms:
                                             x_other, y_other = part.exterior.xy
-                                            ax.plot(x_other, y_other, color='green', linestyle='--', linewidth=2, label=lbl)
-                                elif shapely_other.geom_type in ["LineString", "MultiLineString"]:
-                                    lbl = "Ligne" if not labels_plotted["LineString"] else None
+                                            ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=lbl)
+                                elif clipped.geom_type in ["LineString", "MultiLineString"]:
+                                    lbl = "Autre ligne" if not labels_plotted["LineString"] else None
                                     labels_plotted["LineString"] = True
-                                    if shapely_other.geom_type == "LineString":
-                                        x_other, y_other = shapely_other.xy
-                                        ax.plot(x_other, y_other, color='blue', linestyle='-', linewidth=2, label=lbl)
+                                    if clipped.geom_type == "LineString":
+                                        x_other, y_other = clipped.xy
+                                        ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=lbl)
                                     else:
-                                        for part in shapely_other.geoms:
+                                        for part in clipped.geoms:
                                             x_other, y_other = part.xy
-                                            ax.plot(x_other, y_other, color='blue', linestyle='-', linewidth=2, label=lbl)
-                                elif shapely_other.geom_type in ["Point", "MultiPoint"]:
+                                            ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=lbl)
+                                elif clipped.geom_type in ["Point", "MultiPoint"]:
                                     lbl = "Point" if not labels_plotted["Point"] else None
                                     labels_plotted["Point"] = True
-                                    if shapely_other.geom_type == "Point":
-                                        ax.plot(shapely_other.x, shapely_other.y, 'o', color='orange', markersize=8, label=lbl)
+                                    if clipped.geom_type == "Point":
+                                        ax.plot(clipped.x, clipped.y, 'o', color='black', markersize=8, label=lbl)
                                     else:
-                                        for part in shapely_other.geoms:
-                                            ax.plot(part.x, part.y, 'o', color='orange', markersize=8, label=lbl)
+                                        for part in clipped.geoms:
+                                            ax.plot(part.x, part.y, 'o', color='black', markersize=8, label=lbl)
                         except Exception as e:
                             st.error(f"Erreur lors du tracé d'un dessin supplémentaire : {e}")
 
