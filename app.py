@@ -120,8 +120,7 @@ def create_map(mosaic_file):
     # Outils de dessin
     Draw(
         draw_options={
-            # Modification ici : on définit pour les polylignes allowIntersection à True
-            # et on précise des options de style pour que les segments soient visibles pendant le dessin.
+            # Pour les polylignes, on autorise les intersections et on spécifie un style
             'polyline': {'allowIntersection': True, 'shapeOptions': {'color': 'black', 'weight': 2}},
             'polygon': True,
             'rectangle': True,
@@ -136,14 +135,15 @@ def create_map(mosaic_file):
     
     return m
 
-def generate_contours(mosaic_file, drawing_geometry):
+def generate_contours(mosaic_file, drawing_geometry, show_basemap=True):
     """
     Génère une figure matplotlib affichant les contours d'élévation
     pour la zone définie par drawing_geometry, en convertissant
     les données en coordonnées UTM. La figure est limitée à l'emprise
     dessinée (avec 5% de marge) et affiche, en arrière-plan, le fond de carte
-    (avec une opacité de 50%). Pour chaque autre dessin présent dans cette
-    emprise, seule la partie intérieure est tracée en noir (trait continu).
+    (avec une opacité de 50%) si le paramètre show_basemap est activé.
+    Pour chaque autre dessin présent dans cette emprise, seule la partie intérieure
+    est tracée en noir (trait continu).
 
     Les modifications apportées sont les suivantes :
       - Dans la légende, une seule entrée par classe de dessin est affichée (ex. "Profil")
@@ -221,8 +221,9 @@ def generate_contours(mosaic_file, drawing_geometry):
             ax.set_xlim(minx - dx, maxx + dx)
             ax.set_ylim(miny - dy, maxy + dy)
 
-            # Ajout du fond de carte (basé sur le fond présent) avec opacité 50%
-            ctx.add_basemap(ax, crs=utm_crs, source=ctx.providers.OpenStreetMap.Mapnik, alpha=0.5)
+            # Ajout conditionnel du fond de carte selon le paramètre show_basemap
+            if show_basemap:
+                ctx.add_basemap(ax, crs=utm_crs, source=ctx.providers.OpenStreetMap.Mapnik, alpha=0.5)
 
             # Initialisation des flags pour la légende
             added_profile = False
@@ -442,6 +443,8 @@ def run_analysis_spatiale():
     # Mode Générer des contours (à partir de rectangles dessinés)
     if st.session_state["analysis_mode"] == "contours":
         st.subheader("Générer des contours")
+        # Ajout du bouton à cocher pour l'affichage du fond de carte
+        show_basemap = st.checkbox("Afficher le fond de carte", value=True)
         drawing_geometries = []
         raw_drawings = st.session_state.get("raw_drawings") or []
         # Sélectionner uniquement les dessins de type Polygon (issus d'un rectangle ou d'un polygone)
@@ -458,7 +461,7 @@ def run_analysis_spatiale():
                 for sel in selected_indices:
                     idx = int(sel.split()[1]) - 1  # extraire l'indice
                     geometry = drawing_geometries[idx]
-                    fig = generate_contours(mosaic_path, geometry)
+                    fig = generate_contours(mosaic_path, geometry, show_basemap=show_basemap)
                     if fig is not None:
                         st.pyplot(fig)
                         store_figure(fig, "contour", f"Contours - Emprise {idx+1}")
