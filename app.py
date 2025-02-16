@@ -1,4 +1,4 @@
-import streamlit as st
+import streamlit as st 
 import os
 import rasterio
 import rasterio.merge
@@ -141,8 +141,13 @@ def generate_contours(mosaic_file, drawing_geometry):
     les données en coordonnées UTM. La figure est limitée à l'emprise
     dessinée (avec 5% de marge) et affiche, en arrière-plan, le fond de carte
     (avec une opacité de 50%). Pour chaque autre dessin présent dans cette
-    emprise, seule la partie intérieure est tracée en noir (trait continu) et
-    est annotée avec son nom (par défaut "polygone" ou "profils").
+    emprise, seule la partie intérieure est tracée en noir (trait continu).
+    
+    Modifications apportées :
+      - La géométrie (polygonale) utilisée pour générer la carte de contours
+        n'est pas prise en compte dans l'annotation.
+      - Pour les lignes (profils), un numéro est ajouté (ex. "Profil 1", "Profil 2")
+        et le texte est orienté pour suivre le trait.
     """
     try:
         with rasterio.open(mosaic_file) as src:
@@ -218,10 +223,13 @@ def generate_contours(mosaic_file, drawing_geometry):
             ctx.add_basemap(ax, crs=utm_crs, source=ctx.providers.OpenStreetMap.Mapnik, alpha=0.5)
 
             # Parcours de tous les dessins enregistrés et tracé de leur intersection avec l'enveloppe
-            labels_plotted = {"Polygon": False, "LineString": False, "Point": False}
+            profile_counter = 1  # compteur pour numéroter les profils
             if "raw_drawings" in st.session_state:
                 for d in st.session_state["raw_drawings"]:
                     if isinstance(d, dict) and "geometry" in d:
+                        # Exclure la géométrie utilisée pour générer les contours
+                        if d.get("geometry") == drawing_geometry:
+                            continue
                         try:
                             # Transformation de la géométrie du dessin depuis EPSG:4326 vers UTM
                             geom_other_utm = transform_geom("EPSG:4326", utm_crs, d["geometry"])
@@ -231,45 +239,51 @@ def generate_contours(mosaic_file, drawing_geometry):
                                 clipped = shapely_other.intersection(envelope)
                                 if clipped.is_empty:
                                     continue
-                                # Pour les polygones : label "polygone"
+                                # Pour les polygones : on trace le contour sans ajouter de texte
                                 if clipped.geom_type in ["Polygon", "MultiPolygon"]:
-                                    lbl = "polygone" if not labels_plotted["Polygon"] else None
-                                    labels_plotted["Polygon"] = True
                                     if clipped.geom_type == "Polygon":
                                         x_other, y_other = clipped.exterior.xy
-                                        ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=lbl, zorder=4)
-                                        centroid = clipped.centroid
-                                        ax.text(centroid.x, centroid.y, "polygone", fontsize=8, color='black', ha='center', va='center', zorder=6)
+                                        ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, zorder=4)
                                     else:
                                         for part in clipped.geoms:
                                             x_other, y_other = part.exterior.xy
-                                            ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=lbl, zorder=4)
-                                            centroid = part.centroid
-                                            ax.text(centroid.x, centroid.y, "polygone", fontsize=8, color='black', ha='center', va='center', zorder=6)
-                                # Pour les lignes : label "profils"
+                                            ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, zorder=4)
+                                # Pour les lignes : ajouter le numéro du profil et faire suivre l'écriture sur le trait
                                 elif clipped.geom_type in ["LineString", "MultiLineString"]:
-                                    lbl = "profils" if not labels_plotted["LineString"] else None
-                                    labels_plotted["LineString"] = True
+                                    lbl = f"Profil {profile_counter}"
+                                    profile_counter += 1
                                     if clipped.geom_type == "LineString":
                                         x_other, y_other = clipped.xy
                                         ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=lbl, zorder=4)
+                                        # Calcul de l'angle du trait pour orienter le texte
+                                        if len(x_other) >= 2:
+                                            dx = x_other[1] - x_other[0]
+                                            dy = y_other[1] - y_other[0]
+                                            angle = np.degrees(np.arctan2(dy, dx))
+                                        else:
+                                            angle = 0
                                         centroid = clipped.centroid
-                                        ax.text(centroid.x, centroid.y, "profils", fontsize=8, color='black', ha='center', va='center', zorder=6)
+                                        ax.text(centroid.x, centroid.y, lbl, fontsize=8, color='black', ha='center', va='center', rotation=angle, zorder=6)
                                     else:
+                                        # Pour MultiLineString, appliquer le label à chaque partie
                                         for part in clipped.geoms:
                                             x_other, y_other = part.xy
                                             ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=lbl, zorder=4)
+                                            if len(x_other) >= 2:
+                                                dx = x_other[1] - x_other[0]
+                                                dy = y_other[1] - y_other[0]
+                                                angle = np.degrees(np.arctan2(dy, dx))
+                                            else:
+                                                angle = 0
                                             centroid = part.centroid
-                                            ax.text(centroid.x, centroid.y, "profils", fontsize=8, color='black', ha='center', va='center', zorder=6)
-                                # Pour les points : on laisse le label par défaut
+                                            ax.text(centroid.x, centroid.y, lbl, fontsize=8, color='black', ha='center', va='center', rotation=angle, zorder=6)
+                                # Pour les points : on laisse le tracé sans texte
                                 elif clipped.geom_type in ["Point", "MultiPoint"]:
-                                    lbl = "Point" if not labels_plotted["Point"] else None
-                                    labels_plotted["Point"] = True
                                     if clipped.geom_type == "Point":
-                                        ax.plot(clipped.x, clipped.y, 'o', color='black', markersize=8, label=lbl, zorder=4)
+                                        ax.plot(clipped.x, clipped.y, 'o', color='black', markersize=8, zorder=4)
                                     else:
                                         for part in clipped.geoms:
-                                            ax.plot(part.x, part.y, 'o', color='black', markersize=8, label=lbl, zorder=4)
+                                            ax.plot(part.x, part.y, 'o', color='black', markersize=8, zorder=4)
                         except Exception as e:
                             st.error(f"Erreur lors du tracé d'un dessin supplémentaire : {e}")
 
@@ -279,7 +293,6 @@ def generate_contours(mosaic_file, drawing_geometry):
 
             # Placement de la légende en bas à droite, avec fond blanc et taille réduite de 20%
             leg = ax.legend(loc='lower right', framealpha=1, facecolor='white', fontsize=8)
-            # Optionnel : on peut ajuster la taille du cadre si nécessaire
             for text in leg.get_texts():
                 text.set_fontsize(8)
             return fig
@@ -576,7 +589,6 @@ def draw_metadata(c, metadata):
             aspect = img_height / img_width
             desired_width = 40
             desired_height = desired_width * aspect
-            
             c.drawImage(img, x_left, y_top - desired_height, width=desired_width, height=desired_height, preserveAspectRatio=True, mask='auto')
             logo_drawn = True
         except Exception as e:
