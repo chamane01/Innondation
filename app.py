@@ -315,7 +315,8 @@ def run_analysis_spatiale():
 # ==============================
 
 def create_element_controller():
-    with st.expander("➕ Ajouter un élément", expanded=True, key="rapport_elem_expander"):
+    # Remarque : suppression de l'argument "key" de l'expander pour éviter d'éventuels conflits.
+    with st.expander("➕ Ajouter un élément", expanded=True):
         col1, col2 = st.columns(2)
         with col1:
             elem_type = st.selectbox("Type", ["Image", "Texte"], key="rapport_elem_type")
