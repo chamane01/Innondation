@@ -30,7 +30,6 @@ def create_element_controller():
                 key="h_pos"
             )
         
-        # Pour un élément de type Image, demander le fichier, le titre et la description
         if elem_type == "Image":
             content = st.file_uploader("Contenu (image)", type=["png", "jpg", "jpeg"], key="content_image")
             image_title = st.text_input("Titre de l'image", max_chars=50, key="image_title")
@@ -39,7 +38,6 @@ def create_element_controller():
             content = st.text_area("Contenu", key="content_text")
         
         if st.button("Valider l'élément"):
-            # Pour une image, s'assurer qu'un fichier est sélectionné
             if elem_type == "Image" and content is None:
                 st.error("Veuillez charger une image pour cet élément.")
                 return None
@@ -83,53 +81,45 @@ def draw_metadata(c, metadata):
     margin = 40
     x_left = margin
     y_top = PAGE_HEIGHT - margin
-    line_height = 16  # Espacement vertical renforcé
+    line_height = 16
 
-    # Affichage du logo (si fourni) et préparation du titre principal
     logo_drawn = False
     if metadata['logo']:
         try:
             img = ImageReader(metadata['logo'])
             img_width, img_height = img.getSize()
             aspect = img_height / img_width
-            desired_width = 40  # Taille réduite pour le logo
+            desired_width = 40
             desired_height = desired_width * aspect
             
-            c.drawImage(img, x_left, y_top - desired_height, 
-                        width=desired_width, height=desired_height, 
-                        preserveAspectRatio=True, mask='auto')
+            c.drawImage(img, x_left, y_top - desired_height, width=desired_width, height=desired_height, preserveAspectRatio=True, mask='auto')
             logo_drawn = True
         except Exception as e:
             st.error(f"Erreur de chargement du logo: {str(e)}")
     
-    # Position du titre principal
     if logo_drawn:
-        x_title = x_left + 50  # largeur du logo + marge
+        x_title = x_left + 50
         y_title = y_top - 20
     else:
         x_title = x_left
         y_title = y_top - 20
     
-    # Affichage du titre principal en grand
     c.setFont("Helvetica-Bold", 20)
     c.setFillColor(colors.black)
     if metadata.get('titre'):
         c.drawString(x_title, y_title, metadata['titre'])
     
-    # Affichage du nom de la société juste en dessous du titre (sans libellé)
     c.setFont("Helvetica", 14)
     y_company = y_title - 25
     if metadata.get('company'):
         c.drawString(x_title, y_company, metadata['company'])
     
-    # Trait gris en gras
     y_line = y_company - 10
     c.setStrokeColor(colors.darkgray)
     c.setLineWidth(2)
     c.line(x_left, y_line, x_left + 150, y_line)
-    c.setLineWidth(1)  # Réinitialisation de l'épaisseur
+    c.setLineWidth(1)
     
-    # Affichage des autres métadonnées sous le trait
     y_text = y_line - 20
     infos = [
         ("ID Rapport", metadata['report_id']),
@@ -139,7 +129,7 @@ def draw_metadata(c, metadata):
         ("Localisation", metadata['location'])
     ]
     
-    value_x_offset = x_left + 70  # Décalage augmenté pour séparer libellés et valeurs
+    value_x_offset = x_left + 70
     for label, value in infos:
         c.setFont("Helvetica-Bold", 10)
         c.setFillColor(colors.black)
@@ -152,30 +142,38 @@ def generate_pdf(elements, metadata):
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     
-    # Métadonnées techniques
     c.setAuthor(metadata['editor'])
     c.setTitle(metadata['report_id'])
     
-    # Placement des éléments principaux
     for element in elements:
         width, height = calculate_dimensions(element['size'])
         x, y = calculate_position(element)
         
         if element['type'] == "Image":
-            # Vérifier que le contenu est présent
             if element["content"] is not None:
                 try:
                     img = ImageReader(element["content"])
-                    c.drawImage(img, x, y, width=width, height=height, preserveAspectRatio=True, mask='auto')
-                    # Ajout du titre en haut au centre de l'image
-                    if element.get("image_title"):
-                        c.setFont("Helvetica-Bold", 12)
-                        c.drawCentredString(x + width/2, y + height - 10, element["image_title"])
-                    # Ajout de la description en bas à droite de l'image
-                    if element.get("description"):
-                        desc_text = element["description"][:100]  # Limiter à 100 caractères
-                        c.setFont("Helvetica", 10)
-                        c.drawRightString(x + width - 10, y + 10, desc_text)
+                    # Réserver des marges pour le titre et la description
+                    top_margin = 20
+                    bottom_margin = 20
+                    # Réduire l'image pour laisser de l'espace en haut et en bas
+                    horizontal_scale = 0.9  # réduction horizontale à 90%
+                    image_actual_width = width * horizontal_scale
+                    image_actual_height = height - top_margin - bottom_margin
+                    # Centrer l'image dans l'aire allouée
+                    image_x = x + (width - image_actual_width) / 2
+                    image_y = y + bottom_margin
+                    c.drawImage(img, image_x, image_y, width=image_actual_width, height=image_actual_height, preserveAspectRatio=True, mask='auto')
+                    
+                    # Afficher le titre en haut, centré, dans la marge supérieure (en dehors de l'image)
+                    c.setFont("Helvetica-Bold", 12)
+                    c.drawCentredString(x + width / 2, y + height - top_margin / 2, element.get("image_title", ""))
+                    
+                    # Afficher la description en bas à droite, en gris, dans la marge inférieure (en dehors de l'image)
+                    c.setFont("Helvetica", 10)
+                    c.setFillColor(colors.gray)
+                    c.drawRightString(x + width - 10, y + bottom_margin / 2, element.get("description", "")[:100])
+                    c.setFillColor(colors.black)
                 except Exception as e:
                     st.error(f"Erreur d'image: {str(e)}")
             else:
@@ -188,7 +186,6 @@ def generate_pdf(elements, metadata):
             p.wrapOn(c, width, height)
             p.drawOn(c, x, y)
     
-    # Insertion des métadonnées visuelles
     draw_metadata(c, metadata)
     
     c.save()
@@ -200,12 +197,14 @@ def display_elements_preview(elements):
     for idx, element in enumerate(elements, start=1):
         st.markdown(f"**Élément {idx}**")
         if element["type"] == "Image":
-            # Affichage de l'image avec titre et description si renseignés
             st.image(element["content"], use_column_width=True)
             if element.get("image_title"):
                 st.markdown(f"*Titre de l'image :* **{element['image_title']}**")
             if element.get("description"):
-                st.markdown(f"*Description :* {element['description']}")
+                st.markdown(
+                    f"<span style='color:gray'>*Description :* {element['description']}</span>",
+                    unsafe_allow_html=True
+                )
         else:
             st.markdown(f"**Texte :** {element['content']}")
         st.markdown("---")
@@ -213,7 +212,6 @@ def display_elements_preview(elements):
 def main():
     st.title("📐 Conception de Rapport Structuré")
     
-    # Configuration des métadonnées dans la sidebar
     with st.sidebar:
         st.header("📝 Métadonnées")
         titre = st.text_input("Titre principal")
@@ -236,7 +234,6 @@ def main():
         'logo': logo
     }
     
-    # Gestion des éléments validés
     if "elements" not in st.session_state:
         st.session_state["elements"] = []
     elements = st.session_state["elements"]
@@ -247,11 +244,9 @@ def main():
         st.session_state["elements"] = elements
         st.success("Élément validé avec succès !")
     
-    # Affichage d'un aperçu des éléments validés
     if elements:
         display_elements_preview(elements)
     
-    # Génération et téléchargement du PDF
     if elements:
         if st.button("Générer le PDF"):
             pdf = generate_pdf(elements, metadata)
