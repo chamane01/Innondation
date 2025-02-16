@@ -96,8 +96,17 @@ def create_map(mosaic_file):
     try:
         with rasterio.open(mosaic_file) as src:
             bounds = src.bounds
+            # Si le raster n'est pas en EPSG:4326, on reprojette les limites pour Folium
+            if src.crs.to_string() != "EPSG:4326":
+                from rasterio.warp import transform
+                left, bottom, right, top = bounds.left, bounds.bottom, bounds.right, bounds.top
+                xs, ys = transform(src.crs, "EPSG:4326", [left, right], [bottom, top])
+                bounds_latlon = [[min(ys), min(xs)], [max(ys), max(xs)]]
+            else:
+                bounds_latlon = [[bounds.bottom, bounds.left], [bounds.top, bounds.right]]
+            
             folium.Rectangle(
-                bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
+                bounds=bounds_latlon,
                 color='blue',
                 fill=False,
                 tooltip="Emprise de la mosaïque"
@@ -131,12 +140,13 @@ def generate_contours(mosaic_file, drawing_geometry):
     """
     try:
         with rasterio.open(mosaic_file) as src:
-            if drawing_geometry is not None:
-                out_image, out_transform = rasterio.mask.mask(src, [drawing_geometry], crop=True)
-                data = out_image[0]
-            else:
-                data = src.read(1)
-                out_transform = src.transform
+            # Transformation de la géométrie de EPSG:4326 vers le CRS du raster si nécessaire
+            geom = drawing_geometry
+            if src.crs.to_string() != "EPSG:4326":
+                from rasterio.warp import transform_geom
+                geom = transform_geom("EPSG:4326", src.crs, drawing_geometry)
+            out_image, out_transform = rasterio.mask.mask(src, [geom], crop=True)
+            data = out_image[0]
             nodata = src.nodata
     except Exception as e:
         st.error(f"Erreur lors de la lecture du fichier TIFF : {e}")
@@ -163,8 +173,8 @@ def generate_contours(mosaic_file, drawing_geometry):
     contour = ax.contour(X, Y, data, levels=levels, cmap='terrain')
     ax.clabel(contour, inline=True, fontsize=8)
     ax.set_title("Contours d'élévation")
-    ax.set_xlabel("Longitude")
-    ax.set_ylabel("Latitude")
+    ax.set_xlabel("Coordonnée X")
+    ax.set_ylabel("Coordonnée Y")
     
     return fig
 
@@ -205,8 +215,17 @@ def generate_profile(mosaic_file, coords, profile_title):
     """
     try:
         points, distances = interpolate_line(coords)
+        elevations = []
         with rasterio.open(mosaic_file) as src:
-            elevations = [list(src.sample([p]))[0][0] for p in points]
+            for p in points:
+                pt = p
+                # Transformation du point de EPSG:4326 vers le CRS du raster si nécessaire
+                if src.crs.to_string() != "EPSG:4326":
+                    from rasterio.warp import transform
+                    xs, ys = transform("EPSG:4326", src.crs, [p[0]], [p[1]])
+                    pt = (xs[0], ys[0])
+                elev = list(src.sample([pt]))[0][0]
+                elevations.append(elev)
     except Exception as e:
         st.error(f"Erreur lors de la génération du profil : {e}")
         return None
@@ -322,10 +341,7 @@ def run_analysis_spatiale():
                             cross_origin=False,
                             zindex=1
                         ).add_to(contour_group)
-                # Ajouter le groupe de contours à la carte
-                updated_map.add_child(contour_group)
-                
-                # <<--- AJOUT : Affichage des entités dessinées sur la carte de contours --->
+                # Ajout d'une couche avec l'ensemble des entités dessinées
                 entities_group = folium.FeatureGroup(name="Entités Dessinées")
                 for drawing in st.session_state.get("raw_drawings", []):
                     if isinstance(drawing, dict) and "geometry" in drawing:
@@ -342,8 +358,8 @@ def run_analysis_spatiale():
                             drawing,
                             style_function=lambda feature, s=style: s
                         ).add_to(entities_group)
+                updated_map.add_child(contour_group)
                 updated_map.add_child(entities_group)
-                # <<--- Fin ajout --->
                 
                 st_folium(updated_map, width=700, height=500, key="analysis_map_updated")
         if st.button("Retour", key="retour_contours"):
