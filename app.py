@@ -229,20 +229,20 @@ def run_analysis_spatiale():
     if "analysis_mode" not in st.session_state:
         st.session_state["analysis_mode"] = "none"
     
-    # Assurer la persistance des dessins : sauvegarder et restaurer
+    # Pour la persistance des dessins, on utilise "raw_drawings" et "persisted_drawings"
     if "raw_drawings" not in st.session_state:
         st.session_state["raw_drawings"] = []
-    if "saved_drawings" not in st.session_state:
-        st.session_state["saved_drawings"] = []
+    if "persisted_drawings" not in st.session_state:
+        st.session_state["persisted_drawings"] = []
     
-    # Bouton pour sauvegarder les dessins afin qu'ils ne disparaissent pas lors du changement de menu
+    # Bouton pour sauvegarder manuellement les dessins
     if st.button("Sauvegarder mes dessins", key="save_drawings"):
-        st.session_state["saved_drawings"] = st.session_state["raw_drawings"]
+        st.session_state["persisted_drawings"] = st.session_state.get("raw_drawings", [])
         st.success("Vos dessins ont été sauvegardés.")
     
-    # Si les dessins actuels sont vides mais que des dessins sauvegardés existent, les restaurer
-    if not st.session_state["raw_drawings"] and st.session_state["saved_drawings"]:
-        st.session_state["raw_drawings"] = st.session_state["saved_drawings"]
+    # Si aucun dessin n'est présent mais qu'il y a une sauvegarde, on restaure
+    if not st.session_state.get("raw_drawings") and st.session_state["persisted_drawings"]:
+        st.session_state["raw_drawings"] = st.session_state["persisted_drawings"]
         st.info("Vos dessins sauvegardés ont été restaurés.")
     
     # Saisie du nom de la carte
@@ -260,16 +260,16 @@ def run_analysis_spatiale():
     if not mosaic_path:
         return
     
-    # Création de la carte interactive avec outils de dessin
+    # Création de la carte interactive avec l'outil de dessin
     m = create_map(mosaic_path)
     st.write("**Utilisez l'outil de dessin sur la carte ci-dessous.**")
     map_data = st_folium(m, width=700, height=500, key="analysis_map")
     
-    # Sauvegarder les dessins dans la session pour persistance
+    # Sauvegarde des dessins retournés par st_folium dans raw_drawings
     if map_data is not None and isinstance(map_data, dict) and "all_drawings" in map_data:
         st.session_state["raw_drawings"] = map_data["all_drawings"]
     
-    # Zone d'options sous la carte
+    # Options pour changer de mode
     options_container = st.container()
     if st.session_state["analysis_mode"] == "none":
         col1, col2 = options_container.columns(2)
@@ -278,14 +278,14 @@ def run_analysis_spatiale():
         if col2.button("Générer des contours", key="btn_contours"):
             st.session_state["analysis_mode"] = "contours"
     
-    # Mode Générer des contours (rectangle)
+    # Mode : Générer des contours (rectangles)
     if st.session_state["analysis_mode"] == "contours":
         st.subheader("Générer des contours")
         drawing_geometries = []
         raw_drawings = st.session_state.get("raw_drawings", [])
         if isinstance(raw_drawings, list):
             for drawing in raw_drawings:
-                # Les rectangles dessinés apparaissent en tant que Polygones
+                # On récupère uniquement les Polygones (rectangles dessinés)
                 if isinstance(drawing, dict) and drawing.get("geometry", {}).get("type") == "Polygon":
                     drawing_geometries.append(drawing.get("geometry"))
         if not drawing_geometries:
@@ -300,7 +300,7 @@ def run_analysis_spatiale():
         if st.button("Retour", key="retour_contours"):
             st.session_state["analysis_mode"] = "none"
     
-    # Mode Tracer des profils (ligne)
+    # Mode : Tracer des profils (lignes)
     if st.session_state["analysis_mode"] == "profiles":
         st.subheader("Tracer des profils")
         raw_drawings = st.session_state.get("raw_drawings", [])
@@ -328,7 +328,7 @@ def run_analysis_spatiale():
 # ==============================
 
 def create_element_controller():
-    # Expander sans clé pour éviter des conflits
+    # Expander pour ajouter un élément personnalisé
     with st.expander("➕ Ajouter un élément", expanded=True):
         col1, col2 = st.columns(2)
         with col1:
@@ -523,7 +523,7 @@ def display_elements_preview(elements):
 def run_report():
     st.title("📄 Génération de Rapport")
     
-    # Sidebar dédiée au rapport (identifiant unique)
+    # Sidebar dédiée au rapport
     with st.sidebar:
         st.header("📝 Métadonnées du Rapport")
         titre = st.text_input("Titre principal", key="rapport_titre")
@@ -546,7 +546,7 @@ def run_report():
         'logo': logo
     }
     
-    # Initialisation des éléments du rapport dans la session
+    # Initialisation des éléments du rapport
     if "elements" not in st.session_state:
         st.session_state["elements"] = []
     elements = st.session_state["elements"]
@@ -558,7 +558,7 @@ def run_report():
         analysis_h_pos = st.selectbox("Position horizontale", ["Gauche", "Droite", "Centre"], key="analysis_h_pos")
         analysis_size  = st.selectbox("Taille", ["Grand", "Moyen", "Petit"], key="analysis_size")
         
-        # Filtrer les doublons dans les résultats d'analyse
+        # Filtrage des doublons dans les résultats d'analyse
         unique_results = []
         unique_keys = set()
         for idx, res in enumerate(st.session_state["analysis_results"]):
