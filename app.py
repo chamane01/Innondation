@@ -229,6 +229,10 @@ def run_analysis_spatiale():
     if "analysis_mode" not in st.session_state:
         st.session_state["analysis_mode"] = "none"
     
+    # Initialisation pour conserver les dessins
+    if "raw_drawings" not in st.session_state:
+        st.session_state["raw_drawings"] = []
+    
     # Saisie du nom de la carte
     map_name = st.text_input("Nom de votre carte", value="Ma Carte", key="analysis_map_name")
     
@@ -249,6 +253,10 @@ def run_analysis_spatiale():
     st.write("**Utilisez l'outil de dessin sur la carte ci-dessous.**")
     map_data = st_folium(m, width=700, height=500, key="analysis_map")
     
+    # Sauvegarder les dessins dans la session pour persistance
+    if map_data is not None and isinstance(map_data, dict) and "all_drawings" in map_data:
+        st.session_state["raw_drawings"] = map_data["all_drawings"]
+    
     # Zone d'options sous la carte
     options_container = st.container()
     if st.session_state["analysis_mode"] == "none":
@@ -262,8 +270,8 @@ def run_analysis_spatiale():
     if st.session_state["analysis_mode"] == "contours":
         st.subheader("Générer des contours")
         drawing_geometries = []
-        if isinstance(map_data, dict):
-            raw_drawings = map_data.get("all_drawings", [])
+        raw_drawings = st.session_state.get("raw_drawings", [])
+        if isinstance(raw_drawings, list):
             for drawing in raw_drawings:
                 # Les rectangles dessinés apparaissent en tant que Polygones
                 if isinstance(drawing, dict) and drawing.get("geometry", {}).get("type") == "Polygon":
@@ -283,9 +291,9 @@ def run_analysis_spatiale():
     # Mode Tracer des profils (ligne)
     if st.session_state["analysis_mode"] == "profiles":
         st.subheader("Tracer des profils")
+        raw_drawings = st.session_state.get("raw_drawings", [])
         current_drawings = []
-        if isinstance(map_data, dict):
-            raw_drawings = map_data.get("all_drawings") or []
+        if isinstance(raw_drawings, list):
             current_drawings = [d for d in raw_drawings if isinstance(d, dict) and d.get("geometry", {}).get("type") == "LineString"]
         if not current_drawings:
             st.info("Aucune ligne tracée pour le moment. Veuillez dessiner une ligne sur la carte.")
@@ -315,11 +323,8 @@ def create_element_controller():
             size = st.selectbox("Taille", ["Grand", "Moyen", "Petit"], key="elem_size")
         with col2:
             vertical_pos = st.selectbox("Position verticale", ["Haut", "Milieu", "Bas"], key="v_pos")
-            horizontal_pos = st.selectbox(
-                "Position horizontale",
-                ["Gauche", "Droite", "Centre"] if size == "Petit" else ["Gauche", "Droite"],
-                key="h_pos"
-            )
+            horizontal_options = ["Gauche", "Droite", "Centre"] if size == "Petit" else ["Gauche", "Droite"]
+            horizontal_pos = st.selectbox("Position horizontale", horizontal_options, key="h_pos")
         
         if elem_type == "Image":
             content = st.file_uploader("Contenu (image)", type=["png", "jpg", "jpeg"], key="content_image")
@@ -537,7 +542,7 @@ def run_report():
     if "analysis_results" in st.session_state and st.session_state["analysis_results"]:
         # Sélection multiple des résultats d'analyse spatiale
         options = {f"{i+1} - {res['title']}": i for i, res in enumerate(st.session_state["analysis_results"])}
-        selected = st.multiselect("Choisissez les cartes à ajouter au rapport", options.keys(), key="rapport_select_analysis")
+        selected = st.multiselect("Choisissez les cartes à ajouter au rapport", list(options.keys()), key="rapport_select_analysis")
         for opt in selected:
             idx = options[opt]
             image_data = st.session_state["analysis_results"][idx]["image"]
@@ -579,7 +584,7 @@ def run_report():
 def main():
     st.set_page_config(page_title="Application SIG & Rapport", layout="wide")
     
-    # Menu principal dans la sidebar avec un id unique
+    # Menu principal dans la sidebar
     menu = st.sidebar.radio("Menu Principal", ["Analyse Spatiale", "Rapport"], key="main_menu")
     
     if menu == "Analyse Spatiale":
