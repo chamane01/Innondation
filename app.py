@@ -2,6 +2,7 @@ import streamlit as st
 import os
 import rasterio
 import rasterio.merge
+import rasterio.mask
 import folium
 import math
 import matplotlib.pyplot as plt
@@ -51,13 +52,15 @@ def build_mosaic(tiff_files, mosaic_path="mosaic.tif"):
 
 def create_map(mosaic_file):
     """
-    Crée une carte Folium avec l'outil de dessin (seulement pour les polylignes)
-    et intègre un calque indiquant l'emprise de la mosaïque.
+    Crée une carte Folium en affichant l'emprise de la mosaïque 
+    et en ajoutant l'outil de dessin pour pouvoir tracer à la fois
+    des rectangles (pour sélectionner une emprise et générer des contours)
+    et des lignes (pour tracer des profils d'élévation).
     """
     m = folium.Map(location=[0, 0], zoom_start=2)
     
     # Calque indiquant l'emprise de la mosaïque
-    mosaic_group = folium.FeatureGroup(name="élevation cote d'ivoire")
+    mosaic_group = folium.FeatureGroup(name="Mosaïque")
     try:
         with rasterio.open(mosaic_file) as src:
             bounds = src.bounds
@@ -72,23 +75,70 @@ def create_map(mosaic_file):
     
     mosaic_group.add_to(m)
     
-    # Ajout de l'outil de dessin (uniquement pour dessiner des lignes)
+    # Ajout de l'outil de dessin avec 2 options : rectangle et polyline
     Draw(
         draw_options={
+            'rectangle': True,
             'polyline': {'allowIntersection': False},
             'polygon': False,
             'circle': False,
             'marker': False,
-            'circlemarker': False,
-            'rectangle': False
+            'circlemarker': False
         },
         edit_options={'edit': True, 'remove': True}
     ).add_to(m)
     
-    # Ajout du gestionnaire de couches
     folium.LayerControl().add_to(m)
     
     return m
+
+def generate_contours(mosaic_file, drawing_geometry=None):
+    """
+    Génère et affiche les courbes de niveau (contours) à partir du fichier TIFF.
+    Si drawing_geometry est fourni (GeoJSON d'un rectangle dessiné), on ne
+    génère les contours que sur cette zone.
+    """
+    try:
+        with rasterio.open(mosaic_file) as src:
+            if drawing_geometry is not None:
+                # Découpage de la mosaïque selon l'emprise dessinée
+                out_image, out_transform = rasterio.mask.mask(src, [drawing_geometry], crop=True)
+                data = out_image[0]
+            else:
+                data = src.read(1)
+                out_transform = src.transform
+            nodata = src.nodata
+    except Exception as e:
+        st.error(f"Erreur lors de la lecture du fichier TIFF : {e}")
+        return
+    
+    # Remplacer les valeurs nodata par NaN
+    if nodata is not None:
+        data = np.where(data == nodata, np.nan, data)
+    
+    nrows, ncols = data.shape
+    # Calcul des coordonnées centrales de chaque pixel
+    x_coords = np.arange(ncols) * out_transform.a + out_transform.c + out_transform.a/2
+    y_coords = np.arange(nrows) * out_transform.e + out_transform.f + out_transform.e/2
+    X, Y = np.meshgrid(x_coords, y_coords)
+    
+    try:
+        vmin = np.nanmin(data)
+        vmax = np.nanmax(data)
+    except Exception as e:
+        st.error(f"Erreur lors du calcul des valeurs min et max : {e}")
+        return
+    
+    levels = np.linspace(vmin, vmax, 15)
+    
+    # Tracé des contours
+    fig, ax = plt.subplots(figsize=(8, 6))
+    contour = ax.contour(X, Y, data, levels=levels, cmap='terrain')
+    ax.clabel(contour, inline=True, fontsize=8)
+    ax.set_title("Contours d'élévation")
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    st.pyplot(fig)
 
 def haversine(lon1, lat1, lon2, lat2):
     """Calcule la distance en mètres entre deux points GPS."""
@@ -101,7 +151,10 @@ def haversine(lon1, lat1, lon2, lat2):
     return c * r
 
 def interpolate_line(coords, step=50):
-    """Interpole des points sur une ligne pour obtenir des échantillons réguliers."""
+    """
+    Interpole des points le long d'une ligne pour obtenir des échantillons réguliers.
+    'coords' est une liste de [lon, lat].
+    """
     if len(coords) < 2:
         return coords, [0]
     sampled_points = [coords[0]]
@@ -120,25 +173,21 @@ def interpolate_line(coords, step=50):
             cumulative_dist.append(cumulative_dist[-1] + dist)
     return sampled_points, cumulative_dist
 
-def generate_contours(mosaic_file):
-    """Affiche un message indiquant que la fonctionnalité est en cours de développement."""
-    st.write("En cours de développement")
-
 ##################
 # Fonction main  #
 ##################
 
 def main():
-    st.title("Carte Dynamique avec Profils d'Élévation")
+    st.title("Carte Interactive : Contours et Profils d'Élévation")
     
-    # Initialisation de la variable de mode dans la session :
+    # Initialisation du mode dans la session :
     # "none"     -> aucun mode choisi (affichage des 2 boutons)
-    # "profiles" -> le menu de tracé de profils est actif
-    # "contours" -> le menu de génération de contours est actif
+    # "contours" -> menu de génération de contours actif
+    # "profiles" -> menu de tracé de profils actif
     if "mode" not in st.session_state:
         st.session_state.mode = "none"
     
-    # Saisie du nom de la carte (pour nommer les profils)
+    # Saisie du nom de la carte (sera utilisé pour nommer les profils)
     map_name = st.text_input("Nom de votre carte", value="Ma Carte")
     
     # Chargement et construction de la mosaïque
@@ -155,17 +204,17 @@ def main():
     if not mosaic_path:
         return
 
-    # Création de la carte interactive
+    # Création de la carte interactive avec outils de dessin pour rectangle et ligne
     m = create_map(mosaic_path)
-    st.write("**Utilisez les outils de dessin sur la carte ci-dessus.**")
+    st.write("**Utilisez l'outil de dessin sur la carte ci-dessus.**")
     map_data = st_folium(m, width=700, height=500)
     
     #############################
-    # Espace d'options sous la carte
+    # Espace des options sous la carte
     #############################
     options_container = st.container()
     
-    # Affichage du menu principal (deux boutons) si aucun mode n'est sélectionné
+    # Si aucun mode n'est sélectionné, afficher les 2 boutons
     if st.session_state.mode == "none":
         col1, col2 = options_container.columns(2)
         if col1.button("Tracer des profils"):
@@ -173,52 +222,51 @@ def main():
         if col2.button("Générer des contours"):
             st.session_state.mode = "contours"
     
-    # Mode "Générer des contours"
+    # Mode "Générer des contours" (à partir d'un rectangle dessiné)
     if st.session_state.mode == "contours":
         st.subheader("Générer des contours")
-        generate_contours(mosaic_path)
-        # Bouton "Retour" pour revenir au menu principal
+        drawing_geometries = []
+        if isinstance(map_data, dict):
+            # Les rectangles dessinés sont renvoyés comme des polygones
+            raw_drawings = map_data.get("all_drawings", [])
+            for drawing in raw_drawings:
+                if isinstance(drawing, dict) and drawing.get("geometry", {}).get("type") == "Polygon":
+                    drawing_geometries.append(drawing.get("geometry"))
+        if not drawing_geometries:
+            st.warning("Veuillez dessiner une emprise (rectangle) sur la carte.")
+        else:
+            for i, geom in enumerate(drawing_geometries, start=1):
+                st.markdown(f"**Contours pour l'emprise {i}**")
+                generate_contours(mosaic_path, geom)
         if st.button("Retour", key="retour_contours"):
             st.session_state.mode = "none"
     
-    # Mode "Tracer des profils"
+    # Mode "Tracer des profils" (à partir d'une ligne tracée)
     if st.session_state.mode == "profiles":
         st.subheader("Tracer des profils")
-        
-        # Extraction des dessins de type ligne sur la carte
+        current_drawings = []
         if isinstance(map_data, dict):
-            # Modification ici pour s'assurer que raw_drawings est une liste
             raw_drawings = map_data.get("all_drawings") or []
+            # On filtre uniquement les lignes dessinées
             current_drawings = [
                 d for d in raw_drawings 
                 if isinstance(d, dict) and d.get("geometry", {}).get("type") == "LineString"
             ]
+        if not current_drawings:
+            st.info("Aucun profil dessiné pour le moment. Tracez une ligne sur la carte.")
         else:
-            current_drawings = []
-        
-        # Transformation des lignes dessinées en profils
-        profiles = []
-        for i, d in enumerate(current_drawings):
-            profiles.append({
-                "coords": d["geometry"]["coordinates"],
-                "name": f"{map_name} - Profil {i+1}"
-            })
-        
-        if profiles:
-            st.write("Les profils dessinés sont affichés ci-dessous. Toute nouvelle droite dessinée sera prise en compte automatiquement.")
-            for i, profile in enumerate(profiles):
+            for i, drawing in enumerate(current_drawings):
+                profile = {
+                    "coords": drawing["geometry"]["coordinates"],
+                    "name": f"{map_name} - Profil {i+1}"
+                }
                 st.markdown(f"#### {profile['name']}")
                 col_a, col_b = st.columns([1, 4])
                 with col_a:
-                    # Permet de modifier le nom du profil
-                    new_name = st.text_input(
-                        "Nom du profil", 
-                        value=profile["name"],
-                        key=f"profile_name_{i}"
-                    )
+                    # Possibilité de renommer le profil
+                    new_name = st.text_input("Nom du profil", value=profile["name"], key=f"profile_name_{i}")
                     profile["name"] = new_name
-                    
-                    # Option de présentation du profil
+                    # Choix du mode de présentation
                     presentation_mode = st.radio(
                         "Mode de présentation",
                         ("Automatique", "Manuel"),
@@ -242,7 +290,9 @@ def main():
                         )
                 with col_b:
                     try:
+                        # Interpolation de la ligne pour obtenir des points régulièrement espacés
                         points, distances = interpolate_line(profile["coords"])
+                        # Extraction des altitudes depuis la mosaïque
                         with rasterio.open(mosaic_path) as src:
                             elevations = [list(src.sample([p]))[0][0] for p in points]
                         
@@ -252,7 +302,7 @@ def main():
                         ax.set_xlabel("Distance (m)")
                         ax.set_ylabel("Altitude (m)")
                         
-                        # En mode manuel, on fixe les ticks en fonction des écarts indiqués
+                        # En mode manuel, ajuster les graduations
                         if presentation_mode == "Manuel":
                             ecart_distance = manual_options.get("ecart_distance", 50.0)
                             ecart_altitude = manual_options.get("ecart_altitude", 10.0)
@@ -264,10 +314,6 @@ def main():
                         st.pyplot(fig)
                     except Exception as e:
                         st.error(f"Erreur de traitement : {e}")
-        else:
-            st.info("Aucun profil dessiné pour le moment.")
-        
-        # Bouton "Retour" pour revenir au menu principal
         if st.button("Retour", key="retour_profiles"):
             st.session_state.mode = "none"
 
