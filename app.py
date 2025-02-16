@@ -120,7 +120,9 @@ def create_map(mosaic_file):
     # Outils de dessin
     Draw(
         draw_options={
-            'polyline': {'allowIntersection': False},
+            # Modification ici : on définit pour les polylignes allowIntersection à True
+            # et on précise des options de style pour que les segments soient visibles pendant le dessin.
+            'polyline': {'allowIntersection': True, 'shapeOptions': {'color': 'black', 'weight': 2}},
             'polygon': True,
             'rectangle': True,
             'circle': True,
