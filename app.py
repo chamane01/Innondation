@@ -1,261 +1,189 @@
-import streamlit as st
-from datetime import date, datetime
-from io import BytesIO
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.utils import ImageReader
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.platypus import Paragraph
-from reportlab.lib import colors
+import streamlit as st 
+import os
+import rasterio
+import rasterio.merge
+import rasterio.mask
+import folium
+import numpy as np
+import matplotlib.pyplot as plt
+from streamlit_folium import st_folium
+from folium.plugins import Draw
 
-# Configuration de la page
-st.set_page_config(page_title="Générateur Structuré", layout="centered")
+#########################
+# Fonctions utilitaires #
+#########################
 
-# Dimensions standard
-PAGE_WIDTH, PAGE_HEIGHT = A4
-SECTION_HEIGHT = PAGE_HEIGHT / 3
-COLUMN_WIDTH = PAGE_WIDTH / 2
+def load_tiff_files(folder_path):
+    """Charge les fichiers TIFF contenus dans un dossier."""
+    try:
+        tiff_files = [os.path.join(folder_path, f)
+                      for f in os.listdir(folder_path) if f.lower().endswith('.tif')]
+    except Exception as e:
+        st.error(f"Erreur lors de la lecture du dossier {folder_path} : {e}")
+        return []
+    
+    if not tiff_files:
+        st.error("Aucun fichier TIFF trouvé dans le dossier.")
+        return []
+    
+    return [f for f in tiff_files if os.path.exists(f)]
 
-def create_element_controller():
-    with st.expander("➕ Ajouter un élément", expanded=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            elem_type = st.selectbox("Type", ["Image", "Texte"], key="elem_type")
-            size = st.selectbox("Taille", ["Grand", "Moyen", "Petit"], key="elem_size")
-        with col2:
-            vertical_pos = st.selectbox("Position verticale", ["Haut", "Milieu", "Bas"], key="v_pos")
-            horizontal_pos = st.selectbox(
-                "Position horizontale",
-                ["Gauche", "Droite", "Centre"] if size == "Petit" else ["Gauche", "Droite"],
-                key="h_pos"
-            )
-        
-        if elem_type == "Image":
-            content = st.file_uploader("Contenu (image)", type=["png", "jpg", "jpeg"], key="content_image")
-            image_title = st.text_input("Titre de l'image", max_chars=50, key="image_title")
-            description = st.text_input("Description brève (max 100 caractères)", max_chars=100, key="image_desc")
-        else:
-            content = st.text_area("Contenu", key="content_text")
-        
-        if st.button("Valider l'élément"):
-            if elem_type == "Image" and content is None:
-                st.error("Veuillez charger une image pour cet élément.")
-                return None
-            element_data = {
-                "type": elem_type,
-                "size": size,
-                "v_pos": vertical_pos,
-                "h_pos": horizontal_pos,
-                "content": content,
-            }
-            if elem_type == "Image":
-                element_data["image_title"] = image_title
-                element_data["description"] = description
-            return element_data
-    return None
+def build_mosaic(tiff_files, mosaic_path="mosaic.tif"):
+    """Construit une mosaïque à partir de fichiers TIFF."""
+    try:
+        src_files = [rasterio.open(fp) for fp in tiff_files]
+        mosaic, out_trans = rasterio.merge.merge(src_files)
+        out_meta = src_files[0].meta.copy()
+        out_meta.update({
+            "driver": "GTiff",
+            "height": mosaic.shape[1],
+            "width": mosaic.shape[2],
+            "transform": out_trans
+        })
+        with rasterio.open(mosaic_path, "w", **out_meta) as dest:
+            dest.write(mosaic)
+        for src in src_files:
+            src.close()
+        return mosaic_path
+    except Exception as e:
+        st.error(f"Erreur lors de la création de la mosaïque : {e}")
+        return None
 
-def calculate_dimensions(size):
-    dimensions = {
-        "Grand": (PAGE_WIDTH, SECTION_HEIGHT),
-        "Moyen": (COLUMN_WIDTH, SECTION_HEIGHT),
-        "Petit": (COLUMN_WIDTH / 1.5, SECTION_HEIGHT)
-    }
-    return dimensions.get(size, (PAGE_WIDTH, SECTION_HEIGHT))
+def create_map(mosaic_file):
+    """
+    Crée une carte Folium avec l'outil de dessin (rectangle pour sélectionner une emprise)
+    et intègre un calque indiquant l'emprise de la mosaïque.
+    """
+    m = folium.Map(location=[0, 0], zoom_start=2)
+    
+    # Calque indiquant l'emprise de la mosaïque
+    mosaic_group = folium.FeatureGroup(name="Mosaïque")
+    try:
+        with rasterio.open(mosaic_file) as src:
+            bounds = src.bounds
+            folium.Rectangle(
+                bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
+                color='blue',
+                fill=False,
+                tooltip="Emprise de la mosaïque"
+            ).add_to(mosaic_group)
+    except Exception as e:
+        st.error(f"Erreur lors de l'ouverture de la mosaïque : {e}")
+    
+    mosaic_group.add_to(m)
+    
+    # Ajout de l'outil de dessin (uniquement pour dessiner des rectangles)
+    Draw(
+        draw_options={
+            'rectangle': True,
+            'polyline': False,
+            'polygon': False,
+            'circle': False,
+            'marker': False,
+            'circlemarker': False
+        },
+        edit_options={'edit': True, 'remove': True}
+    ).add_to(m)
+    
+    folium.LayerControl().add_to(m)
+    
+    return m
 
-def calculate_position(element):
-    vertical_offset = {"Haut": 0, "Milieu": SECTION_HEIGHT, "Bas": SECTION_HEIGHT*2}[element['v_pos']]
-    
-    if element['size'] == "Grand":
-        return (0, PAGE_HEIGHT - vertical_offset - SECTION_HEIGHT)
-    
-    if element['h_pos'] == "Gauche":
-        x = 0
-    elif element['h_pos'] == "Droite":
-        x = COLUMN_WIDTH
-    else:  # Centre
-        x = COLUMN_WIDTH / 2 - calculate_dimensions(element['size'])[0] / 2
-    
-    return (x, PAGE_HEIGHT - vertical_offset - SECTION_HEIGHT)
-
-def draw_metadata(c, metadata):
-    margin = 40
-    x_left = margin
-    y_top = PAGE_HEIGHT - margin
-    line_height = 16
-
-    logo_drawn = False
-    if metadata['logo']:
-        try:
-            img = ImageReader(metadata['logo'])
-            img_width, img_height = img.getSize()
-            aspect = img_height / img_width
-            desired_width = 40
-            desired_height = desired_width * aspect
-            
-            c.drawImage(img, x_left, y_top - desired_height, width=desired_width, height=desired_height, preserveAspectRatio=True, mask='auto')
-            logo_drawn = True
-        except Exception as e:
-            st.error(f"Erreur de chargement du logo: {str(e)}")
-    
-    if logo_drawn:
-        x_title = x_left + 50
-        y_title = y_top - 20
-    else:
-        x_title = x_left
-        y_title = y_top - 20
-    
-    c.setFont("Helvetica-Bold", 20)
-    c.setFillColor(colors.black)
-    if metadata.get('titre'):
-        c.drawString(x_title, y_title, metadata['titre'])
-    
-    c.setFont("Helvetica", 14)
-    y_company = y_title - 25
-    if metadata.get('company'):
-        c.drawString(x_title, y_company, metadata['company'])
-    
-    y_line = y_company - 10
-    c.setStrokeColor(colors.darkgray)
-    c.setLineWidth(2)
-    c.line(x_left, y_line, x_left + 150, y_line)
-    c.setLineWidth(1)
-    
-    y_text = y_line - 20
-    infos = [
-        ("ID Rapport", metadata['report_id']),
-        ("Date", metadata['date'].strftime('%d/%m/%Y') if hasattr(metadata['date'], "strftime") else metadata['date']),
-        ("Heure", metadata['time'].strftime('%H:%M') if hasattr(metadata['time'], "strftime") else metadata['time']),
-        ("Éditeur", metadata['editor']),
-        ("Localisation", metadata['location'])
-    ]
-    
-    value_x_offset = x_left + 70
-    for label, value in infos:
-        c.setFont("Helvetica-Bold", 10)
-        c.setFillColor(colors.black)
-        c.drawString(x_left, y_text, label + ":")
-        c.setFont("Helvetica", 10)
-        c.drawString(value_x_offset, y_text, str(value))
-        y_text -= line_height
-
-def generate_pdf(elements, metadata):
-    buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    
-    c.setAuthor(metadata['editor'])
-    c.setTitle(metadata['report_id'])
-    
-    for element in elements:
-        width, height = calculate_dimensions(element['size'])
-        x, y = calculate_position(element)
-        
-        if element['type'] == "Image":
-            if element["content"] is not None:
-                try:
-                    img = ImageReader(element["content"])
-                    # Réserver des marges pour le titre et la description
-                    top_margin = 20
-                    bottom_margin = 20
-                    # Réduire l'image pour laisser de l'espace en haut et en bas
-                    horizontal_scale = 0.9  # réduction horizontale à 90%
-                    image_actual_width = width * horizontal_scale
-                    image_actual_height = height - top_margin - bottom_margin
-                    # Centrer l'image dans l'aire allouée
-                    image_x = x + (width - image_actual_width) / 2
-                    image_y = y + bottom_margin
-                    c.drawImage(img, image_x, image_y, width=image_actual_width, height=image_actual_height, preserveAspectRatio=True, mask='auto')
-                    
-                    # Afficher le titre en haut, centré, dans la marge supérieure (en dehors de l'image) en majuscules
-                    if element.get("image_title"):
-                        c.setFont("Helvetica-Bold", 12)
-                        image_title = element["image_title"].upper()
-                        c.drawCentredString(x + width / 2, y + height - top_margin / 2, image_title)
-                    
-                    # Afficher la description en bas à droite, en gris, dans la marge inférieure (en dehors de l'image)
-                    if element.get("description"):
-                        c.setFont("Helvetica", 10)
-                        c.setFillColor(colors.gray)
-                        c.drawRightString(x + width - 10, y + bottom_margin / 2, element["description"][:100])
-                        c.setFillColor(colors.black)
-                except Exception as e:
-                    st.error(f"Erreur d'image: {str(e)}")
+def generate_contours(mosaic_file, drawing_geometry=None):
+    """
+    Génère et affiche les courbes de niveau (contours) à partir du fichier TIFF.
+    Si drawing_geometry est fourni (GeoJSON d'un rectangle dessiné), on ne
+    génère les contours que sur cette zone.
+    """
+    try:
+        with rasterio.open(mosaic_file) as src:
+            if drawing_geometry is not None:
+                # Utiliser l'emprise dessinée pour découper la mosaïque
+                out_image, out_transform = rasterio.mask.mask(src, [drawing_geometry], crop=True)
+                data = out_image[0]
             else:
-                st.error("Une image validée est introuvable.")
-        else:
-            text = element['content']
-            style = getSampleStyleSheet()["Normal"]
-            style.fontSize = 14 if element['size'] == "Grand" else 12 if element['size'] == "Moyen" else 10
-            p = Paragraph(text, style)
-            p.wrapOn(c, width, height)
-            p.drawOn(c, x, y)
+                data = src.read(1)
+                out_transform = src.transform
+    except Exception as e:
+        st.error(f"Erreur lors de la lecture du fichier TIFF : {e}")
+        return
     
-    draw_metadata(c, metadata)
+    # Masquer les valeurs nodata le cas échéant
+    nodata = src.nodata
+    if nodata is not None:
+        data = np.where(data == nodata, np.nan, data)
     
-    c.save()
-    buffer.seek(0)
-    return buffer
+    # Création d'une grille de coordonnées en se basant sur la transformation affine
+    nrows, ncols = data.shape
+    # Coordonnées des centres de pixels
+    x_coords = np.arange(ncols) * out_transform.a + out_transform.c + out_transform.a/2
+    y_coords = np.arange(nrows) * out_transform.e + out_transform.f + out_transform.e/2
+    X, Y = np.meshgrid(x_coords, y_coords)
+    
+    # Détermination automatique des niveaux de contour
+    try:
+        vmin = np.nanmin(data)
+        vmax = np.nanmax(data)
+    except Exception as e:
+        st.error(f"Erreur lors du calcul des valeurs min et max : {e}")
+        return
+    
+    levels = np.linspace(vmin, vmax, 15)
+    
+    # Tracé des courbes de niveau
+    fig, ax = plt.subplots(figsize=(8, 6))
+    contour = ax.contour(X, Y, data, levels=levels, cmap='terrain')
+    ax.clabel(contour, inline=True, fontsize=8)
+    ax.set_title("Contours d'élévation")
+    ax.set_xlabel("Longitude")
+    ax.set_ylabel("Latitude")
+    st.pyplot(fig)
 
-def display_elements_preview(elements):
-    st.markdown("## Aperçu des éléments validés")
-    for idx, element in enumerate(elements, start=1):
-        st.markdown(f"**Élément {idx}**")
-        if element["type"] == "Image":
-            # Affichage réduit de l'image (largeur fixe)
-            st.image(element["content"], width=200)
-            if element.get("image_title"):
-                st.markdown(f"*Titre de l'image :* **{element['image_title'].upper()}**")
-            if element.get("description"):
-                st.markdown(
-                    f"<span style='color:gray'>*Description :* {element['description']}</span>",
-                    unsafe_allow_html=True
-                )
-        else:
-            st.markdown(f"**Texte :** {element['content']}")
-        st.markdown("---")
+##################
+# Fonction main  #
+##################
 
 def main():
-    st.title("📐 Conception de Rapport Structuré")
+    st.title("Génération de Contours à partir d'un TIFF")
     
-    with st.sidebar:
-        st.header("📝 Métadonnées")
-        titre = st.text_input("Titre principal")
-        report_id = st.text_input("ID du rapport")
-        report_date = st.date_input("Date du rapport", date.today())
-        report_time = st.time_input("Heure du rapport", datetime.now().time())
-        editor = st.text_input("Éditeur")
-        location = st.text_input("Localisation")
-        company = st.text_input("Société")
-        logo = st.file_uploader("Logo", type=["png", "jpg", "jpeg"])
+    # Saisie du nom de la carte (affiché en titre, par exemple)
+    map_name = st.text_input("Nom de votre carte", value="Ma Carte")
     
-    metadata = {
-        'titre': titre,
-        'report_id': report_id,
-        'date': report_date,
-        'time': report_time,
-        'editor': editor,
-        'location': location,
-        'company': company,
-        'logo': logo
-    }
-    
-    if "elements" not in st.session_state:
-        st.session_state["elements"] = []
-    elements = st.session_state["elements"]
-    
-    new_element = create_element_controller()
-    if new_element:
-        elements.append(new_element)
-        st.session_state["elements"] = elements
-        st.success("Élément validé avec succès !")
-    
-    if elements:
-        display_elements_preview(elements)
-    
-    if elements:
-        if st.button("Générer le PDF"):
-            pdf = generate_pdf(elements, metadata)
-            st.success("✅ Rapport généré avec succès!")
-            st.download_button("Télécharger le PDF", pdf, "rapport_structuré.pdf", "application/pdf")
+    # Chargement et construction de la mosaïque
+    folder_path = "TIFF"
+    if not os.path.exists(folder_path):
+        st.error("Dossier TIFF introuvable")
+        return
 
+    tiff_files = load_tiff_files(folder_path)
+    if not tiff_files:
+        return
+
+    mosaic_path = build_mosaic(tiff_files)
+    if not mosaic_path:
+        return
+
+    # Création de la carte interactive avec outil de dessin pour sélectionner l'emprise
+    m = create_map(mosaic_path)
+    st.write("**Utilisez l'outil de dessin pour sélectionner une zone (rectangle) sur la carte.**")
+    map_data = st_folium(m, width=700, height=500)
+    
+    # Gestion des emprises dessinées (possibilité de multiples rectangles)
+    drawing_geometries = []
+    if isinstance(map_data, dict):
+        raw_drawings = map_data.get("all_drawings", [])
+        if raw_drawings:
+            for drawing in raw_drawings:
+                if isinstance(drawing, dict) and drawing.get("geometry", {}).get("type") == "Polygon":
+                    drawing_geometries.append(drawing.get("geometry"))
+    
+    if not drawing_geometries:
+        st.warning("Veuillez dessiner une emprise")
+    else:
+        # Pour chaque rectangle dessiné, générer et afficher les contours correspondants
+        for i, geom in enumerate(drawing_geometries, start=1):
+            st.subheader(f"Résultat des contours - Emprise {i}")
+            generate_contours(mosaic_path, geom)
+    
 if __name__ == "__main__":
     main()
