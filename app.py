@@ -24,19 +24,32 @@ def create_element_controller():
             size = st.selectbox("Taille", ["Grand", "Moyen", "Petit"], key="elem_size")
         with col2:
             vertical_pos = st.selectbox("Position verticale", ["Haut", "Milieu", "Bas"], key="v_pos")
-            horizontal_pos = st.selectbox("Position horizontale", ["Gauche", "Droite", "Centre"] 
-                                      if size == "Petit" else ["Gauche", "Droite"], key="h_pos")
+            horizontal_pos = st.selectbox(
+                "Position horizontale",
+                ["Gauche", "Droite", "Centre"] if size == "Petit" else ["Gauche", "Droite"],
+                key="h_pos"
+            )
         
-        content = st.file_uploader("Contenu", type=["png", "jpg", "jpeg"]) if elem_type == "Image" else st.text_area("Contenu")
+        # Pour une image, on demande le fichier, le titre et la description
+        if elem_type == "Image":
+            content = st.file_uploader("Contenu (image)", type=["png", "jpg", "jpeg"], key="content_image")
+            image_title = st.text_input("Titre de l'image", max_chars=50, key="image_title")
+            description = st.text_input("Description brève (max 100 caractères)", max_chars=100, key="image_desc")
+        else:
+            content = st.text_area("Contenu", key="content_text")
         
         if st.button("Valider l'élément"):
-            return {
+            element_data = {
                 "type": elem_type,
                 "size": size,
                 "v_pos": vertical_pos,
                 "h_pos": horizontal_pos,
-                "content": content
+                "content": content,
             }
+            if elem_type == "Image":
+                element_data["image_title"] = image_title
+                element_data["description"] = description
+            return element_data
     return None
 
 def calculate_dimensions(size):
@@ -148,6 +161,15 @@ def generate_pdf(elements, metadata):
             try:
                 img = ImageReader(element['content'])
                 c.drawImage(img, x, y, width=width, height=height, preserveAspectRatio=True, mask='auto')
+                # Ajout du titre en haut au centre de l'image
+                if element.get("image_title"):
+                    c.setFont("Helvetica-Bold", 12)
+                    c.drawCentredString(x + width/2, y + height - 10, element["image_title"])
+                # Ajout de la description en bas à droite de l'image
+                if element.get("description"):
+                    desc_text = element["description"][:100]  # Limiter à 100 caractères
+                    c.setFont("Helvetica", 10)
+                    c.drawRightString(x + width - 10, y + 10, desc_text)
             except Exception as e:
                 st.error(f"Erreur d'image: {str(e)}")
         else:
@@ -171,7 +193,7 @@ def main():
     # Configuration des métadonnées dans la sidebar
     with st.sidebar:
         st.header("📝 Métadonnées")
-        titre = st.text_input("Titre principal")  # Nouveau champ pour le titre principal
+        titre = st.text_input("Titre principal")
         report_id = st.text_input("ID du rapport")
         report_date = st.date_input("Date du rapport", date.today())
         report_time = st.time_input("Heure du rapport", datetime.now().time())
