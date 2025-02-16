@@ -315,7 +315,7 @@ def run_analysis_spatiale():
 # ==============================
 
 def create_element_controller():
-    # L'expender n'utilise plus de clé pour éviter d'éventuels conflits.
+    # L'expander n'utilise plus de clé pour éviter d'éventuels conflits.
     with st.expander("➕ Ajouter un élément", expanded=True):
         col1, col2 = st.columns(2)
         with col1:
@@ -561,22 +561,24 @@ def run_report():
         # Sélection multiple des résultats d'analyse spatiale
         options = {f"{i+1} - {res['title']}": i for i, res in enumerate(st.session_state["analysis_results"])}
         selected = st.multiselect("Choisissez les cartes à ajouter au rapport", list(options.keys()), key="rapport_select_analysis")
-        for opt in selected:
-            idx = options[opt]
-            image_data = st.session_state["analysis_results"][idx]["image"]
-            # Ajout de l'image en évitant les doublons
-            if not any(el.get("analysis_ref") == idx for el in elements if el["type"] == "Image"):
-                elements.append({
-                    "type": "Image",
-                    "size": analysis_size,
-                    "v_pos": analysis_v_pos,
-                    "h_pos": analysis_h_pos,
-                    "content": image_data,
-                    "image_title": analysis_image_title if analysis_image_title else st.session_state["analysis_results"][idx]["title"],
-                    "description": analysis_description if analysis_description else "Carte générée depuis l'analyse spatiale",
-                    "analysis_ref": idx
-                })
-        st.success("Les cartes sélectionnées ont été ajoutées aux éléments du rapport.")
+        
+        if st.button("Valider les cartes sélectionnées"):
+            for opt in selected:
+                idx = options[opt]
+                image_data = st.session_state["analysis_results"][idx]["image"]
+                # Ajout de l'image en évitant les doublons
+                if not any(el.get("analysis_ref") == idx for el in elements if el["type"] == "Image"):
+                    elements.append({
+                        "type": "Image",
+                        "size": analysis_size,
+                        "v_pos": analysis_v_pos,
+                        "h_pos": analysis_h_pos,
+                        "content": image_data,
+                        "image_title": analysis_image_title if analysis_image_title else st.session_state["analysis_results"][idx]["title"],
+                        "description": analysis_description if analysis_description else "Carte générée depuis l'analyse spatiale",
+                        "analysis_ref": idx
+                    })
+            st.success("Les cartes sélectionnées ont été ajoutées aux éléments du rapport.")
     else:
         st.info("Aucune carte issue de l'analyse spatiale n'est disponible pour le moment.")
     
