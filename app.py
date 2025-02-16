@@ -229,8 +229,21 @@ def run_analysis_spatiale():
     if "analysis_mode" not in st.session_state:
         st.session_state["analysis_mode"] = "none"
     
-    # Initialisation pour conserver les dessins
-    st.session_state.setdefault("raw_drawings", [])
+    # Assurer la persistance des dessins : sauvegarder et restaurer
+    if "raw_drawings" not in st.session_state:
+        st.session_state["raw_drawings"] = []
+    if "saved_drawings" not in st.session_state:
+        st.session_state["saved_drawings"] = []
+    
+    # Bouton pour sauvegarder les dessins afin qu'ils ne disparaissent pas lors du changement de menu
+    if st.button("Sauvegarder mes dessins", key="save_drawings"):
+        st.session_state["saved_drawings"] = st.session_state["raw_drawings"]
+        st.success("Vos dessins ont été sauvegardés.")
+    
+    # Si les dessins actuels sont vides mais que des dessins sauvegardés existent, les restaurer
+    if not st.session_state["raw_drawings"] and st.session_state["saved_drawings"]:
+        st.session_state["raw_drawings"] = st.session_state["saved_drawings"]
+        st.info("Vos dessins sauvegardés ont été restaurés.")
     
     # Saisie du nom de la carte
     map_name = st.text_input("Nom de votre carte", value="Ma Carte", key="analysis_map_name")
@@ -549,7 +562,6 @@ def run_report():
         unique_results = []
         unique_keys = set()
         for idx, res in enumerate(st.session_state["analysis_results"]):
-            # On utilise le titre et la taille de l'image comme indicateur de doublon
             key = res["title"] + "_" + str(len(res["image"]))
             if key not in unique_keys:
                 unique_keys.add(key)
