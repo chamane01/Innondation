@@ -23,7 +23,6 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph
 from reportlab.lib import colors
 
-# Pour conversion de géométries (overlay dans matplotlib)
 from shapely.geometry import shape
 
 # Dimensions standard pour le PDF
@@ -34,7 +33,6 @@ COLUMN_WIDTH = PAGE_WIDTH / 2
 # ------------------------------
 # Fonctions utilitaires pour la conversion d'images
 # ------------------------------
-
 def image_bytes_to_data_url(image_bytes):
     """Convertit des bytes d'image en data URL pour l'overlay Folium."""
     base64_str = base64.b64encode(image_bytes).decode('utf-8')
@@ -50,7 +48,6 @@ def get_bounds_from_geometry(geometry):
 # ==============================
 # Fonctions utilitaires - ANALYSE SPATIALE
 # ==============================
-
 def load_tiff_files(folder_path):
     """Charge les fichiers TIFF contenus dans un dossier."""
     try:
@@ -140,11 +137,13 @@ def generate_contours(mosaic_file, drawing_geometry):
     """
     Génère une figure matplotlib affichant les contours d'élévation
     pour la zone définie par drawing_geometry, en convertissant
-    les données en coordonnées UTM.
+    les données en coordonnées UTM. En plus de la zone sélectionnée,
+    tous les autres dessins (polygones, lignes, marqueurs, etc.) qui
+    se trouvent dans cette emprise sont tracés.
     """
     try:
         with rasterio.open(mosaic_file) as src:
-            # Pour le masquage, convertir la géométrie de EPSG:4326 vers le CRS du raster (si besoin)
+            # Conversion de la géométrie dessinée pour le masquage : de EPSG:4326 vers le CRS du raster
             geom = drawing_geometry
             if src.crs.to_string() != "EPSG:4326":
                 from rasterio.warp import transform_geom
@@ -155,7 +154,7 @@ def generate_contours(mosaic_file, drawing_geometry):
             nodata = src.nodata
 
             nrows, ncols = data.shape
-            # Création d'une grille (en CRS du raster)
+            # Création d'une grille en CRS du raster
             x_coords = np.arange(ncols) * out_transform.a + out_transform.c + out_transform.a/2
             y_coords = np.arange(nrows) * out_transform.e + out_transform.f + out_transform.e/2
             X, Y = np.meshgrid(x_coords, y_coords)
@@ -182,9 +181,11 @@ def generate_contours(mosaic_file, drawing_geometry):
             X_utm = np.array(X_utm_flat).reshape(X.shape)
             Y_utm = np.array(Y_utm_flat).reshape(Y.shape)
 
-            # Conversion de la géométrie dessinée (en EPSG:4326) vers UTM pour l'affichage
+            # Conversion de la zone dessinée (en EPSG:4326) vers UTM
             from rasterio.warp import transform_geom
             geom_utm = transform_geom("EPSG:4326", utm_crs, drawing_geometry)
+            # Création de la forme shapely de la zone sélectionnée
+            poly = shape(geom_utm)
 
             # Remplacement des pixels nodata par NaN
             if nodata is not None:
@@ -203,12 +204,57 @@ def generate_contours(mosaic_file, drawing_geometry):
             ax.set_xlabel("UTM Easting")
             ax.set_ylabel("UTM Northing")
 
-            # Superposition de la zone dessinée
-            poly = shape(geom_utm)
+            # Tracé de la zone sélectionnée (en rouge)
             x_poly, y_poly = poly.exterior.xy
             ax.plot(x_poly, y_poly, color='red', linewidth=2, label="Zone dessinée")
-            ax.legend()
 
+            # Parcours de tous les dessins enregistrés et tracés s'ils intersectent la zone
+            labels_plotted = {"Polygon": False, "LineString": False, "Point": False}
+            if "raw_drawings" in st.session_state:
+                for d in st.session_state["raw_drawings"]:
+                    if isinstance(d, dict) and "geometry" in d:
+                        try:
+                            # Transformation de la géométrie du dessin depuis EPSG:4326 vers UTM
+                            geom_other_utm = transform_geom("EPSG:4326", utm_crs, d["geometry"])
+                            shapely_other = shape(geom_other_utm)
+                            # Si le dessin intersecte la zone sélectionnée
+                            if shapely_other.intersects(poly):
+                                # Éviter de retracer la zone sélectionnée (exactement identique)
+                                if shapely_other.equals(poly):
+                                    continue
+                                # Tracé selon le type géométrique
+                                if shapely_other.geom_type in ["Polygon", "MultiPolygon"]:
+                                    lbl = "Autre polygon" if not labels_plotted["Polygon"] else None
+                                    labels_plotted["Polygon"] = True
+                                    if shapely_other.geom_type == "Polygon":
+                                        x_other, y_other = shapely_other.exterior.xy
+                                        ax.plot(x_other, y_other, color='green', linestyle='--', linewidth=2, label=lbl)
+                                    else:
+                                        for part in shapely_other.geoms:
+                                            x_other, y_other = part.exterior.xy
+                                            ax.plot(x_other, y_other, color='green', linestyle='--', linewidth=2, label=lbl)
+                                elif shapely_other.geom_type in ["LineString", "MultiLineString"]:
+                                    lbl = "Ligne" if not labels_plotted["LineString"] else None
+                                    labels_plotted["LineString"] = True
+                                    if shapely_other.geom_type == "LineString":
+                                        x_other, y_other = shapely_other.xy
+                                        ax.plot(x_other, y_other, color='blue', linestyle='-', linewidth=2, label=lbl)
+                                    else:
+                                        for part in shapely_other.geoms:
+                                            x_other, y_other = part.xy
+                                            ax.plot(x_other, y_other, color='blue', linestyle='-', linewidth=2, label=lbl)
+                                elif shapely_other.geom_type in ["Point", "MultiPoint"]:
+                                    lbl = "Point" if not labels_plotted["Point"] else None
+                                    labels_plotted["Point"] = True
+                                    if shapely_other.geom_type == "Point":
+                                        ax.plot(shapely_other.x, shapely_other.y, 'o', color='orange', markersize=8, label=lbl)
+                                    else:
+                                        for part in shapely_other.geoms:
+                                            ax.plot(part.x, part.y, 'o', color='orange', markersize=8, label=lbl)
+                        except Exception as e:
+                            st.error(f"Erreur lors du tracé d'un dessin supplémentaire : {e}")
+
+            ax.legend()
             return fig
     except Exception as e:
         st.error(f"Erreur lors de la génération des contours : {e}")
@@ -292,7 +338,6 @@ def store_figure(fig, result_type, title):
 # ==============================
 # Interface - Analyse Spatiale
 # ==============================
-
 def run_analysis_spatiale():
     st.title("🔍 Analyse Spatiale")
     st.info("Ce module vous permet de générer des contours (à partir de rectangles sélectionnés) ou des profils d'élévation (à partir de lignes).")
@@ -390,7 +435,6 @@ def run_analysis_spatiale():
 # Menu pour ajouter une carte d'analyse spatiale
 # (Similaire au formulaire pour les images téléversées)
 # ==============================
-
 def create_analysis_card_controller():
     with st.expander("➕ Ajouter une carte d'analyse spatiale", expanded=True):
         if "analysis_results" not in st.session_state or not st.session_state["analysis_results"]:
@@ -429,7 +473,6 @@ def create_analysis_card_controller():
 # ==============================
 # Fonctions utilitaires - RAPPORT
 # ==============================
-
 def create_element_controller():
     with st.expander("➕ Ajouter un élément", expanded=True):
         col1, col2 = st.columns(2)
@@ -630,7 +673,6 @@ def display_elements_preview(elements):
 # ==============================
 # Interface - Rapport
 # ==============================
-
 def run_report():
     st.title("📄 Génération de Rapport")
     
@@ -688,7 +730,6 @@ def run_report():
 # ==============================
 # Application Principale
 # ==============================
-
 def main():
     st.set_page_config(page_title="Application SIG & Rapport", layout="wide")
     
