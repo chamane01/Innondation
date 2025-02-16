@@ -286,7 +286,7 @@ def run_analysis_spatiale():
     if st.session_state["analysis_mode"] == "contours":
         st.subheader("Générer des contours")
         drawing_geometries = []
-        raw_drawings = st.session_state.get("raw_drawings") or []  # Correction ici
+        raw_drawings = st.session_state.get("raw_drawings") or []
         # Sélectionner uniquement les dessins de type Polygon (issus du rectangle ou autres polygones)
         for drawing in raw_drawings:
             if isinstance(drawing, dict) and drawing.get("geometry", {}).get("type") == "Polygon":
@@ -324,6 +324,27 @@ def run_analysis_spatiale():
                         ).add_to(contour_group)
                 # Ajouter le groupe de contours à la carte
                 updated_map.add_child(contour_group)
+                
+                # <<--- AJOUT : Affichage des entités dessinées sur la carte de contours --->
+                entities_group = folium.FeatureGroup(name="Entités Dessinées")
+                for drawing in st.session_state.get("raw_drawings", []):
+                    if isinstance(drawing, dict) and "geometry" in drawing:
+                        geom_type = drawing["geometry"].get("type", "")
+                        if geom_type == "Polygon":
+                            style = {'color': 'green', 'weight': 2, 'fillColor': 'green', 'fillOpacity': 0.2}
+                        elif geom_type == "LineString":
+                            style = {'color': 'blue', 'weight': 3}
+                        elif geom_type == "Point":
+                            style = {'color': 'orange', 'radius': 5}
+                        else:
+                            style = {'color': 'red', 'weight': 2}
+                        folium.GeoJson(
+                            drawing,
+                            style_function=lambda feature, s=style: s
+                        ).add_to(entities_group)
+                updated_map.add_child(entities_group)
+                # <<--- Fin ajout --->
+                
                 st_folium(updated_map, width=700, height=500, key="analysis_map_updated")
         if st.button("Retour", key="retour_contours"):
             st.session_state["analysis_mode"] = "none"
