@@ -1,10 +1,11 @@
 import streamlit as st
-from datetime import date
+from datetime import date, datetime
 from io import BytesIO
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
 from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import Paragraph
 
 # Configuration de la page
 st.set_page_config(page_title="Générateur Structuré", layout="centered")
@@ -60,10 +61,50 @@ def calculate_position(element):
     
     return (x, PAGE_HEIGHT - vertical_offset - SECTION_HEIGHT)
 
-def generate_pdf(elements):
+def draw_metadata(c, metadata):
+    margin = 50
+    x_right = PAGE_WIDTH - margin
+    y_top = PAGE_HEIGHT - margin
+    line_height = 14
+    
+    # Logo
+    if metadata['logo']:
+        try:
+            img = ImageReader(metadata['logo'])
+            img_width, img_height = img.getSize()
+            aspect = img_height / img_width
+            desired_width = 50
+            desired_height = desired_width * aspect
+            c.drawImage(img, x_right - desired_width, y_top - desired_height, 
+                       width=desired_width, height=desired_height, preserveAspectRatio=True)
+            y_top -= desired_height + 10
+        except Exception as e:
+            st.error(f"Erreur de chargement du logo: {str(e)}")
+
+    # Métadonnées textuelles
+    c.setFont("Helvetica", 9)
+    elements = [
+        f"ID: {metadata['report_id']}",
+        f"Date: {metadata['date'].strftime('%d/%m/%Y')} {metadata['time'].strftime('%H:%M')}",
+        f"Lieu: {metadata['location']}",
+        f"Rédacteur: {metadata['editor']}",
+        f"Société: {metadata['company']}"
+    ]
+    
+    for text in elements:
+        c.drawRightString(x_right, y_top, text)
+        y_top -= line_height
+
+def generate_pdf(elements, metadata):
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
     
+    # Métadonnées techniques
+    c.setAuthor(metadata['editor'])
+    c.setTitle(metadata['report_id'])
+    c.setSubject(f"Rapport {metadata['company']} - {metadata['date']}")
+    
+    # Éléments principaux
     for element in elements:
         width, height = calculate_dimensions(element['size'])
         x, y = calculate_position(element)
@@ -72,8 +113,8 @@ def generate_pdf(elements):
             try:
                 img = ImageReader(element['content'])
                 c.drawImage(img, x, y, width=width, height=height, preserveAspectRatio=True, mask='auto')
-            except:
-                pass
+            except Exception as e:
+                st.error(f"Erreur d'image: {str(e)}")
         else:
             text = element['content']
             style = getSampleStyleSheet()["Normal"]
@@ -82,6 +123,9 @@ def generate_pdf(elements):
             p.wrapOn(c, width, height)
             p.drawOn(c, x, y)
     
+    # Métadonnées visuelles
+    draw_metadata(c, metadata)
+    
     c.save()
     buffer.seek(0)
     return buffer
@@ -89,10 +133,28 @@ def generate_pdf(elements):
 def main():
     st.title("📐 Conception de Rapport Structuré")
     
-    # Configuration de base
+    # Configuration des métadonnées
     with st.expander("⚙️ Métadonnées", expanded=True):
-        report_id = st.text_input("ID du rapport", value=f"RAPPORT-{date.today().isoformat()}")
-        company = st.text_input("Société", value="ENTREPRISE SARL")
+        col1, col2 = st.columns(2)
+        with col1:
+            report_id = st.text_input("ID du rapport", value=f"RAPPORT-{datetime.now().strftime('%Y%m%d%H%M')}")
+            company = st.text_input("Société", value="ENTREPRISE SARL")
+            location = st.text_input("Lieu", value="Paris")
+        with col2:
+            report_date = st.date_input("Date", value=date.today())
+            report_time = st.time_input("Heure", value=datetime.now().time())
+            editor = st.text_input("Rédacteur", value="John Doe")
+            logo = st.file_uploader("Logo", type=["png", "jpg", "jpeg"])
+    
+    metadata = {
+        "report_id": report_id,
+        "company": company,
+        "date": report_date,
+        "time": report_time,
+        "location": location,
+        "editor": editor,
+        "logo": logo
+    }
     
     # Gestion des éléments
     elements = []
@@ -100,7 +162,7 @@ def main():
     if new_element:
         elements.append(new_element)
     
-    # Affichage de la structure
+    # Affichage et génération
     if elements:
         with st.container():
             st.markdown("### Prévisualisation Structurée")
@@ -115,8 +177,7 @@ def main():
                         else:
                             st.markdown(element['content'])
         
-        # Génération PDF
-        pdf_buffer = generate_pdf(elements)
+        pdf_buffer = generate_pdf(elements, metadata)
         st.download_button(
             label="📤 Exporter le PDF",
             data=pdf_buffer,
