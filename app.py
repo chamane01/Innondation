@@ -144,10 +144,9 @@ def generate_contours(mosaic_file, drawing_geometry):
     emprise, seule la partie intérieure est tracée en noir (trait continu).
 
     Les modifications apportées sont les suivantes :
-      - Dans la légende, une seule entrée par classe de dessin est affichée (par exemple, "Profil"
-        plutôt que "Profil 1", "Profil 2", etc.).
-      - Pour les lignes (profils), le label est incrusté directement le long du trait, à la manière des
-        courbes de niveau.
+      - Dans la légende, une seule entrée par classe de dessin est affichée (ex. "Profil")
+        tandis que sur le dessin, chaque ligne (profil) conserve son numéro (ex. "Profil 1", "Profil 2", etc.)
+      - Pour les lignes (profils), le texte est incrusté directement le long du trait.
       - Une classe est ajoutée pour chaque type de dessin (points, lignes, polygones, etc.).
     """
     try:
@@ -223,11 +222,13 @@ def generate_contours(mosaic_file, drawing_geometry):
             # Ajout du fond de carte (basé sur le fond présent) avec opacité 50%
             ctx.add_basemap(ax, crs=utm_crs, source=ctx.providers.OpenStreetMap.Mapnik, alpha=0.5)
 
-            # Initialisation des flags pour s'assurer qu'une seule entrée par classe est ajoutée dans la légende
+            # Initialisation des flags pour la légende
             added_profile = False
             added_polygon = False
             added_point = False
-            # (On pourra ajouter ici d'autres flags si d'autres types de dessins apparaissent, ex. "Cercle")
+
+            # Compteur pour numéroter les profils
+            profile_counter = 1
 
             # Parcours de tous les dessins enregistrés et tracé de leur intersection avec l'enveloppe
             if "raw_drawings" in st.session_state:
@@ -257,15 +258,17 @@ def generate_contours(mosaic_file, drawing_geometry):
                                         for part in clipped.geoms:
                                             x_other, y_other = part.exterior.xy
                                             ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=label, zorder=4)
-                                # Pour les lignes : tracer le trait, incruster le label "Profil" le long du trait,
+                                # Pour les lignes : tracer le trait, incruster le numéro du profil sur le trait,
                                 # et ajouter une seule entrée légende "Profil"
                                 elif clipped.geom_type in ["LineString", "MultiLineString"]:
-                                    label = "Profil" if not added_profile else "_nolegend_"
+                                    current_profile_label = f"Profil {profile_counter}"
+                                    profile_counter += 1
+                                    legend_label = "Profil" if not added_profile else "_nolegend_"
                                     if not added_profile:
                                         added_profile = True
                                     if clipped.geom_type == "LineString":
                                         x_other, y_other = clipped.xy
-                                        ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=label, zorder=4)
+                                        ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=legend_label, zorder=4)
                                         if len(x_other) >= 2:
                                             dx = x_other[1] - x_other[0]
                                             dy = y_other[1] - y_other[0]
@@ -273,11 +276,11 @@ def generate_contours(mosaic_file, drawing_geometry):
                                         else:
                                             angle = 0
                                         centroid = clipped.centroid
-                                        ax.text(centroid.x, centroid.y, "Profil", fontsize=8, color='black', ha='center', va='center', rotation=angle, zorder=6)
+                                        ax.text(centroid.x, centroid.y, current_profile_label, fontsize=8, color='black', ha='center', va='center', rotation=angle, zorder=6)
                                     else:
                                         for part in clipped.geoms:
                                             x_other, y_other = part.xy
-                                            ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=label, zorder=4)
+                                            ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=legend_label, zorder=4)
                                             if len(x_other) >= 2:
                                                 dx = x_other[1] - x_other[0]
                                                 dy = y_other[1] - y_other[0]
@@ -285,7 +288,7 @@ def generate_contours(mosaic_file, drawing_geometry):
                                             else:
                                                 angle = 0
                                             centroid = part.centroid
-                                            ax.text(centroid.x, centroid.y, "Profil", fontsize=8, color='black', ha='center', va='center', rotation=angle, zorder=6)
+                                            ax.text(centroid.x, centroid.y, current_profile_label, fontsize=8, color='black', ha='center', va='center', rotation=angle, zorder=6)
                                 # Pour les points : tracer le point et ajouter une seule entrée légende "Point"
                                 elif clipped.geom_type in ["Point", "MultiPoint"]:
                                     label = "Point" if not added_point else "_nolegend_"
