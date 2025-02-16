@@ -23,6 +23,9 @@ from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.platypus import Paragraph
 from reportlab.lib import colors
 
+# Pour conversion de géométries (overlay dans matplotlib)
+from shapely.geometry import shape
+
 # Dimensions standard pour le PDF
 PAGE_WIDTH, PAGE_HEIGHT = A4
 SECTION_HEIGHT = PAGE_HEIGHT / 3
@@ -88,15 +91,15 @@ def create_map(mosaic_file):
     """
     Crée une carte Folium affichant l'emprise de la mosaïque et intégrant
     tous les outils de dessin pour augmenter les possibilités.
+    (Cette carte servira uniquement à recueillir les dessins.)
     """
     m = folium.Map(location=[0, 0], zoom_start=2)
     
-    # Calque indiquant l'emprise de la mosaïque
+    # Calque indiquant l'emprise de la mosaïque (transformé en EPSG:4326 pour Folium)
     mosaic_group = folium.FeatureGroup(name="Mosaïque")
     try:
         with rasterio.open(mosaic_file) as src:
             bounds = src.bounds
-            # Si le raster n'est pas en EPSG:4326, on reprojette les limites pour Folium
             if src.crs.to_string() != "EPSG:4326":
                 from rasterio.warp import transform
                 left, bottom, right, top = bounds.left, bounds.bottom, bounds.right, bounds.top
@@ -116,7 +119,7 @@ def create_map(mosaic_file):
     
     mosaic_group.add_to(m)
     
-    # Ajout de tous les outils de dessin
+    # Outils de dessin
     Draw(
         draw_options={
             'polyline': {'allowIntersection': False},
@@ -135,48 +138,81 @@ def create_map(mosaic_file):
 
 def generate_contours(mosaic_file, drawing_geometry):
     """
-    Génère les courbes de niveau à partir d'une zone définie par drawing_geometry.
-    Retourne la figure matplotlib.
+    Génère une figure matplotlib affichant les contours d'élévation
+    pour la zone définie par drawing_geometry, en convertissant
+    les données en coordonnées UTM.
     """
     try:
         with rasterio.open(mosaic_file) as src:
-            # Transformation de la géométrie de EPSG:4326 vers le CRS du raster si nécessaire
+            # Pour le masquage, convertir la géométrie de EPSG:4326 vers le CRS du raster (si besoin)
             geom = drawing_geometry
             if src.crs.to_string() != "EPSG:4326":
                 from rasterio.warp import transform_geom
                 geom = transform_geom("EPSG:4326", src.crs, drawing_geometry)
+            
             out_image, out_transform = rasterio.mask.mask(src, [geom], crop=True)
             data = out_image[0]
             nodata = src.nodata
+
+            nrows, ncols = data.shape
+            # Création d'une grille (en CRS du raster)
+            x_coords = np.arange(ncols) * out_transform.a + out_transform.c + out_transform.a/2
+            y_coords = np.arange(nrows) * out_transform.e + out_transform.f + out_transform.e/2
+            X, Y = np.meshgrid(x_coords, y_coords)
+
+            # Détermination du CRS UTM à partir du centre de la zone masquée
+            from rasterio.warp import transform
+            center_x = out_transform.c + (ncols/2) * out_transform.a
+            center_y = out_transform.f + (nrows/2) * out_transform.e
+            if src.crs.to_string() != "EPSG:4326":
+                lon, lat = transform(src.crs, "EPSG:4326", [center_x], [center_y])
+                center_lon, center_lat = lon[0], lat[0]
+            else:
+                center_lon, center_lat = center_x, center_y
+            utm_zone = int((center_lon + 180) / 6) + 1
+            if center_lat >= 0:
+                utm_crs = f"EPSG:{32600 + utm_zone}"
+            else:
+                utm_crs = f"EPSG:{32700 + utm_zone}"
+
+            # Transformation de la grille en coordonnées UTM
+            x_flat = X.flatten()
+            y_flat = Y.flatten()
+            X_utm_flat, Y_utm_flat = transform(src.crs, utm_crs, x_flat, y_flat)
+            X_utm = np.array(X_utm_flat).reshape(X.shape)
+            Y_utm = np.array(Y_utm_flat).reshape(Y.shape)
+
+            # Conversion de la géométrie dessinée (en EPSG:4326) vers UTM pour l'affichage
+            from rasterio.warp import transform_geom
+            geom_utm = transform_geom("EPSG:4326", utm_crs, drawing_geometry)
+
+            # Remplacement des pixels nodata par NaN
+            if nodata is not None:
+                data = np.where(data == nodata, np.nan, data)
+
+            # Calcul des niveaux de contour
+            vmin = np.nanmin(data)
+            vmax = np.nanmax(data)
+            levels = np.linspace(vmin, vmax, 15)
+
+            # Création de la figure en UTM
+            fig, ax = plt.subplots(figsize=(8, 6))
+            cs = ax.contour(X_utm, Y_utm, data, levels=levels, cmap='terrain')
+            ax.clabel(cs, inline=True, fontsize=8)
+            ax.set_title("Contours d'élévation (UTM)")
+            ax.set_xlabel("UTM Easting")
+            ax.set_ylabel("UTM Northing")
+
+            # Superposition de la zone dessinée
+            poly = shape(geom_utm)
+            x_poly, y_poly = poly.exterior.xy
+            ax.plot(x_poly, y_poly, color='red', linewidth=2, label="Zone dessinée")
+            ax.legend()
+
+            return fig
     except Exception as e:
-        st.error(f"Erreur lors de la lecture du fichier TIFF : {e}")
+        st.error(f"Erreur lors de la génération des contours : {e}")
         return None
-    
-    if nodata is not None:
-        data = np.where(data == nodata, np.nan, data)
-    
-    nrows, ncols = data.shape
-    x_coords = np.arange(ncols) * out_transform.a + out_transform.c + out_transform.a/2
-    y_coords = np.arange(nrows) * out_transform.e + out_transform.f + out_transform.e/2
-    X, Y = np.meshgrid(x_coords, y_coords)
-    
-    try:
-        vmin = np.nanmin(data)
-        vmax = np.nanmax(data)
-    except Exception as e:
-        st.error(f"Erreur lors du calcul des valeurs min et max : {e}")
-        return None
-    
-    levels = np.linspace(vmin, vmax, 15)
-    
-    fig, ax = plt.subplots(figsize=(8, 6))
-    contour = ax.contour(X, Y, data, levels=levels, cmap='terrain')
-    ax.clabel(contour, inline=True, fontsize=8)
-    ax.set_title("Contours d'élévation")
-    ax.set_xlabel("Coordonnée X")
-    ax.set_ylabel("Coordonnée Y")
-    
-    return fig
 
 def haversine(lon1, lat1, lon2, lat2):
     """Calcule la distance (m) entre deux points GPS."""
@@ -283,7 +319,7 @@ def run_analysis_spatiale():
     if not mosaic_path:
         return
     
-    # Création de la carte interactive avec outils de dessin
+    # Création de la carte interactive (pour dessiner)
     m = create_map(mosaic_path)
     st.write("**Utilisez l'outil de dessin sur la carte ci-dessous.**")
     map_data = st_folium(m, width=700, height=500, key="analysis_map")
@@ -301,12 +337,12 @@ def run_analysis_spatiale():
         if col2.button("Générer des contours", key="btn_contours"):
             st.session_state["analysis_mode"] = "contours"
     
-    # Mode Générer des contours (rectangle sélectionné)
+    # Mode Générer des contours (à partir de rectangles dessinés)
     if st.session_state["analysis_mode"] == "contours":
         st.subheader("Générer des contours")
         drawing_geometries = []
         raw_drawings = st.session_state.get("raw_drawings") or []
-        # Sélectionner uniquement les dessins de type Polygon (issus du rectangle ou autres polygones)
+        # Sélectionner uniquement les dessins de type Polygon (issus d'un rectangle ou d'un polygone)
         for drawing in raw_drawings:
             if isinstance(drawing, dict) and drawing.get("geometry", {}).get("type") == "Polygon":
                 drawing_geometries.append(drawing.get("geometry"))
@@ -317,51 +353,13 @@ def run_analysis_spatiale():
             options_list = [f"Rectangle {i+1}" for i in range(len(drawing_geometries))]
             selected_indices = st.multiselect("Sélectionnez les rectangles pour générer des contours", options=options_list)
             if st.button("Générer les contours sélectionnés", key="generate_selected_contours"):
-                updated_map = create_map(mosaic_path)
-                # Créer un groupe de couche pour les contours
-                contour_group = folium.FeatureGroup(name="Contours")
                 for sel in selected_indices:
                     idx = int(sel.split()[1]) - 1  # extraire l'indice
                     geometry = drawing_geometries[idx]
                     fig = generate_contours(mosaic_path, geometry)
                     if fig is not None:
-                        st.pyplot(fig)  # afficher la figure
+                        st.pyplot(fig)
                         store_figure(fig, "contour", f"Contours - Emprise {idx+1}")
-                        buf = BytesIO()
-                        fig.savefig(buf, format="png", bbox_inches="tight")
-                        buf.seek(0)
-                        image_data = buf.getvalue()
-                        data_url = image_bytes_to_data_url(image_data)
-                        bounds = get_bounds_from_geometry(geometry)
-                        folium.raster_layers.ImageOverlay(
-                            image=data_url,
-                            bounds=bounds,
-                            opacity=0.6,
-                            interactive=True,
-                            cross_origin=False,
-                            zindex=1
-                        ).add_to(contour_group)
-                # Ajout d'une couche avec l'ensemble des entités dessinées
-                entities_group = folium.FeatureGroup(name="Entités Dessinées")
-                for drawing in st.session_state.get("raw_drawings", []):
-                    if isinstance(drawing, dict) and "geometry" in drawing:
-                        geom_type = drawing["geometry"].get("type", "")
-                        if geom_type == "Polygon":
-                            style = {'color': 'green', 'weight': 2, 'fillColor': 'green', 'fillOpacity': 0.2}
-                        elif geom_type == "LineString":
-                            style = {'color': 'blue', 'weight': 3}
-                        elif geom_type == "Point":
-                            style = {'color': 'orange', 'radius': 5}
-                        else:
-                            style = {'color': 'red', 'weight': 2}
-                        folium.GeoJson(
-                            drawing,
-                            style_function=lambda feature, s=style: s
-                        ).add_to(entities_group)
-                updated_map.add_child(contour_group)
-                updated_map.add_child(entities_group)
-                
-                st_folium(updated_map, width=700, height=500, key="analysis_map_updated")
         if st.button("Retour", key="retour_contours"):
             st.session_state["analysis_mode"] = "none"
     
