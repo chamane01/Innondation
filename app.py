@@ -11,6 +11,7 @@ from streamlit_folium import st_folium
 from folium.plugins import Draw
 from io import BytesIO
 from datetime import date, datetime
+import base64
 
 # ------------------------------
 # Partie ReportLab pour le rapport
@@ -26,6 +27,22 @@ from reportlab.lib import colors
 PAGE_WIDTH, PAGE_HEIGHT = A4
 SECTION_HEIGHT = PAGE_HEIGHT / 3
 COLUMN_WIDTH = PAGE_WIDTH / 2
+
+# ------------------------------
+# Fonctions utilitaires pour la conversion d'images
+# ------------------------------
+
+def image_bytes_to_data_url(image_bytes):
+    """Convertit des bytes d'image en data URL pour l'overlay Folium."""
+    base64_str = base64.b64encode(image_bytes).decode('utf-8')
+    return 'data:image/png;base64,' + base64_str
+
+def get_bounds_from_geometry(geometry):
+    """Calcule les limites géographiques [ [sud, ouest], [nord, est] ] d'une géométrie de type Polygon."""
+    coords = geometry.get("coordinates")[0]  # première bague
+    lons = [pt[0] for pt in coords]
+    lats = [pt[1] for pt in coords]
+    return [[min(lats), min(lons)], [max(lats), max(lons)]]
 
 # ==============================
 # Fonctions utilitaires - ANALYSE SPATIALE
@@ -70,7 +87,7 @@ def build_mosaic(tiff_files, mosaic_path="mosaic.tif"):
 def create_map(mosaic_file):
     """
     Crée une carte Folium affichant l'emprise de la mosaïque et intégrant
-    l'outil de dessin pour pouvoir tracer à la fois des rectangles et des lignes.
+    tous les outils de dessin pour augmenter les possibilités.
     """
     m = folium.Map(location=[0, 0], zoom_start=2)
     
@@ -90,15 +107,15 @@ def create_map(mosaic_file):
     
     mosaic_group.add_to(m)
     
-    # Outils de dessin : rectangle pour contours, polyline pour profils
+    # Ajout de tous les outils de dessin
     Draw(
         draw_options={
-            'rectangle': True,
             'polyline': {'allowIntersection': False},
-            'polygon': False,
-            'circle': False,
-            'marker': False,
-            'circlemarker': False
+            'polygon': True,
+            'rectangle': True,
+            'circle': True,
+            'marker': True,
+            'circlemarker': True
         },
         edit_options={'edit': True, 'remove': True}
     ).add_to(m)
@@ -223,7 +240,7 @@ def store_figure(fig, result_type, title):
 
 def run_analysis_spatiale():
     st.title("🔍 Analyse Spatiale")
-    st.info("Ce module vous permet de générer des contours (à partir de rectangles dessinés) ou des profils d'élévation (à partir de lignes).")
+    st.info("Ce module vous permet de générer des contours (à partir de rectangles sélectionnés) ou des profils d'élévation (à partir de lignes).")
     
     # Initialisation du mode pour cette partie
     if "analysis_mode" not in st.session_state:
@@ -256,7 +273,7 @@ def run_analysis_spatiale():
     if map_data is not None and isinstance(map_data, dict) and "all_drawings" in map_data:
         st.session_state["raw_drawings"] = map_data["all_drawings"]
     
-    # Zone d'options sous la carte
+    # Menu de sélection du mode
     options_container = st.container()
     if st.session_state["analysis_mode"] == "none":
         col1, col2 = options_container.columns(2)
@@ -265,25 +282,47 @@ def run_analysis_spatiale():
         if col2.button("Générer des contours", key="btn_contours"):
             st.session_state["analysis_mode"] = "contours"
     
-    # Mode Générer des contours (rectangle)
+    # Mode Générer des contours (rectangle sélectionné)
     if st.session_state["analysis_mode"] == "contours":
         st.subheader("Générer des contours")
         drawing_geometries = []
         raw_drawings = st.session_state.get("raw_drawings", [])
-        if isinstance(raw_drawings, list):
-            for drawing in raw_drawings:
-                # Les rectangles dessinés apparaissent en tant que Polygones
-                if isinstance(drawing, dict) and drawing.get("geometry", {}).get("type") == "Polygon":
-                    drawing_geometries.append(drawing.get("geometry"))
+        # Sélectionner uniquement les dessins de type Polygon (issus du rectangle ou autres polygones)
+        for drawing in raw_drawings:
+            if isinstance(drawing, dict) and drawing.get("geometry", {}).get("type") == "Polygon":
+                drawing_geometries.append(drawing.get("geometry"))
         if not drawing_geometries:
-            st.warning("Veuillez dessiner un rectangle sur la carte pour définir une zone.")
+            st.warning("Veuillez dessiner au moins un rectangle sur la carte pour définir une zone.")
         else:
-            for i, geom in enumerate(drawing_geometries, start=1):
-                st.markdown(f"**Contours pour l'emprise {i}**")
-                fig = generate_contours(mosaic_path, geom)
-                if fig is not None:
-                    st.pyplot(fig)
-                    store_figure(fig, "contour", f"Contours - Emprise {i}")
+            # Permettre de sélectionner parmi les rectangles dessinés
+            options_list = [f"Rectangle {i+1}" for i in range(len(drawing_geometries))]
+            selected_indices = st.multiselect("Sélectionnez les rectangles pour générer des contours", options=options_list)
+            if st.button("Générer les contours sélectionnés", key="generate_selected_contours"):
+                # Créer une nouvelle carte avec les overlays
+                updated_map = create_map(mosaic_path)
+                for sel in selected_indices:
+                    idx = int(sel.split()[1]) - 1  # extraire l'indice
+                    geometry = drawing_geometries[idx]
+                    fig = generate_contours(mosaic_path, geometry)
+                    if fig is not None:
+                        st.pyplot(fig)  # afficher la figure
+                        store_figure(fig, "contour", f"Contours - Emprise {idx+1}")
+                        # Convertir la figure en image et créer un overlay
+                        buf = BytesIO()
+                        fig.savefig(buf, format="png", bbox_inches="tight")
+                        buf.seek(0)
+                        image_data = buf.getvalue()
+                        data_url = image_bytes_to_data_url(image_data)
+                        bounds = get_bounds_from_geometry(geometry)
+                        folium.raster_layers.ImageOverlay(
+                            image=data_url,
+                            bounds=bounds,
+                            opacity=0.6,
+                            interactive=True,
+                            cross_origin=False,
+                            zindex=1
+                        ).add_to(updated_map)
+                st_folium(updated_map, width=700, height=500, key="analysis_map_updated")
         if st.button("Retour", key="retour_contours"):
             st.session_state["analysis_mode"] = "none"
     
@@ -589,7 +628,7 @@ def run_report():
     st.markdown("### 📌 Ajouter une carte d'analyse spatiale")
     analysis_card = create_analysis_card_controller()
     if analysis_card:
-        # Vérifier pour éviter les doublons (basé sur l'indice de référence)
+        # Éviter les doublons en se basant sur 'analysis_ref'
         if not any(el.get("analysis_ref") == analysis_card.get("analysis_ref") for el in elements if el["type"] == "Image"):
             elements.append(analysis_card)
             st.success("Carte d'analyse ajoutée avec succès !")
