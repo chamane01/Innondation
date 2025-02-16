@@ -30,7 +30,7 @@ def create_element_controller():
                 key="h_pos"
             )
         
-        # Pour une image, on demande le fichier, le titre et la description
+        # Pour un élément de type Image, demander le fichier, le titre et la description
         if elem_type == "Image":
             content = st.file_uploader("Contenu (image)", type=["png", "jpg", "jpeg"], key="content_image")
             image_title = st.text_input("Titre de l'image", max_chars=50, key="image_title")
@@ -39,6 +39,10 @@ def create_element_controller():
             content = st.text_area("Contenu", key="content_text")
         
         if st.button("Valider l'élément"):
+            # Pour une image, s'assurer qu'un fichier est sélectionné
+            if elem_type == "Image" and content is None:
+                st.error("Veuillez charger une image pour cet élément.")
+                return None
             element_data = {
                 "type": elem_type,
                 "size": size,
@@ -158,20 +162,24 @@ def generate_pdf(elements, metadata):
         x, y = calculate_position(element)
         
         if element['type'] == "Image":
-            try:
-                img = ImageReader(element['content'])
-                c.drawImage(img, x, y, width=width, height=height, preserveAspectRatio=True, mask='auto')
-                # Ajout du titre en haut au centre de l'image
-                if element.get("image_title"):
-                    c.setFont("Helvetica-Bold", 12)
-                    c.drawCentredString(x + width/2, y + height - 10, element["image_title"])
-                # Ajout de la description en bas à droite de l'image
-                if element.get("description"):
-                    desc_text = element["description"][:100]  # Limiter à 100 caractères
-                    c.setFont("Helvetica", 10)
-                    c.drawRightString(x + width - 10, y + 10, desc_text)
-            except Exception as e:
-                st.error(f"Erreur d'image: {str(e)}")
+            # Vérifier que le contenu est présent
+            if element["content"] is not None:
+                try:
+                    img = ImageReader(element["content"])
+                    c.drawImage(img, x, y, width=width, height=height, preserveAspectRatio=True, mask='auto')
+                    # Ajout du titre en haut au centre de l'image
+                    if element.get("image_title"):
+                        c.setFont("Helvetica-Bold", 12)
+                        c.drawCentredString(x + width/2, y + height - 10, element["image_title"])
+                    # Ajout de la description en bas à droite de l'image
+                    if element.get("description"):
+                        desc_text = element["description"][:100]  # Limiter à 100 caractères
+                        c.setFont("Helvetica", 10)
+                        c.drawRightString(x + width - 10, y + 10, desc_text)
+                except Exception as e:
+                    st.error(f"Erreur d'image: {str(e)}")
+            else:
+                st.error("Une image validée est introuvable.")
         else:
             text = element['content']
             style = getSampleStyleSheet()["Normal"]
@@ -186,6 +194,21 @@ def generate_pdf(elements, metadata):
     c.save()
     buffer.seek(0)
     return buffer
+
+def display_elements_preview(elements):
+    st.markdown("## Aperçu des éléments validés")
+    for idx, element in enumerate(elements, start=1):
+        st.markdown(f"**Élément {idx}**")
+        if element["type"] == "Image":
+            # Affichage de l'image avec titre et description si renseignés
+            st.image(element["content"], use_column_width=True)
+            if element.get("image_title"):
+                st.markdown(f"*Titre de l'image :* **{element['image_title']}**")
+            if element.get("description"):
+                st.markdown(f"*Description :* {element['description']}")
+        else:
+            st.markdown(f"**Texte :** {element['content']}")
+        st.markdown("---")
 
 def main():
     st.title("📐 Conception de Rapport Structuré")
@@ -213,15 +236,22 @@ def main():
         'logo': logo
     }
     
-    # Gestion des éléments
-    elements = st.session_state.get('elements', [])
+    # Gestion des éléments validés
+    if "elements" not in st.session_state:
+        st.session_state["elements"] = []
+    elements = st.session_state["elements"]
     
     new_element = create_element_controller()
     if new_element:
         elements.append(new_element)
-        st.session_state['elements'] = elements
+        st.session_state["elements"] = elements
+        st.success("Élément validé avec succès !")
     
-    # Aperçu et génération du PDF
+    # Affichage d'un aperçu des éléments validés
+    if elements:
+        display_elements_preview(elements)
+    
+    # Génération et téléchargement du PDF
     if elements:
         if st.button("Générer le PDF"):
             pdf = generate_pdf(elements, metadata)
