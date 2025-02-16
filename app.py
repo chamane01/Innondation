@@ -165,15 +165,18 @@ def generate_pdf(elements, metadata):
                     image_y = y + bottom_margin
                     c.drawImage(img, image_x, image_y, width=image_actual_width, height=image_actual_height, preserveAspectRatio=True, mask='auto')
                     
-                    # Afficher le titre en haut, centré, dans la marge supérieure (en dehors de l'image)
-                    c.setFont("Helvetica-Bold", 12)
-                    c.drawCentredString(x + width / 2, y + height - top_margin / 2, element.get("image_title", ""))
+                    # Afficher le titre en haut, centré, dans la marge supérieure (en dehors de l'image) en majuscules
+                    if element.get("image_title"):
+                        c.setFont("Helvetica-Bold", 12)
+                        image_title = element["image_title"].upper()
+                        c.drawCentredString(x + width / 2, y + height - top_margin / 2, image_title)
                     
                     # Afficher la description en bas à droite, en gris, dans la marge inférieure (en dehors de l'image)
-                    c.setFont("Helvetica", 10)
-                    c.setFillColor(colors.gray)
-                    c.drawRightString(x + width - 10, y + bottom_margin / 2, element.get("description", "")[:100])
-                    c.setFillColor(colors.black)
+                    if element.get("description"):
+                        c.setFont("Helvetica", 10)
+                        c.setFillColor(colors.gray)
+                        c.drawRightString(x + width - 10, y + bottom_margin / 2, element["description"][:100])
+                        c.setFillColor(colors.black)
                 except Exception as e:
                     st.error(f"Erreur d'image: {str(e)}")
             else:
@@ -197,9 +200,10 @@ def display_elements_preview(elements):
     for idx, element in enumerate(elements, start=1):
         st.markdown(f"**Élément {idx}**")
         if element["type"] == "Image":
-            st.image(element["content"], use_column_width=True)
+            # Affichage réduit de l'image (largeur fixe)
+            st.image(element["content"], width=200)
             if element.get("image_title"):
-                st.markdown(f"*Titre de l'image :* **{element['image_title']}**")
+                st.markdown(f"*Titre de l'image :* **{element['image_title'].upper()}**")
             if element.get("description"):
                 st.markdown(
                     f"<span style='color:gray'>*Description :* {element['description']}</span>",
