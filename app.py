@@ -86,9 +86,15 @@ def add_image_overlay(map_object, tiff_path, bounds, name):
     """Add a TIFF image overlay to a Folium map."""
     with rasterio.open(tiff_path) as src:
         image = reshape_as_image(src.read())
+        # Gérer le cas où bounds est un objet (avec attributs bottom, left, etc.) ou un tuple
+        if hasattr(bounds, 'bottom'):
+            overlay_bounds = [[bounds.bottom, bounds.left], [bounds.top, bounds.right]]
+        else:
+            minx, miny, maxx, maxy = bounds
+            overlay_bounds = [[miny, minx], [maxy, maxx]]
         folium.raster_layers.ImageOverlay(
             image=image,
-            bounds=[[bounds.bottom, bounds.left], [bounds.top, bounds.right]],
+            bounds=overlay_bounds,
             name=name,
             opacity=0.6,
         ).add_to(map_object)
@@ -128,7 +134,7 @@ def validate_projection_and_extent(raster_path, polygons_gdf, target_crs):
                 st.warning(f"Le polygone {idx} est en dehors de l'emprise du raster")
     return polygons_gdf
 
-# Fonctions pour calculer volumes, surfaces et autres traitements spatiaux …
+# Fonctions pour calculer volumes, surfaces et autres traitements spatiaux
 def calculate_volume_and_area_for_each_polygon(mns_path, mnt_path, polygons_gdf):
     volumes = []
     areas = []
@@ -271,13 +277,11 @@ with st.sidebar:
             st.success(f"La couche '{new_layer_name}' a été ajoutée.")
         else:
             st.warning(f"La couche '{new_layer_name}' existe déjà.")
-
     st.markdown("#### Sélectionner une couche active")
     if st.session_state["layers"]:
         layer_name = st.selectbox("Choisissez la couche à laquelle ajouter les entités", list(st.session_state["layers"].keys()))
     else:
         st.write("Aucune couche disponible. Ajoutez une couche pour commencer.")
-
     if st.session_state["new_features"]:
         st.write(f"**Entités dessinées temporairement ({len(st.session_state['new_features'])}) :**")
         for idx, feature in enumerate(st.session_state["new_features"]):
@@ -314,8 +318,6 @@ with st.sidebar:
     else:
         st.write("Aucune couche disponible pour gérer les entités.")
     st.markdown("---")
-
-    # Section 2 : Téléversement de fichiers
     st.markdown("### 2- Téléverser des fichiers")
     tiff_type = st.selectbox(
         "Sélectionnez le type de fichier TIFF",
@@ -336,8 +338,6 @@ with st.sidebar:
                 if display_mode == "Reprojection en EPSG:4326":
                     processed_tiff = reproject_tiff(tiff_path, "EPSG:4326")
                 else:
-                    # Pour l'affichage en UTM, on conserve le fichier original,
-                    # mais on convertit les bornes en EPSG:4326 pour l'affichage sur la carte
                     processed_tiff = tiff_path
                 with rasterio.open(processed_tiff) as src:
                     if display_mode == "Affichage en UTM":
@@ -352,7 +352,6 @@ with st.sidebar:
             except Exception as e:
                 st.error(f"Erreur lors du traitement du fichier TIFF : {e}")
             finally:
-                # Pour le mode reprojection, supprimer le fichier temporaire original
                 if display_mode == "Reprojection en EPSG:4326":
                     os.remove(tiff_path)
     geojson_type = st.selectbox(
@@ -402,6 +401,7 @@ folium.TileLayer(
     attr="OpenTopoMap",
     name="Topographique",
 ).add_to(m)
+
 # Ajout des couches créées à la carte
 for layer, features in st.session_state["layers"].items():
     layer_group = folium.FeatureGroup(name=layer, show=True)
@@ -417,6 +417,7 @@ for layer, features in st.session_state["layers"].items():
         elif feature_type == "Polygon":
             folium.Polygon(locations=[(lat, lon) for lon, lat in coordinates[0]], color="green", fill=True, popup=popup).add_to(layer_group)
     layer_group.add_to(m)
+
 # Ajout des couches téléversées à la carte
 for layer in st.session_state["uploaded_layers"]:
     if layer["type"] == "TIFF":
@@ -428,8 +429,13 @@ for layer in st.session_state["uploaded_layers"]:
             os.remove(temp_png_path)
         else:
             add_image_overlay(m, layer["path"], layer["bounds"], layer["name"])
-        bounds = [[layer["bounds"].bottom, layer["bounds"].left], [layer["bounds"].top, layer["bounds"].right]]
-        m.fit_bounds(bounds)
+        # Adaptation de fit_bounds selon le type de bounds
+        if hasattr(layer["bounds"], 'bottom'):
+            display_bounds = [[layer["bounds"].bottom, layer["bounds"].left], [layer["bounds"].top, layer["bounds"].right]]
+        else:
+            minx, miny, maxx, maxy = layer["bounds"]
+            display_bounds = [[miny, minx], [maxy, maxx]]
+        m.fit_bounds(display_bounds)
     elif layer["type"] == "GeoJSON":
         color = geojson_colors.get(layer["name"], "blue")
         folium.GeoJson(
@@ -441,6 +447,7 @@ for layer in st.session_state["uploaded_layers"]:
                 "opacity": 0.7
             }
         ).add_to(m)
+
 # Gestionnaire de dessin
 draw = Draw(
     draw_options={
