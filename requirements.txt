@@ -24,3 +24,4 @@ opencv-python
 pdfkit
 reportlab
 utm
+streamlit-geolocation
