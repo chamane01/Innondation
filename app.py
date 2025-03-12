@@ -414,7 +414,7 @@ def store_figure(fig, result_type, title):
 # ==============================
 def run_analysis_spatiale():
     st.title("🔍 Analyse Spatiale")
-    st.info("Ce module vous permet de générer des contours (à partir de rectangles sélectionnés), tracer des profils d'élévation (à partir de lignes) ou trouver un point.")
+    st.info("Ce module vous permet de générer des contours (à partir de rectangles), tracer des profils d'élévation (à partir de lignes) ou trouver un point.")
     
     # Initialisation du mode pour cette partie
     if "analysis_mode" not in st.session_state:
@@ -511,7 +511,7 @@ def run_analysis_spatiale():
         st.subheader("Trouver un point")
         st.info("La position de votre appareil sera récupérée automatiquement.\nVeuillez autoriser la géolocalisation dans votre navigateur.")
         
-        # Tenter d'importer le composant de géolocalisation
+        # Tentative d'importation du module de géolocalisation
         try:
             from streamlit_geolocation import geolocate
         except ImportError:
