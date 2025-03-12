@@ -120,7 +120,6 @@ def create_map(mosaic_file):
     # Outils de dessin
     Draw(
         draw_options={
-            # Pour les polylignes, on autorise les intersections et on spécifie un style
             'polyline': {'allowIntersection': True, 'shapeOptions': {'color': 'black', 'weight': 2}},
             'polygon': True,
             'rectangle': True,
@@ -139,17 +138,7 @@ def generate_contours(mosaic_file, drawing_geometry, show_basemap=True):
     """
     Génère une figure matplotlib affichant les contours d'élévation
     pour la zone définie par drawing_geometry, en convertissant
-    les données en coordonnées UTM. La figure est limitée à l'emprise
-    dessinée (avec 5% de marge) et affiche, en arrière-plan, le fond de carte
-    (avec une opacité de 50%) si le paramètre show_basemap est activé.
-    Pour chaque autre dessin présent dans cette emprise, seule la partie intérieure
-    est tracée en noir (trait continu).
-
-    Les modifications apportées sont les suivantes :
-      - Dans la légende, une seule entrée par classe de dessin est affichée (ex. "Profil")
-        tandis que sur le dessin, chaque ligne (profil) conserve son numéro (ex. "Profil 1", "Profil 2", etc.)
-      - Pour les lignes (profils), le texte est incrusté directement le long du trait.
-      - Une classe est ajoutée pour chaque type de dessin (points, lignes, polygones, etc.).
+    les données en coordonnées UTM.
     """
     try:
         with rasterio.open(mosaic_file) as src:
@@ -273,9 +262,9 @@ def generate_contours(mosaic_file, drawing_geometry, show_basemap=True):
                                         x_other, y_other = clipped.xy
                                         ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=legend_label, zorder=4)
                                         if len(x_other) >= 2:
-                                            dx = x_other[1] - x_other[0]
-                                            dy = y_other[1] - y_other[0]
-                                            angle = np.degrees(np.arctan2(dy, dx))
+                                            dx_line = x_other[1] - x_other[0]
+                                            dy_line = y_other[1] - y_other[0]
+                                            angle = np.degrees(np.arctan2(dy_line, dx_line))
                                         else:
                                             angle = 0
                                         centroid = clipped.centroid
@@ -285,9 +274,9 @@ def generate_contours(mosaic_file, drawing_geometry, show_basemap=True):
                                             x_other, y_other = part.xy
                                             ax.plot(x_other, y_other, color='black', linestyle='-', linewidth=2, label=legend_label, zorder=4)
                                             if len(x_other) >= 2:
-                                                dx = x_other[1] - x_other[0]
-                                                dy = y_other[1] - y_other[0]
-                                                angle = np.degrees(np.arctan2(dy, dx))
+                                                dx_line = x_other[1] - x_other[0]
+                                                dy_line = y_other[1] - y_other[0]
+                                                angle = np.degrees(np.arctan2(dy_line, dx_line))
                                             else:
                                                 angle = 0
                                             centroid = part.centroid
@@ -305,11 +294,11 @@ def generate_contours(mosaic_file, drawing_geometry, show_basemap=True):
                         except Exception as e:
                             st.error(f"Erreur lors du tracé d'un dessin supplémentaire : {e}")
 
-            # Re-affichage de l'enveloppe dessinée en rouge pour garantir sa visibilité (le contour doit rester rouge)
+            # Re-affichage de l'enveloppe dessinée en rouge pour garantir sa visibilité
             x_env, y_env = envelope.exterior.xy
             ax.plot(x_env, y_env, color='red', linewidth=2, label="Zone dessinée", zorder=5)
 
-            # Placement de la légende en bas à droite, avec fond blanc et taille réduite de 20%
+            # Placement de la légende en bas à droite
             leg = ax.legend(loc='lower right', framealpha=1, facecolor='white', fontsize=8)
             for text in leg.get_texts():
                 text.set_fontsize(8)
@@ -327,6 +316,32 @@ def haversine(lon1, lat1, lon2, lat2):
     c = 2 * math.asin(math.sqrt(a))
     r = 6371000
     return c * r
+
+def draw_compass(bearing):
+    """
+    Génère une figure matplotlib représentant une boussole avec une flèche
+    orientée selon le cap (bearing) donné (en degrés, 0° = Nord).
+    """
+    fig, ax = plt.subplots(figsize=(4, 4))
+    # Dessiner un cercle
+    circle = plt.Circle((0, 0), 1, color='blue', fill=False, linewidth=2)
+    ax.add_artist(circle)
+    
+    # Conversion de l'angle pour que 0° corresponde au Nord (flèche vers le haut)
+    angle_rad = math.radians(90 - bearing)
+    arrow_length = 0.8
+    dx = arrow_length * math.cos(angle_rad)
+    dy = arrow_length * math.sin(angle_rad)
+    
+    # Dessiner la flèche
+    ax.arrow(0, 0, dx, dy, head_width=0.1, head_length=0.1, fc='red', ec='red')
+    
+    ax.set_xlim(-1.2, 1.2)
+    ax.set_ylim(-1.2, 1.2)
+    ax.set_aspect('equal')
+    ax.axis('off')
+    ax.set_title(f"Cap: {bearing:.2f}°", fontsize=12)
+    return fig
 
 def interpolate_line(coords, step=50):
     """Interpole des points le long d'une ligne pour obtenir des échantillons réguliers."""
@@ -398,8 +413,8 @@ def store_figure(fig, result_type, title):
 # ==============================
 def run_analysis_spatiale():
     st.title("🔍 Analyse Spatiale")
-    st.info("Ce module vous permet de générer des contours (à partir de rectangles sélectionnés) ou des profils d'élévation (à partir de lignes).")
-    
+    st.info("Ce module vous permet de générer des contours (à partir de rectangles sélectionnés), tracer des profils d'élévation (à partir de lignes) ou trouver un point.")
+
     # Initialisation du mode pour cette partie
     if "analysis_mode" not in st.session_state:
         st.session_state["analysis_mode"] = "none"
@@ -434,32 +449,31 @@ def run_analysis_spatiale():
     # Menu de sélection du mode
     options_container = st.container()
     if st.session_state["analysis_mode"] == "none":
-        col1, col2 = options_container.columns(2)
+        col1, col2, col3 = options_container.columns(3)
         if col1.button("Tracer des profils", key="btn_profiles"):
             st.session_state["analysis_mode"] = "profiles"
         if col2.button("Générer des contours", key="btn_contours"):
             st.session_state["analysis_mode"] = "contours"
+        if col3.button("Trouver un point", key="btn_find_point"):
+            st.session_state["analysis_mode"] = "find_point"
     
     # Mode Générer des contours (à partir de rectangles dessinés)
     if st.session_state["analysis_mode"] == "contours":
         st.subheader("Générer des contours")
-        # Ajout du bouton à cocher pour l'affichage du fond de carte
         show_basemap = st.checkbox("Afficher le fond de carte", value=True)
         drawing_geometries = []
         raw_drawings = st.session_state.get("raw_drawings") or []
-        # Sélectionner uniquement les dessins de type Polygon (issus d'un rectangle ou d'un polygone)
         for drawing in raw_drawings:
             if isinstance(drawing, dict) and drawing.get("geometry", {}).get("type") == "Polygon":
                 drawing_geometries.append(drawing.get("geometry"))
         if not drawing_geometries:
             st.warning("Veuillez dessiner au moins un rectangle sur la carte pour définir une zone.")
         else:
-            # Permettre de sélectionner parmi les rectangles dessinés
             options_list = [f"Rectangle {i+1}" for i in range(len(drawing_geometries))]
             selected_indices = st.multiselect("Sélectionnez les rectangles pour générer des contours", options=options_list)
             if st.button("Générer les contours sélectionnés", key="generate_selected_contours"):
                 for sel in selected_indices:
-                    idx = int(sel.split()[1]) - 1  # extraire l'indice
+                    idx = int(sel.split()[1]) - 1
                     geometry = drawing_geometries[idx]
                     fig = generate_contours(mosaic_path, geometry, show_basemap=show_basemap)
                     if fig is not None:
@@ -490,10 +504,28 @@ def run_analysis_spatiale():
                     st.error(f"Erreur de traitement : {e}")
         if st.button("Retour", key="retour_profiles"):
             st.session_state["analysis_mode"] = "none"
+    
+    # Mode Trouver un point
+    if st.session_state["analysis_mode"] == "find_point":
+        st.subheader("Trouver un point")
+        st.info("Entrez la position de votre appareil et les coordonnées UTM du point recherché.")
+        device_easting = st.number_input("Votre position - Easting (m)", value=500000.0, format="%.2f")
+        device_northing = st.number_input("Votre position - Northing (m)", value=4649776.22, format="%.2f")
+        target_easting = st.number_input("Point recherché - Easting (m)", value=500100.0, format="%.2f")
+        target_northing = st.number_input("Point recherché - Northing (m)", value=4649876.22, format="%.2f")
+        if st.button("Calculer", key="calculate_point"):
+            dx = target_easting - device_easting
+            dy = target_northing - device_northing
+            distance = math.sqrt(dx**2 + dy**2)
+            bearing = (math.degrees(math.atan2(dx, dy)) + 360) % 360
+            st.success(f"Distance : {distance:.2f} m, Cap à suivre : {bearing:.2f}°")
+            fig_compass = draw_compass(bearing)
+            st.pyplot(fig_compass)
+        if st.button("Retour", key="retour_find_point"):
+            st.session_state["analysis_mode"] = "none"
 
 # ==============================
 # Menu pour ajouter une carte d'analyse spatiale
-# (Similaire au formulaire pour les images téléversées)
 # ==============================
 def create_analysis_card_controller():
     with st.expander("➕ Ajouter une carte d'analyse spatiale", expanded=True):
@@ -501,12 +533,10 @@ def create_analysis_card_controller():
             st.info("Aucune carte d'analyse spatiale n'est disponible pour le moment.")
             return None
         
-        # Sélection d'une carte issue des résultats d'analyse
         options = {f"{i+1} - {res['title']}": i for i, res in enumerate(st.session_state["analysis_results"])}
         chosen = st.selectbox("Choisissez une carte", list(options.keys()), key="analysis_card_select")
         idx = options[chosen]
         
-        # Paramètres similaires à ceux du téléversement d'images
         col1, col2 = st.columns(2)
         with col1:
             size = st.selectbox("Taille", ["Grand", "Moyen", "Petit"], key="analysis_card_size")
@@ -578,17 +608,14 @@ def calculate_dimensions(size):
 
 def calculate_position(element):
     vertical_offset = {"Haut": 0, "Milieu": SECTION_HEIGHT, "Bas": SECTION_HEIGHT*2}[element['v_pos']]
-    
     if element['size'] == "Grand":
         return (0, PAGE_HEIGHT - vertical_offset - SECTION_HEIGHT)
-    
     if element['h_pos'] == "Gauche":
         x = 0
     elif element['h_pos'] == "Droite":
         x = COLUMN_WIDTH
     else:  # Centre
         x = COLUMN_WIDTH / 2 - calculate_dimensions(element['size'])[0] / 2
-    
     return (x, PAGE_HEIGHT - vertical_offset - SECTION_HEIGHT)
 
 def draw_metadata(c, metadata):
@@ -596,7 +623,6 @@ def draw_metadata(c, metadata):
     x_left = margin
     y_top = PAGE_HEIGHT - margin
     line_height = 16
-
     logo_drawn = False
     if metadata['logo']:
         try:
@@ -613,30 +639,25 @@ def draw_metadata(c, metadata):
             logo_drawn = True
         except Exception as e:
             st.error(f"Erreur de chargement du logo: {str(e)}")
-    
     if logo_drawn:
         x_title = x_left + 50
         y_title = y_top - 20
     else:
         x_title = x_left
         y_title = y_top - 20
-    
     c.setFont("Helvetica-Bold", 20)
     c.setFillColor(colors.black)
     if metadata.get('titre'):
         c.drawString(x_title, y_title, metadata['titre'])
-    
     c.setFont("Helvetica", 14)
     y_company = y_title - 25
     if metadata.get('company'):
         c.drawString(x_title, y_company, metadata['company'])
-    
     y_line = y_company - 10
     c.setStrokeColor(colors.darkgray)
     c.setLineWidth(2)
     c.line(x_left, y_line, x_left + 150, y_line)
     c.setLineWidth(1)
-    
     y_text = y_line - 20
     infos = [
         ("ID Rapport", metadata['report_id']),
@@ -645,7 +666,6 @@ def draw_metadata(c, metadata):
         ("Éditeur", metadata['editor']),
         ("Localisation", metadata['location'])
     ]
-    
     value_x_offset = x_left + 70
     for label, value in infos:
         c.setFont("Helvetica-Bold", 10)
@@ -658,14 +678,11 @@ def draw_metadata(c, metadata):
 def generate_pdf(elements, metadata):
     buffer = BytesIO()
     c = canvas.Canvas(buffer, pagesize=A4)
-    
     c.setAuthor(metadata['editor'])
     c.setTitle(metadata['report_id'])
-    
     for element in elements:
         width, height = calculate_dimensions(element['size'])
         x, y = calculate_position(element)
-        
         if element['type'] == "Image":
             if element["content"] is not None:
                 try:
@@ -674,7 +691,6 @@ def generate_pdf(elements, metadata):
                     else:
                         image_stream = element["content"]
                     img = ImageReader(image_stream)
-                    
                     top_margin = 20
                     bottom_margin = 20
                     horizontal_scale = 0.9
@@ -683,12 +699,10 @@ def generate_pdf(elements, metadata):
                     image_x = x + (width - image_actual_width) / 2
                     image_y = y + bottom_margin
                     c.drawImage(img, image_x, image_y, width=image_actual_width, height=image_actual_height, preserveAspectRatio=True, mask='auto')
-                    
                     if element.get("image_title"):
                         c.setFont("Helvetica-Bold", 12)
                         image_title = element["image_title"].upper()
                         c.drawCentredString(x + width / 2, y + height - top_margin / 2, image_title)
-                    
                     if element.get("description"):
                         c.setFont("Helvetica", 10)
                         c.setFillColor(colors.gray)
@@ -705,9 +719,7 @@ def generate_pdf(elements, metadata):
             p = Paragraph(text, style)
             p.wrapOn(c, width, height)
             p.drawOn(c, x, y)
-    
     draw_metadata(c, metadata)
-    
     c.save()
     buffer.seek(0)
     return buffer
@@ -721,10 +733,7 @@ def display_elements_preview(elements):
             if element.get("image_title"):
                 st.markdown(f"*Titre de l'image :* **{element['image_title'].upper()}**")
             if element.get("description"):
-                st.markdown(
-                    f"<span style='color:gray'>*Description :* {element['description']}</span>",
-                    unsafe_allow_html=True
-                )
+                st.markdown(f"<span style='color:gray'>*Description :* {element['description']}</span>", unsafe_allow_html=True)
         else:
             st.markdown(f"**Texte :** {element['content']}")
         st.markdown("---")
@@ -734,8 +743,6 @@ def display_elements_preview(elements):
 # ==============================
 def run_report():
     st.title("📄 Génération de Rapport")
-    
-    # Sidebar dédiée au rapport
     with st.sidebar:
         st.header("📝 Métadonnées du Rapport")
         titre = st.text_input("Titre principal", key="rapport_titre")
@@ -758,7 +765,6 @@ def run_report():
         'logo': logo
     }
     
-    # Initialisation des éléments du rapport
     if "elements" not in st.session_state:
         st.session_state["elements"] = []
     elements = st.session_state["elements"]
@@ -766,7 +772,6 @@ def run_report():
     st.markdown("### 📌 Ajouter une carte d'analyse spatiale")
     analysis_card = create_analysis_card_controller()
     if analysis_card:
-        # Éviter les doublons en se basant sur 'analysis_ref'
         if not any(el.get("analysis_ref") == analysis_card.get("analysis_ref") for el in elements if el["type"] == "Image"):
             elements.append(analysis_card)
             st.success("Carte d'analyse ajoutée avec succès !")
@@ -791,10 +796,7 @@ def run_report():
 # ==============================
 def main():
     st.set_page_config(page_title="Application SIG & Rapport", layout="wide")
-    
-    # Menu principal dans la sidebar
     menu = st.sidebar.radio("Menu Principal", ["Analyse Spatiale", "Rapport"], key="main_menu")
-    
     if menu == "Analyse Spatiale":
         run_analysis_spatiale()
     elif menu == "Rapport":
