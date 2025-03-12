@@ -13,6 +13,7 @@ from io import BytesIO
 from datetime import date, datetime
 import base64
 import contextily as ctx  # pour le fond de carte
+import utm  # pour la conversion de lat/lon en UTM
 
 # ------------------------------
 # Partie ReportLab pour le rapport
@@ -414,7 +415,7 @@ def store_figure(fig, result_type, title):
 def run_analysis_spatiale():
     st.title("🔍 Analyse Spatiale")
     st.info("Ce module vous permet de générer des contours (à partir de rectangles sélectionnés), tracer des profils d'élévation (à partir de lignes) ou trouver un point.")
-
+    
     # Initialisation du mode pour cette partie
     if "analysis_mode" not in st.session_state:
         st.session_state["analysis_mode"] = "none"
@@ -508,19 +509,44 @@ def run_analysis_spatiale():
     # Mode Trouver un point
     if st.session_state["analysis_mode"] == "find_point":
         st.subheader("Trouver un point")
-        st.info("Entrez la position de votre appareil et les coordonnées UTM du point recherché.")
-        device_easting = st.number_input("Votre position - Easting (m)", value=500000.0, format="%.2f")
-        device_northing = st.number_input("Votre position - Northing (m)", value=4649776.22, format="%.2f")
+        st.info("La position de votre appareil sera récupérée automatiquement.\nVeuillez autoriser la géolocalisation dans votre navigateur.")
+        
+        # Tenter d'importer le composant de géolocalisation
+        try:
+            from streamlit_geolocation import geolocate
+        except ImportError:
+            geolocate = None
+
+        if geolocate is not None:
+            location_data = geolocate(timeout=10)
+            if location_data is not None:
+                lat = location_data.get("lat")
+                lon = location_data.get("lon")
+                # Conversion en coordonnées UTM
+                device_easting, device_northing, zone_number, zone_letter = utm.from_latlon(lat, lon)
+                st.success(f"Position récupérée : lat {lat:.6f}, lon {lon:.6f} (UTM: {device_easting:.2f}, {device_northing:.2f})")
+            else:
+                st.error("Impossible de récupérer votre position. Veuillez vérifier les autorisations de géolocalisation.")
+                device_easting, device_northing = None, None
+        else:
+            st.warning("Le composant de géolocalisation n'est pas installé. Veuillez installer streamlit-geolocation.")
+            device_easting = st.number_input("Votre position - Easting (m)", value=500000.0, format="%.2f")
+            device_northing = st.number_input("Votre position - Northing (m)", value=4649776.22, format="%.2f")
+        
         target_easting = st.number_input("Point recherché - Easting (m)", value=500100.0, format="%.2f")
         target_northing = st.number_input("Point recherché - Northing (m)", value=4649876.22, format="%.2f")
+        
         if st.button("Calculer", key="calculate_point"):
-            dx = target_easting - device_easting
-            dy = target_northing - device_northing
-            distance = math.sqrt(dx**2 + dy**2)
-            bearing = (math.degrees(math.atan2(dx, dy)) + 360) % 360
-            st.success(f"Distance : {distance:.2f} m, Cap à suivre : {bearing:.2f}°")
-            fig_compass = draw_compass(bearing)
-            st.pyplot(fig_compass)
+            if device_easting is None or device_northing is None:
+                st.error("La position de l'appareil n'est pas disponible.")
+            else:
+                dx = target_easting - device_easting
+                dy = target_northing - device_northing
+                distance = math.sqrt(dx**2 + dy**2)
+                bearing = (math.degrees(math.atan2(dx, dy)) + 360) % 360
+                st.success(f"Distance : {distance:.2f} m, Cap à suivre : {bearing:.2f}°")
+                fig_compass = draw_compass(bearing)
+                st.pyplot(fig_compass)
         if st.button("Retour", key="retour_find_point"):
             st.session_state["analysis_mode"] = "none"
 
