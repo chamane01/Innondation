@@ -2,189 +2,180 @@
 import streamlit as st
 import pandas as pd
 import json
-from fpdf import FPDF
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 import io
+import zipfile
 from datetime import datetime
 
-st.set_page_config(page_title="Générateur de Fiches Signalétiques", layout="wide")
-st.title("📘 Générateur de Catalogue de Fiches Signalétiques")
+# --- CONFIGURATION A4 (pixels) ---
+# Format A4 à 150 DPI ≃ 1240×1754 px
+A4_W, A4_H = 1240, 1754
+MARGIN = 50
+LINE_Y = 150
 
-# ----------------------------
+st.set_page_config(page_title="Générateur de Fiches Signalétiques", layout="wide")
+st.title("📘 Générateur d’Images A4 par Borne (ZIP)")
+
 # 1) Chargement des données
-# ----------------------------
 st.sidebar.header("1. Chargement des points")
-uploaded = st.sidebar.file_uploader(
-    "Importez CSV / TXT / GeoJSON", type=["csv", "txt", "json"]
-)
+uploaded = st.sidebar.file_uploader("CSV / TXT / GeoJSON", type=["csv","txt","json"])
 df = None
 if uploaded:
     try:
         if uploaded.name.lower().endswith(".json"):
             geo = json.load(uploaded)
             feats = geo.get("features", [])
-            records = []
-            for f in feats:
-                props = f.get("properties", {})
-                geom = f.get("geometry", {})
-                coords = geom.get("coordinates", [None, None])
-                props.update({
-                    "ID": str(props.get("ID", len(records))),
-                    "X": coords[0],
-                    "Y": coords[1],
-                    "Z": props.get("Z", "")
+            recs = []
+            for i,f in enumerate(feats):
+                p = f.get("properties",{})
+                g = f.get("geometry",{})
+                c = g.get("coordinates",[None,None])
+                recs.append({
+                    "ID": str(p.get("ID", i)),
+                    "X": c[0], "Y": c[1], "Z": p.get("Z",""),
+                    "latitude": p.get("latitude",""), "longitude": p.get("longitude","")
                 })
-                records.append(props)
-            df = pd.DataFrame(records)
+            df = pd.DataFrame(recs)
         else:
             df = pd.read_csv(uploaded, sep=None, engine="python")
             if "ID" not in df.columns:
-                df.insert(0, "ID", df.index.astype(str))
+                df.insert(0,"ID",df.index.astype(str))
     except Exception as e:
-        st.error(f"Erreur de lecture du fichier : {e}")
+        st.error(f"Erreur lecture fichier : {e}")
     else:
         st.success(f"{len(df)} points chargés")
 
-# ----------------------------
-# 2) Informations générales
-# ----------------------------
+# 2) Infos génériques
 st.sidebar.header("2. Infos générales")
-republique = st.sidebar.text_input(
-    "République / État", "République de Côte d'Ivoire"
-)
-ministere = st.sidebar.text_input(
-    "Ministère / Projet", "Ministère de l’Équipement et de l’Entretien Routier"
-)
-projet = st.sidebar.text_input(
-    "Projet", "PIDUCAS – Cadastrage de la ville de San-Pedro"
-)
-commune = st.sidebar.text_input("Commune / Agglomération", "")
-logo_file = st.sidebar.file_uploader(
-    "Logo (PNG/JPG)", type=["png", "jpg", "jpeg"]
-)
+republique = st.sidebar.text_input("République / État", "République de Côte d'Ivoire")
+ministere = st.sidebar.text_input("Ministère / Projet", "Ministère de l’Équipement et de l’Entretien Routier")
+projet    = st.sidebar.text_input("Projet", "PIDUCAS – Cadastrage San-Pedro")
+commune   = st.sidebar.text_input("Commune", "")
+logo_file = st.sidebar.file_uploader("Logo (PNG/JPG)", type=["png","jpg","jpeg"])
 
-# ----------------------------
 # 3) Photos par point
-# ----------------------------
 photo_dict = {}
 if df is not None:
-    st.header("📸 Photos par point")
+    st.header("📸 Photos par borne")
     for _, row in df.iterrows():
         pid = str(row["ID"])
-        with st.expander(f"Borne {pid}", expanded=False):
+        with st.expander(f"Borne {pid}"):
             files = st.file_uploader(
-                label=f"Photos pour {pid}",
-                type=["jpg", "jpeg", "png"],
-                accept_multiple_files=True,
-                key=f"upl_{pid}"
+                f"Photos pour {pid}", type=["jpg","jpeg","png"],
+                accept_multiple_files=True, key=f"upl_{pid}"
             )
             if files:
                 photo_dict[pid] = files
 
-# ----------------------------
-# 4) Génération PDF
-# ----------------------------
-if st.sidebar.button("🖨️ Générer le PDF") and df is not None:
-    pdf = FPDF(orientation="P", unit="mm", format="A4")
-    pdf.set_auto_page_break(auto=True, margin=15)
+# 4) Génération des images + ZIP
+if st.sidebar.button("🖼️ Générer images et télécharger ZIP") and df is not None:
+    # Prépare le buffer ZIP
+    zip_buffer = io.BytesIO()
+    with zipfile.ZipFile(zip_buffer, "w") as zipf:
+        # Police par défaut PIL
+        font_bold = ImageFont.load_default()
+        font_reg  = ImageFont.load_default()
 
-    for idx, row in df.iterrows():
-        pid = str(row.get("ID", idx))
-        pdf.add_page()
+        for _, row in df.iterrows():
+            pid = str(row["ID"])
+            # Crée une image blanche A4
+            img = Image.new("RGB", (A4_W, A4_H), "white")
+            draw = ImageDraw.Draw(img)
 
-        # ---- Header officiel ----
-        if logo_file:
-            try:
-                img = Image.open(logo_file)
-                bio = io.BytesIO()
-                img.thumbnail((60, 60))
-                img.save(bio, format="PNG")
-                bio.seek(0)
-                pdf.image(bio, x=12, y=8, w=25, type="PNG")
-            except Exception:
-                pass
-
-        pdf.set_font("Helvetica", "B", 14)
-        pdf.cell(0, 8, republique, ln=1, align="C")
-        pdf.set_font("Helvetica", "", 10)
-        pdf.cell(0, 6, f"{ministere}", ln=1, align="C")
-        pdf.cell(0, 6, f"{projet}", ln=1, align="C")
-        pdf.ln(2)
-        pdf.line(10, pdf.get_y(), 200, pdf.get_y())
-        pdf.ln(6)
-
-        # ---- Titre de la fiche ----
-        pdf.set_font("Helvetica", "B", 12)
-        pdf.cell(0, 8, f"BORNE GÉODÉSIQUE : SP {pid}", ln=1, align="L")
-        pdf.set_font("Helvetica", "", 10)
-        date_str = datetime.today().strftime("%B %Y")
-        pdf.cell(0, 6, f"MAJ : {date_str}", ln=1, align="L")
-        pdf.ln(4)
-
-        # ---- Tableau coordonnées ----
-        # Entêtes
-        pdf.set_font("Helvetica", "B", 10)
-        col_w = [35, 35, 35, 40, 40]
-        headers = [
-            "LATITUDE NORD", "LONGITUDE OUEST", "HAUTEUR / ELLIPSOÏDE",
-            "X (m)", "Y (m)"
-        ]
-        for w, h in zip(col_w, headers):
-            pdf.cell(w, 7, h, border=1, align="C")
-        pdf.ln()
-        # Valeurs (gestion des données manquantes)
-        pdf.set_font("Helvetica", "", 10)
-        vals = [
-            row.get("latitude", ""),
-            row.get("longitude", ""),
-            str(row.get("Z", "")),
-            str(row.get("X", "")),
-            str(row.get("Y", ""))
-        ]
-        for w, v in zip(col_w, vals):
-            pdf.cell(w, 6, v or "-", border=1, align="C")
-        pdf.ln(10)
-
-        # ---- Vues (photos) ----
-        pdf.set_font("Helvetica", "B", 11)
-        pdf.cell(0, 6, "VUES :", ln=1)
-        x0, y0 = pdf.get_x(), pdf.get_y()
-        thumb_w, thumb_h = 60, 45
-        photos = photo_dict.get(pid, [])
-        if not photos:
-            # placeholder si pas de photo
-            pdf.set_font("Helvetica", "I", 9)
-            pdf.cell(0, 6, "Aucune photo fournie", ln=1, align="L")
-            pdf.ln(4)
-        else:
-            for i, f in enumerate(photos):
+            # --- Logo ---
+            x = MARGIN
+            if logo_file:
                 try:
-                    img = Image.open(f)
-                    bio = io.BytesIO()
-                    img.thumbnail((thumb_w*4, thumb_h*4))
-                    img.save(bio, format="JPEG")
-                    bio.seek(0)
-                    x = x0 + (i % 2)*(thumb_w + 5)
-                    y = y0 + (i//2)*(thumb_h + 5)
-                    pdf.image(bio, x=x, y=y, w=thumb_w, h=thumb_h, type="JPEG")
-                except Exception:
-                    continue
-            pdf.ln(thumb_h*2/3 + 8)
+                    logo = Image.open(logo_file)
+                    logo.thumbnail((100,100))
+                    img.paste(logo, (MARGIN, MARGIN))
+                except:
+                    pass
 
-        # ---- Pied de page ----
-        pdf.set_y(-25)
-        pdf.set_font("Helvetica", "I", 8)
-        pdf.cell(0, 5, f"Commune : {commune or '-'}", ln=1, align="L")
-        pdf.cell(0, 5, "Fiche générée automatiquement", ln=1, align="R")
+            # --- Header texte ---
+            y0 = MARGIN
+            draw.text((200, y0), republice, font=font_bold, fill="black")
+            y0 += 30
+            draw.text((200, y0), ministere, font=font_reg, fill="black")
+            y0 += 25
+            draw.text((200, y0), projet, font=font_reg, fill="black")
 
-    # Génération du buffer PDF avec encodage tolérant
-    raw = pdf.output(dest="S")
-    pdf_bytes = raw.encode("latin-1", errors="ignore")
+            # Ligne séparatrice
+            y_sep = y0 + 40
+            draw.line((MARGIN, y_sep, A4_W-MARGIN, y_sep), fill="black", width=2)
 
-    st.success("✅ Votre catalogue est prêt !")
+            # --- Titre fiche ---
+            y = y_sep + 30
+            draw.text((MARGIN, y), f"BORNE GÉODÉSIQUE SP {pid}", font=font_bold, fill="black")
+            y += 30
+            date_str = datetime.today().strftime("%B %Y")
+            draw.text((MARGIN, y), f"MAJ : {date_str}", font=font_reg, fill="black")
+
+            # --- Tableau coordonnées ---
+            y += 50
+            headers = ["LAT NORD","LON OUEST","HAUTEUR","X (m)","Y (m)"]
+            vals = [
+                row.get("latitude","") or "-",
+                row.get("longitude","") or "-",
+                str(row.get("Z","") or "-"),
+                str(row.get("X","") or "-"),
+                str(row.get("Y","") or "-")
+            ]
+            col_w = (A4_W - 2*MARGIN) // len(headers)
+            # entêtes
+            for i,h in enumerate(headers):
+                draw.rectangle(
+                    [MARGIN+i*col_w, y, MARGIN+(i+1)*col_w, y+40],
+                    outline="black", width=1
+                )
+                draw.text(
+                    (MARGIN+5 + i*col_w, y+5), h, font=font_bold, fill="black"
+                )
+            # valeurs
+            y_val = y + 45
+            for i,v in enumerate(vals):
+                draw.rectangle(
+                    [MARGIN+i*col_w, y_val, MARGIN+(i+1)*col_w, y_val+40],
+                    outline="black", width=1
+                )
+                draw.text(
+                    (MARGIN+5 + i*col_w, y_val+10), v, font=font_reg, fill="black"
+                )
+
+            # --- Vues / photos ---
+            y_ph = y_val + 80
+            draw.text((MARGIN, y_ph), "VUES :", font=font_bold, fill="black")
+            y_ph += 30
+            photos = photo_dict.get(pid, [])
+            if not photos:
+                draw.text((MARGIN, y_ph), "Aucune photo fournie", font=font_reg, fill="gray")
+            else:
+                thumb_w, thumb_h = 300, 200
+                for i,f in enumerate(photos):
+                    try:
+                        p = Image.open(f)
+                        p.thumbnail((thumb_w,thumb_h))
+                        x_ph = MARGIN + (i%2)*(thumb_w+20)
+                        y_cur = y_ph + (i//2)*(thumb_h+20)
+                        img.paste(p, (x_ph, y_cur))
+                    except:
+                        continue
+
+            # --- Pied de page ---
+            text_cf = commune or "-"
+            draw.text((MARGIN, A4_H-100), f"Commune : {text_cf}", font=font_reg, fill="black")
+            draw.text((A4_W-MARGIN-300, A4_H-100), "Généré automatiquement", font=font_reg, fill="black")
+
+            # Sauvegarde PNG en bytes
+            out = io.BytesIO()
+            img.save(out, format="PNG")
+            zipf.writestr(f"borne_{pid}.png", out.getvalue())
+
+    zip_buffer.seek(0)
+    st.success("✅ ZIP prêt : toutes vos images A4 par borne")
     st.download_button(
-        label="⬇️ Télécharger le PDF",
-        data=pdf_bytes,
-        file_name="catalogue_fiches_signaletiques.pdf",
-        mime="application/pdf"
+        "⬇️ Télécharger le ZIP",
+        data=zip_buffer,
+        file_name="catalogue_bornes_images.zip",
+        mime="application/zip"
     )
