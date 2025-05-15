@@ -26,3 +26,4 @@ reportlab
 utm
 streamlit-geolocation
 fpdf
+Html2Image
