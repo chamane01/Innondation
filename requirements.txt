@@ -25,3 +25,4 @@ pdfkit
 reportlab
 utm
 streamlit-geolocation
+fpdf
