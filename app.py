@@ -1,3 +1,5 @@
+# app.py
+
 import streamlit as st
 import pandas as pd
 import json
@@ -12,15 +14,12 @@ from pyproj import Transformer
 A4_W, A4_H = 1240, 1754
 MARGIN = 50
 
-# UTM zone for Côte d'Ivoire (zone 30N)
-transformer = Transformer.from_crs("EPSG:32630", "EPSG:4326", always_xy=True)
-
 st.set_page_config(page_title="Générateur d’Images A4 par Borne (ZIP)", layout="wide")
 st.title("📘 Générateur d’Images A4 par Borne et ZIP")
 
 # 1) Chargement des données
 st.sidebar.header("1. Chargement des points")
-uploaded = st.sidebar.file_uploader("CSV / TXT / GeoJSON", type=["csv","txt","json"])
+uploaded = st.sidebar.file_uploader("CSV / TXT / GeoJSON", type=["csv", "txt", "json"])
 df = None
 if uploaded:
     try:
@@ -34,7 +33,8 @@ if uploaded:
                 c = g.get("coordinates", [None, None])
                 recs.append({
                     "ID": str(p.get("ID", i)),
-                    "X": c[0], "Y": c[1], "Z": p.get("Z",""),
+                    "X": c[0], "Y": c[1], "Z": p.get("Z", ""),
+                    "latitude": p.get("latitude", ""), "longitude": p.get("longitude", "")
                 })
             df = pd.DataFrame(recs)
         else:
@@ -45,10 +45,19 @@ if uploaded:
         st.error(f"Erreur lecture fichier : {e}")
     else:
         st.success(f"{len(df)} points chargés")
-        # calculer lat/long
-        df[['longitude', 'latitude']] = df.apply(
-            lambda r: transformer.transform(r['X'], r['Y'])[0:2][::-1] if pd.notnull(r['X']) and pd.notnull(r['Y']) else (None, None),
-            axis=1, result_type='expand')
+
+        # 1a) conversion UTM -> lat/long si besoin
+        if "X" in df.columns and "Y" in df.columns:
+            utm_zone = st.sidebar.number_input("Zone UTM", min_value=1, max_value=60, value=31)
+            hemisphere = st.sidebar.selectbox("Hémisphère UTM", ["Nord", "Sud"])
+            crs_utm = f"+proj=utm +zone={utm_zone} +{'north' if hemisphere=='Nord' else 'south'} +datum=WGS84 +units=m +no_defs"
+            transformer = Transformer.from_crs(crs_utm, "EPSG:4326", always_xy=True)
+            try:
+                lons, lats = transformer.transform(df["X"].values, df["Y"].values)
+                df["longitude"] = lons
+                df["latitude"] = lats
+            except Exception as e:
+                st.warning(f"Conversion UTM → lat/long échouée : {e}")
 
 # 2) Infos générales
 st.sidebar.header("2. Infos générales")
@@ -56,10 +65,12 @@ republique = st.sidebar.text_input("République / État", "République de Côte 
 ministere = st.sidebar.text_input("Ministère / Projet", "Ministère de l’Équipement et de l’Entretien Routier")
 projet    = st.sidebar.text_input("Projet", "PIDUCAS – Cadastrage San-Pedro")
 commune   = st.sidebar.text_input("Commune", "")
-# logos
-logo_ivory = st.sidebar.file_uploader("Logo Côte d'Ivoire (PNG/JPG)", type=["png","jpg","jpeg"])
-logo_mo   = st.sidebar.file_uploader("Logo Maître d'œuvre (PNG/JPG)", type=["png","jpg","jpeg"])
-logo_exec = st.sidebar.file_uploader("Logo Entreprise d'exécution (PNG/JPG)", type=["png","jpg","jpeg"])
+
+# 2a) Logos multiples
+st.sidebar.header("3. Logos")
+logo_ci   = st.sidebar.file_uploader("Logo Côte d'Ivoire", type=["png", "jpg", "jpeg"])
+logo_moe  = st.sidebar.file_uploader("Logo Maître d'Œuvre", type=["png", "jpg", "jpeg"])
+logo_exec = st.sidebar.file_uploader("Logo Entreprise d'Exécution", type=["png", "jpg", "jpeg"])
 
 # 3) Photos par point
 photo_dict = {}
@@ -70,7 +81,7 @@ if df is not None:
         with st.expander(f"Borne {pid}"):
             files = st.file_uploader(
                 f"Photos pour {pid}",
-                type=["jpg","jpeg","png"],
+                type=["jpg", "jpeg", "png"],
                 accept_multiple_files=True,
                 key=f"upl_{pid}"
             )
@@ -81,59 +92,65 @@ if df is not None:
 if st.sidebar.button("🖼️ Générer images et télécharger ZIP") and df is not None:
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w") as zipf:
-        # Fonts
+        # Chargement des polices
         try:
-            font_bold = ImageFont.truetype("DejaVuSans-Bold.ttf", 24)
-            font_reg  = ImageFont.truetype("DejaVuSans.ttf", 20)
-        except:
+            font_bold = ImageFont.truetype("arialbd.ttf", size=32)
+            font_reg = ImageFont.truetype("arial.ttf", size=24)
+        except IOError:
             font_bold = ImageFont.load_default()
-            font_reg  = ImageFont.load_default()
+            font_reg = ImageFont.load_default()
 
         for _, row in df.iterrows():
             pid = str(row["ID"])
             img = Image.new("RGB", (A4_W, A4_H), "white")
             draw = ImageDraw.Draw(img)
 
-            # --- Logos en entête ---
-            x_l = MARGIN
-            for logo_file in [logo_ivory, logo_mo, logo_exec]:
+            # --- Logos en en-tête ---
+            logos = [logo_ci, logo_moe, logo_exec]
+            logo_max_h = 100
+            spacing = 20
+            x_cursor = MARGIN
+            for logo_file in logos:
                 if logo_file:
                     try:
-                        lg = Image.open(logo_file)
-                        lg.thumbnail((150,150))
-                        img.paste(lg, (x_l, MARGIN), lg if lg.mode=='RGBA' else None)
-                        x_l += lg.width + 30
+                        logo = Image.open(logo_file)
+                        w, h = logo.size
+                        ratio = logo_max_h / h
+                        logo = logo.resize((int(w * ratio), logo_max_h), Image.ANTIALIAS)
+                        img.paste(logo, (x_cursor, MARGIN), logo.convert("RGBA"))
+                        x_cursor += logo.width + spacing
                     except:
                         continue
 
-            # Header texte
-            y0 = MARGIN + 160
-            draw.text((MARGIN, y0), republique, font=font_bold, fill="black")
+            # Texte header à droite des logos
+            header_x = x_cursor
+            y0 = MARGIN
+            draw.text((header_x, y0), republique, font=font_bold, fill="black")
+            y0 += 35
+            draw.text((header_x, y0), ministere, font=font_reg, fill="black")
             y0 += 30
-            draw.text((MARGIN, y0), ministere, font=font_reg, fill="black")
-            y0 += 25
-            draw.text((MARGIN, y0), projet, font=font_reg, fill="black")
+            draw.text((header_x, y0), projet, font=font_reg, fill="black")
 
             # Ligne séparatrice
-            y_sep = y0 + 40
+            y_sep = MARGIN + logo_max_h + 20
             draw.line((MARGIN, y_sep, A4_W - MARGIN, y_sep), fill="black", width=2)
 
-            # Titre fiche
+            # --- Titre fiche ---
             y = y_sep + 30
             draw.text((MARGIN, y), f"BORNE GÉODÉSIQUE SP {pid}", font=font_bold, fill="black")
             y += 35
-            date_str = datetime.today().strftime("%d %B %Y")
+            date_str = datetime.today().strftime("%B %Y")
             draw.text((MARGIN, y), f"MAJ : {date_str}", font=font_reg, fill="black")
 
-            # Tableau coordonnées
-            y += 50
-            headers = ["LAT NORD","LON OUEST","HAUTEUR (m)","X (m)","Y (m)"]
+            # --- Tableau coordonnées ---
+            y += 60
+            headers = ["LAT NORD", "LON OUEST", "HAUTEUR", "X (m)", "Y (m)"]
             vals = [
-                f"{row['latitude']:.6f}" if pd.notnull(row['latitude']) else "-",
-                f"{row['longitude']:.6f}" if pd.notnull(row['longitude']) else "-",
-                str(row.get("Z","-")),
-                f"{row['X']:.3f}",
-                f"{row['Y']:.3f}"
+                f"{row.get('latitude', '-'):.6f}" if row.get('latitude') != "" else "-",
+                f"{row.get('longitude', '-'):.6f}" if row.get('longitude') != "" else "-",
+                str(row.get("Z", "-") or "-"),
+                str(row.get("X", "-") or "-"),
+                str(row.get("Y", "-") or "-")
             ]
             col_w = (A4_W - 2 * MARGIN) // len(headers)
             # Entêtes
@@ -148,7 +165,7 @@ if st.sidebar.button("🖼️ Générer images et télécharger ZIP") and df is 
                 draw.rectangle([x0, y_val, x0 + col_w, y_val + 40], outline="black", width=1)
                 draw.text((x0 + 5, y_val + 10), v, font=font_reg, fill="black")
 
-            # Vues / photos
+            # --- Vues / photos ---
             y_ph = y_val + 80
             draw.text((MARGIN, y_ph), "VUES :", font=font_bold, fill="black")
             y_ph += 30
@@ -167,12 +184,12 @@ if st.sidebar.button("🖼️ Générer images et télécharger ZIP") and df is 
                     except:
                         continue
 
-            # Pied de page
+            # --- Pied de page ---
             text_cf = commune or "-"
             draw.text((MARGIN, A4_H - 100), f"Commune : {text_cf}", font=font_reg, fill="black")
             draw.text((A4_W - MARGIN - 300, A4_H - 100), "Généré automatiquement", font=font_reg, fill="black")
 
-            # Sauvegarde PNG
+            # Sauvegarde PNG en mémoire
             out = io.BytesIO()
             img.save(out, format="PNG")
             zipf.writestr(f"borne_{pid}.png", out.getvalue())
