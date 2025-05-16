@@ -10,14 +10,14 @@ from datetime import datetime
 from pyproj import Transformer
 
 # --- CONFIGURATION A4 (pixels) ---
-# Format A4 à 150 DPI ≃ 1240×1754 px
+# A4 à 150 DPI ≃ 1240×1754 px
 A4_W, A4_H = 1240, 1754
 MARGIN = 50
 
-st.set_page_config(page_title="Générateur d’Images A4 par Borne (ZIP)", layout="wide")
-st.title("📘 Générateur d’Images A4 par Borne et ZIP")
+st.set_page_config(page_title="Générateur de Fiches Géodésiques", layout="wide")
+st.title("Générateur de Fiches Géodésiques")
 
-# 1) Chargement des données
+# --- SIDEBAR ---
 st.sidebar.header("1. Chargement des points")
 uploaded = st.sidebar.file_uploader("CSV / TXT / GeoJSON", type=["csv", "txt", "json"])
 df = None
@@ -33,8 +33,8 @@ if uploaded:
                 c = g.get("coordinates", [None, None])
                 recs.append({
                     "ID": str(p.get("ID", i)),
-                    "X": c[0], "Y": c[1], "Z": p.get("Z", ""),
-                    "latitude": p.get("latitude", ""), "longitude": p.get("longitude", "")
+                    "X": c[0], "Y": c[1], "Z": p.get("Z",""),
+                    "latitude": p.get("latitude",""), "longitude": p.get("longitude","")
                 })
             df = pd.DataFrame(recs)
         else:
@@ -46,31 +46,28 @@ if uploaded:
     else:
         st.success(f"{len(df)} points chargés")
 
-        # 1a) conversion UTM -> lat/long si besoin
+        # Conversion UTM → WGS84
         if "X" in df.columns and "Y" in df.columns:
             utm_zone = st.sidebar.number_input("Zone UTM", min_value=1, max_value=60, value=31)
-            hemisphere = st.sidebar.selectbox("Hémisphère UTM", ["Nord", "Sud"])
+            hemisphere = st.sidebar.selectbox("Hémisphère UTM", ["Nord","Sud"])
             crs_utm = f"+proj=utm +zone={utm_zone} +{'north' if hemisphere=='Nord' else 'south'} +datum=WGS84 +units=m +no_defs"
             transformer = Transformer.from_crs(crs_utm, "EPSG:4326", always_xy=True)
             try:
                 lons, lats = transformer.transform(df["X"].values, df["Y"].values)
-                df["longitude"] = lons
-                df["latitude"] = lats
+                df["longitude"], df["latitude"] = lons, lats
             except Exception as e:
                 st.warning(f"Conversion UTM → lat/long échouée : {e}")
 
-# 2) Infos générales
 st.sidebar.header("2. Infos générales")
+commune    = st.sidebar.text_input("Commune", "SAN-PEDRO")
 republique = st.sidebar.text_input("République / État", "République de Côte d'Ivoire")
-ministere = st.sidebar.text_input("Ministère / Projet", "Ministère de l’Équipement et de l’Entretien Routier")
-projet    = st.sidebar.text_input("Projet", "PIDUCAS – Cadastrage San-Pedro")
-commune   = st.sidebar.text_input("Commune", "")
+ministere  = st.sidebar.text_input("Ministère / Projet", "Ministère de l’Équipement et de l’Entretien Routier")
+projet     = st.sidebar.text_input("Projet", f"CADASTRAGE DE LA VILLE DE {commune}")
 
-# 2a) Logos multiples
 st.sidebar.header("3. Logos")
-logo_ci   = st.sidebar.file_uploader("Logo Côte d'Ivoire", type=["png", "jpg", "jpeg"])
-logo_moe  = st.sidebar.file_uploader("Logo Maître d'Œuvre", type=["png", "jpg", "jpeg"])
-logo_exec = st.sidebar.file_uploader("Logo Entreprise d'Exécution", type=["png", "jpg", "jpeg"])
+logo_ci   = st.sidebar.file_uploader("Logo Côte d'Ivoire", type=["png","jpg","jpeg"])
+logo_moe  = st.sidebar.file_uploader("Logo Maître d'Œuvre",  type=["png","jpg","jpeg"])
+logo_exec = st.sidebar.file_uploader("Logo Exécution",      type=["png","jpg","jpeg"])
 
 # 3) Photos par point
 photo_dict = {}
@@ -81,131 +78,135 @@ if df is not None:
         with st.expander(f"Borne {pid}"):
             files = st.file_uploader(
                 f"Photos pour {pid}",
-                type=["jpg", "jpeg", "png"],
+                type=["jpg","jpeg","png"],
                 accept_multiple_files=True,
                 key=f"upl_{pid}"
             )
             if files:
                 photo_dict[pid] = files
 
-# 4) Génération des images + ZIP
-if st.sidebar.button("🖼️ Générer images et télécharger ZIP") and df is not None:
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w") as zipf:
-        # Chargement des polices
+# 4) Génération + ZIP
+if st.sidebar.button("Générer fiches et ZIP") and df is not None:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as zipf:
+        # polices Times New Roman
         try:
-            font_bold = ImageFont.truetype("arialbd.ttf", size=32)
-            font_reg = ImageFont.truetype("arial.ttf", size=24)
+            font_bold = ImageFont.truetype("Times New Roman Bold.ttf", size=32)
+            font_reg  = ImageFont.truetype("Times New Roman.ttf", size=24)
+            font_small= ImageFont.truetype("Times New Roman.ttf", size=18)
         except IOError:
             font_bold = ImageFont.load_default()
-            font_reg = ImageFont.load_default()
+            font_reg  = ImageFont.load_default()
+            font_small= ImageFont.load_default()
 
         for _, row in df.iterrows():
             pid = str(row["ID"])
-            img = Image.new("RGB", (A4_W, A4_H), "white")
+            img = Image.new("RGB", (A4_W, A4_H), "#f5f5f5")
             draw = ImageDraw.Draw(img)
 
-            # --- Logos en en-tête ---
+            # container blanc avec ombre
+            box = [MARGIN, MARGIN, A4_W-MARGIN, A4_H-MARGIN]
+            # ombre
+            draw.rectangle([MARGIN+5, MARGIN+5, A4_W-MARGIN+5, A4_H-MARGIN+5], fill="#ddd")
+            # fond
+            draw.rectangle(box, fill="white")
+
+            # bar de drapeau
+            bar_h = 15
+            bar_y = MARGIN + bar_h
+            draw.rectangle([box[0], box[0], box[2], box[0]+bar_h],
+                           fill=None, outline=None)
+            # 3 bandes
+            third = (box[2]-box[0])//3
+            draw.rectangle([box[0], box[0], box[0]+third, box[0]+bar_h], fill="#ff9b00")
+            draw.rectangle([box[0]+third, box[0], box[0]+2*third, box[0]+bar_h], fill="white")
+            draw.rectangle([box[0]+2*third,box[0], box[2], box[0]+bar_h], fill="#009e49")
+
+            # logos positionnés absolu
             logos = [logo_ci, logo_moe, logo_exec]
-            logo_max_h = 100
-            spacing = 20
-            x_cursor = MARGIN
-            for logo_file in logos:
-                if logo_file:
+            x0 = box[0] + 10
+            for lf in logos:
+                if lf:
                     try:
-                        logo = Image.open(logo_file)
-                        w, h = logo.size
-                        ratio = logo_max_h / h
-                        logo = logo.resize((int(w * ratio), logo_max_h), Image.ANTIALIAS)
-                        img.paste(logo, (x_cursor, MARGIN), logo.convert("RGBA"))
-                        x_cursor += logo.width + spacing
+                        logo = Image.open(lf).convert("RGBA")
+                        h_ratio = 60 / logo.height
+                        logo = logo.resize((int(logo.width*h_ratio), 60), Image.ANTIALIAS)
+                        img.paste(logo, (x0, box[0]+bar_h+10), logo)
+                        x0 += logo.width + 20
                     except:
                         continue
 
-            # Texte header à droite des logos
-            header_x = x_cursor
-            y0 = MARGIN
-            draw.text((header_x, y0), republique, font=font_bold, fill="black")
-            y0 += 35
-            draw.text((header_x, y0), ministere, font=font_reg, fill="black")
-            y0 += 30
-            draw.text((header_x, y0), projet, font=font_reg, fill="black")
-
-            # Ligne séparatrice
-            y_sep = MARGIN + logo_max_h + 20
-            draw.line((MARGIN, y_sep, A4_W - MARGIN, y_sep), fill="black", width=2)
-
-            # --- Titre fiche ---
-            y = y_sep + 30
-            draw.text((MARGIN, y), f"BORNE GÉODÉSIQUE SP {pid}", font=font_bold, fill="black")
+            # header texte centré
+            text_x = box[0] + 10
+            y = box[0] + bar_h + 80
+            draw.text((text_x, y), republique, font=font_bold, fill="black")
+            y += 40
+            draw.text((text_x, y), ministere, font=font_reg, fill="black")
             y += 35
-            date_str = datetime.today().strftime("%B %Y")
-            draw.text((MARGIN, y), f"MAJ : {date_str}", font=font_reg, fill="black")
+            draw.text((text_x, y), projet, font=font_reg, fill="black")
 
-            # --- Préparation des valeurs coordonnées ---
-            def fmt(val):
-                try:
-                    return f"{float(val):.6f}"
-                except:
-                    return "-"
-            
-            lat_txt = fmt(row.get("latitude", ""))
-            lon_txt = fmt(row.get("longitude", ""))
-            z_txt   = str(row.get("Z", "") or "-")
-            x_txt   = str(row.get("X", "") or "-")
-            y_txt   = str(row.get("Y", "") or "-")
+            # ligne séparatrice
+            y_sep = y + 50
+            draw.line([box[0]+10, y_sep, box[2]-10, y_sep], fill="black", width=2)
 
-            # --- Tableau coordonnées ---
-            y += 60
-            headers = ["LAT NORD", "LON OUEST", "HAUTEUR", "X (m)", "Y (m)"]
-            vals = [lat_txt, lon_txt, z_txt, x_txt, y_txt]
-            col_w = (A4_W - 2 * MARGIN) // len(headers)
-            # Entêtes
-            for i, h in enumerate(headers):
-                x0 = MARGIN + i * col_w
-                draw.rectangle([x0, y, x0 + col_w, y + 40], outline="black", width=1)
-                draw.text((x0 + 5, y + 5), h, font=font_bold, fill="black")
-            # Valeurs
-            y_val = y + 45
-            for i, v in enumerate(vals):
-                x0 = MARGIN + i * col_w
-                draw.rectangle([x0, y_val, x0 + col_w, y_val + 40], outline="black", width=1)
-                draw.text((x0 + 5, y_val + 10), v, font=font_reg, fill="black")
+            # titre fiche
+            y2 = y_sep + 30
+            draw.text((box[0]+10, y2), f"BORNE GÉODÉSIQUE SP {pid}", font=font_bold, fill="black")
+            y2 += 35
+            draw.text((box[0]+10, y2), f"MAJ : {datetime.today():%B %Y}", font=font_reg, fill="black")
 
-            # --- Vues / photos ---
-            y_ph = y_val + 80
-            draw.text((MARGIN, y_ph), "VUES :", font=font_bold, fill="black")
-            y_ph += 30
-            photos = photo_dict.get(pid, [])
-            if not photos:
-                draw.text((MARGIN, y_ph), "Aucune photo fournie", font=font_reg, fill="gray")
+            # formatage coordonnées
+            def fmt(v):
+                try: return f"{float(v):.6f}"
+                except: return "-"
+
+            lat = fmt(row.get("latitude",""))
+            lon = fmt(row.get("longitude",""))
+            z   = str(row.get("Z","") or "-")
+            x   = str(row.get("X","") or "-")
+            y_p = str(row.get("Y","") or "-")
+
+            # tableau
+            table_y = y2 + 50
+            cols = ["LAT NORD","LON OUEST","HAUTEUR","X (m)","Y (m)"]
+            vals = [lat, lon, z, x, y_p]
+            col_w = (box[2]-box[0]-20)//len(cols)
+            for i, h in enumerate(cols):
+                xh = box[0]+10 + i*col_w
+                draw.rectangle([xh, table_y, xh+col_w, table_y+35], outline="black")
+                draw.text((xh+5, table_y+5), h, font=font_small, fill="black")
+                draw.rectangle([xh, table_y+40, xh+col_w, table_y+75], outline="black")
+                draw.text((xh+5, table_y+45), vals[i], font=font_small, fill="black")
+
+            # photos
+            photo_y = table_y + 120
+            draw.text((box[0]+10, photo_y), "VUES :", font=font_bold, fill="black")
+            photo_y += 40
+            thumbs = photo_dict.get(pid, [])
+            if not thumbs:
+                draw.text((box[0]+10, photo_y), "Aucune photo fournie", font=font_reg, fill="#666")
             else:
-                thumb_w, thumb_h = 300, 200
-                for i, f in enumerate(photos):
+                tw, th = 300, 200
+                for i, f in enumerate(thumbs):
                     try:
                         p = Image.open(f)
-                        p.thumbnail((thumb_w, thumb_h))
-                        x_ph = MARGIN + (i % 2) * (thumb_w + 20)
-                        y_cur = y_ph + (i // 2) * (thumb_h + 20)
-                        img.paste(p, (x_ph, y_cur))
+                        p.thumbnail((tw, th))
+                        px = box[0]+10 + (i%2)*(tw+20)
+                        py = photo_y + (i//2)*(th+20)
+                        img.paste(p, (px, py))
                     except:
                         continue
 
-            # --- Pied de page ---
-            text_cf = commune or "-"
-            draw.text((MARGIN, A4_H - 100), f"Commune : {text_cf}", font=font_reg, fill="black")
-            draw.text((A4_W - MARGIN - 300, A4_H - 100), "Généré automatiquement", font=font_reg, fill="black")
+            # pied de page
+            draw.text((box[0]+10, box[3]-70), f"Commune : {commune}", font=font_reg, fill="black")
+            draw.text((box[2]-250, box[3]-70), "Généré automatiquement", font=font_reg, fill="black")
 
-            # Sauvegarde PNG en mémoire
-            out = io.BytesIO()
-            img.save(out, format="PNG")
-            zipf.writestr(f"borne_{pid}.png", out.getvalue())
+            # export
+            buf2 = io.BytesIO()
+            img.crop(box).save(buf2, format="PNG")
+            zipf.writestr(f"fiche_SP_{pid}.png", buf2.getvalue())
 
-    zip_buffer.seek(0)
-    st.success("✅ ZIP prêt : toutes vos images A4 par borne")
-    st.download_button(
-        "⬇️ Télécharger le ZIP",
-        data=zip_buffer,
-        file_name="catalogue_bornes_images.zip",
-        mime="application/zip"
-    )
+    buffer.seek(0)
+    st.success("✅ ZIP prêt")
+    st.download_button("⬇️ Télécharger ZIP", data=buffer,
+                       file_name="fiches_geodesiques.zip", mime="application/zip")
