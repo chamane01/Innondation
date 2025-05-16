@@ -1,4 +1,3 @@
-# app.py
 import streamlit as st
 import pandas as pd
 import json
@@ -6,11 +5,15 @@ from PIL import Image, ImageDraw, ImageFont
 import io
 import zipfile
 from datetime import datetime
+from pyproj import Transformer
 
 # --- CONFIGURATION A4 (pixels) ---
 # Format A4 à 150 DPI ≃ 1240×1754 px
 A4_W, A4_H = 1240, 1754
 MARGIN = 50
+
+# UTM zone for Côte d'Ivoire (zone 30N)
+transformer = Transformer.from_crs("EPSG:32630", "EPSG:4326", always_xy=True)
 
 st.set_page_config(page_title="Générateur d’Images A4 par Borne (ZIP)", layout="wide")
 st.title("📘 Générateur d’Images A4 par Borne et ZIP")
@@ -32,7 +35,6 @@ if uploaded:
                 recs.append({
                     "ID": str(p.get("ID", i)),
                     "X": c[0], "Y": c[1], "Z": p.get("Z",""),
-                    "latitude": p.get("latitude",""), "longitude": p.get("longitude","")
                 })
             df = pd.DataFrame(recs)
         else:
@@ -43,6 +45,10 @@ if uploaded:
         st.error(f"Erreur lecture fichier : {e}")
     else:
         st.success(f"{len(df)} points chargés")
+        # calculer lat/long
+        df[['longitude', 'latitude']] = df.apply(
+            lambda r: transformer.transform(r['X'], r['Y'])[0:2][::-1] if pd.notnull(r['X']) and pd.notnull(r['Y']) else (None, None),
+            axis=1, result_type='expand')
 
 # 2) Infos générales
 st.sidebar.header("2. Infos générales")
@@ -50,7 +56,10 @@ republique = st.sidebar.text_input("République / État", "République de Côte 
 ministere = st.sidebar.text_input("Ministère / Projet", "Ministère de l’Équipement et de l’Entretien Routier")
 projet    = st.sidebar.text_input("Projet", "PIDUCAS – Cadastrage San-Pedro")
 commune   = st.sidebar.text_input("Commune", "")
-logo_file = st.sidebar.file_uploader("Logo (PNG/JPG)", type=["png","jpg","jpeg"])
+# logos
+logo_ivory = st.sidebar.file_uploader("Logo Côte d'Ivoire (PNG/JPG)", type=["png","jpg","jpeg"])
+logo_mo   = st.sidebar.file_uploader("Logo Maître d'œuvre (PNG/JPG)", type=["png","jpg","jpeg"])
+logo_exec = st.sidebar.file_uploader("Logo Entreprise d'exécution (PNG/JPG)", type=["png","jpg","jpeg"])
 
 # 3) Photos par point
 photo_dict = {}
@@ -72,74 +81,74 @@ if df is not None:
 if st.sidebar.button("🖼️ Générer images et télécharger ZIP") and df is not None:
     zip_buffer = io.BytesIO()
     with zipfile.ZipFile(zip_buffer, "w") as zipf:
-        # On utilise la police par défaut de PIL
-        font_bold = ImageFont.load_default()
-        font_reg  = ImageFont.load_default()
+        # Fonts
+        try:
+            font_bold = ImageFont.truetype("DejaVuSans-Bold.ttf", 24)
+            font_reg  = ImageFont.truetype("DejaVuSans.ttf", 20)
+        except:
+            font_bold = ImageFont.load_default()
+            font_reg  = ImageFont.load_default()
 
         for _, row in df.iterrows():
             pid = str(row["ID"])
-            # Crée une image blanche A4
             img = Image.new("RGB", (A4_W, A4_H), "white")
             draw = ImageDraw.Draw(img)
 
-            # --- Logo ---
-            if logo_file:
-                try:
-                    logo = Image.open(logo_file)
-                    logo.thumbnail((100,100))
-                    img.paste(logo, (MARGIN, MARGIN))
-                except:
-                    pass
+            # --- Logos en entête ---
+            x_l = MARGIN
+            for logo_file in [logo_ivory, logo_mo, logo_exec]:
+                if logo_file:
+                    try:
+                        lg = Image.open(logo_file)
+                        lg.thumbnail((150,150))
+                        img.paste(lg, (x_l, MARGIN), lg if lg.mode=='RGBA' else None)
+                        x_l += lg.width + 30
+                    except:
+                        continue
 
-            # --- Header texte ---
-            y0 = MARGIN
-            draw.text((200, y0), republique, font=font_bold, fill="black")
+            # Header texte
+            y0 = MARGIN + 160
+            draw.text((MARGIN, y0), republique, font=font_bold, fill="black")
             y0 += 30
-            draw.text((200, y0), ministere, font=font_reg, fill="black")
+            draw.text((MARGIN, y0), ministere, font=font_reg, fill="black")
             y0 += 25
-            draw.text((200, y0), projet, font=font_reg, fill="black")
+            draw.text((MARGIN, y0), projet, font=font_reg, fill="black")
 
             # Ligne séparatrice
             y_sep = y0 + 40
             draw.line((MARGIN, y_sep, A4_W - MARGIN, y_sep), fill="black", width=2)
 
-            # --- Titre fiche ---
+            # Titre fiche
             y = y_sep + 30
             draw.text((MARGIN, y), f"BORNE GÉODÉSIQUE SP {pid}", font=font_bold, fill="black")
-            y += 30
-            date_str = datetime.today().strftime("%B %Y")
+            y += 35
+            date_str = datetime.today().strftime("%d %B %Y")
             draw.text((MARGIN, y), f"MAJ : {date_str}", font=font_reg, fill="black")
 
-            # --- Tableau coordonnées ---
+            # Tableau coordonnées
             y += 50
-            headers = ["LAT NORD","LON OUEST","HAUTEUR","X (m)","Y (m)"]
+            headers = ["LAT NORD","LON OUEST","HAUTEUR (m)","X (m)","Y (m)"]
             vals = [
-                row.get("latitude","") or "-",
-                row.get("longitude","") or "-",
-                str(row.get("Z","") or "-"),
-                str(row.get("X","") or "-"),
-                str(row.get("Y","") or "-")
+                f"{row['latitude']:.6f}" if pd.notnull(row['latitude']) else "-",
+                f"{row['longitude']:.6f}" if pd.notnull(row['longitude']) else "-",
+                str(row.get("Z","-")),
+                f"{row['X']:.3f}",
+                f"{row['Y']:.3f}"
             ]
             col_w = (A4_W - 2 * MARGIN) // len(headers)
             # Entêtes
             for i, h in enumerate(headers):
                 x0 = MARGIN + i * col_w
-                draw.rectangle(
-                    [x0, y, x0 + col_w, y + 40],
-                    outline="black", width=1
-                )
+                draw.rectangle([x0, y, x0 + col_w, y + 40], outline="black", width=1)
                 draw.text((x0 + 5, y + 5), h, font=font_bold, fill="black")
             # Valeurs
             y_val = y + 45
             for i, v in enumerate(vals):
                 x0 = MARGIN + i * col_w
-                draw.rectangle(
-                    [x0, y_val, x0 + col_w, y_val + 40],
-                    outline="black", width=1
-                )
+                draw.rectangle([x0, y_val, x0 + col_w, y_val + 40], outline="black", width=1)
                 draw.text((x0 + 5, y_val + 10), v, font=font_reg, fill="black")
 
-            # --- Vues / photos ---
+            # Vues / photos
             y_ph = y_val + 80
             draw.text((MARGIN, y_ph), "VUES :", font=font_bold, fill="black")
             y_ph += 30
@@ -158,12 +167,12 @@ if st.sidebar.button("🖼️ Générer images et télécharger ZIP") and df is 
                     except:
                         continue
 
-            # --- Pied de page ---
+            # Pied de page
             text_cf = commune or "-"
             draw.text((MARGIN, A4_H - 100), f"Commune : {text_cf}", font=font_reg, fill="black")
             draw.text((A4_W - MARGIN - 300, A4_H - 100), "Généré automatiquement", font=font_reg, fill="black")
 
-            # Sauvegarde PNG en mémoire
+            # Sauvegarde PNG
             out = io.BytesIO()
             img.save(out, format="PNG")
             zipf.writestr(f"borne_{pid}.png", out.getvalue())
