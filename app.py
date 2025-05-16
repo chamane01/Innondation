@@ -142,16 +142,23 @@ if st.sidebar.button("🖼️ Générer images et télécharger ZIP") and df is 
             date_str = datetime.today().strftime("%B %Y")
             draw.text((MARGIN, y), f"MAJ : {date_str}", font=font_reg, fill="black")
 
+            # --- Préparation des valeurs coordonnées ---
+            def fmt(val):
+                try:
+                    return f"{float(val):.6f}"
+                except:
+                    return "-"
+            
+            lat_txt = fmt(row.get("latitude", ""))
+            lon_txt = fmt(row.get("longitude", ""))
+            z_txt   = str(row.get("Z", "") or "-")
+            x_txt   = str(row.get("X", "") or "-")
+            y_txt   = str(row.get("Y", "") or "-")
+
             # --- Tableau coordonnées ---
             y += 60
             headers = ["LAT NORD", "LON OUEST", "HAUTEUR", "X (m)", "Y (m)"]
-            vals = [
-                f"{row.get('latitude', '-'):.6f}" if row.get('latitude') != "" else "-",
-                f"{row.get('longitude', '-'):.6f}" if row.get('longitude') != "" else "-",
-                str(row.get("Z", "-") or "-"),
-                str(row.get("X", "-") or "-"),
-                str(row.get("Y", "-") or "-")
-            ]
+            vals = [lat_txt, lon_txt, z_txt, x_txt, y_txt]
             col_w = (A4_W - 2 * MARGIN) // len(headers)
             # Entêtes
             for i, h in enumerate(headers):
@@ -167,7 +174,7 @@ if st.sidebar.button("🖼️ Générer images et télécharger ZIP") and df is 
 
             # --- Vues / photos ---
             y_ph = y_val + 80
-            draw.text((MARGIN, y_ph), "VUES :", font=font_bold, fill="black")
+            draw.text((MARGIN, y_ph), "VUES :", font=font_bold, fill="black")
             y_ph += 30
             photos = photo_dict.get(pid, [])
             if not photos:
@@ -186,7 +193,7 @@ if st.sidebar.button("🖼️ Générer images et télécharger ZIP") and df is 
 
             # --- Pied de page ---
             text_cf = commune or "-"
-            draw.text((MARGIN, A4_H - 100), f"Commune : {text_cf}", font=font_reg, fill="black")
+            draw.text((MARGIN, A4_H - 100), f"Commune : {text_cf}", font=font_reg, fill="black")
             draw.text((A4_W - MARGIN - 300, A4_H - 100), "Généré automatiquement", font=font_reg, fill="black")
 
             # Sauvegarde PNG en mémoire
@@ -195,7 +202,7 @@ if st.sidebar.button("🖼️ Générer images et télécharger ZIP") and df is 
             zipf.writestr(f"borne_{pid}.png", out.getvalue())
 
     zip_buffer.seek(0)
-    st.success("✅ ZIP prêt : toutes vos images A4 par borne")
+    st.success("✅ ZIP prêt : toutes vos images A4 par borne")
     st.download_button(
         "⬇️ Télécharger le ZIP",
         data=zip_buffer,
