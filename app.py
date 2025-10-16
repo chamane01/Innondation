@@ -328,7 +328,13 @@ def create_advanced_map(mosaic_file, show_minimap=True, show_fullscreen=True):
     ).add_to(m)
     
     # Couches de fond supplémentaires
-    folium.TileLayer('Stamen Terrain', name='🏔️ Terrain', show=False).add_to(m)
+    # Couches de fond supplémentaires
+    folium.TileLayer(
+        tiles='https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}.png',
+        attr='Map tiles by Stadia Maps, under CC BY 3.0. Data by OpenStreetMap, under ODbL',
+        name='🏔️ Terrain',
+        show=False
+    ).add_to(m)
     folium.TileLayer('CartoDB positron', name='⚪ Clair', show=False).add_to(m)
     folium.TileLayer('CartoDB dark_matter', name='⚫ Sombre', show=False).add_to(m)
     folium.TileLayer(
