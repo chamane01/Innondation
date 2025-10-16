@@ -17,6 +17,8 @@ import base64
 import contextily as ctx
 import json
 import pandas as pd
+import zipfile
+import shutil
 
 from reportlab.pdfgen import canvas
 from reportlab.lib.pagesizes import A4
@@ -36,67 +38,6 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="expanded"
 )
-
-# ============================================================================
-# STYLES CSS PERSONNALISÉS
-# ============================================================================
-st.markdown("""
-<style>
-    .main-header {
-        font-size: 2.5rem;
-        font-weight: bold;
-        color: #1f77b4;
-        text-align: center;
-        margin-bottom: 2rem;
-        text-shadow: 2px 2px 4px rgba(0,0,0,0.1);
-    }
-    .sub-header {
-        font-size: 1.5rem;
-        color: #2ca02c;
-        margin-top: 1rem;
-        border-bottom: 2px solid #2ca02c;
-        padding-bottom: 0.5rem;
-    }
-    .info-box {
-        background-color: #e8f4f8;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border-left: 4px solid #1f77b4;
-        margin: 1rem 0;
-    }
-    .success-box {
-        background-color: #d4edda;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border-left: 4px solid #28a745;
-    }
-    .warning-box {
-        background-color: #fff3cd;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border-left: 4px solid #ffc107;
-    }
-    .metric-card {
-        background-color: #f8f9fa;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-    }
-    .stButton>button {
-        border-radius: 0.5rem;
-        transition: all 0.3s ease;
-    }
-    .stButton>button:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-    }
-</style>
-""", unsafe_allow_html=True)
-
-# Dimensions PDF
-PAGE_WIDTH, PAGE_HEIGHT = A4
-SECTION_HEIGHT = PAGE_HEIGHT / 3
-COLUMN_WIDTH = PAGE_WIDTH / 2
 
 # ============================================================================
 # FONCTIONS UTILITAIRES - INITIALISATION
@@ -121,7 +62,13 @@ def initialize_session_state():
         "export_format": "PNG",
         "show_hillshade": False,
         "show_slope": True,
-        "current_project": None
+        "current_project": None,
+        "use_uploaded_tiff": False,
+        "uploaded_tiff_path": None,
+        "uploaded_shapefiles": [],
+        "uploaded_csv_data": None,
+        "active_mosaic": "default",
+        "shapefile_layers": []
     }
     for key, value in defaults.items():
         if key not in st.session_state:
@@ -163,6 +110,96 @@ def get_elevation_stats(data, nodata=None):
         "std": float(np.nanstd(data)),
         "range": float(np.nanmax(data) - np.nanmin(data))
     }
+
+# ============================================================================
+# FONCTIONS UTILITAIRES - GESTION DES FICHIERS UPLOADÉS
+# ============================================================================
+
+def save_uploaded_file(uploaded_file, folder="uploads"):
+    """Sauvegarde un fichier uploadé et retourne le chemin"""
+    try:
+        if not os.path.exists(folder):
+            os.makedirs(folder)
+        
+        file_path = os.path.join(folder, uploaded_file.name)
+        with open(file_path, "wb") as f:
+            f.write(uploaded_file.getbuffer())
+        return file_path
+    except Exception as e:
+        st.error(f"❌ Erreur lors de la sauvegarde du fichier: {e}")
+        return None
+
+def validate_tiff_file(file_path):
+    """Valide qu'un fichier TIFF est correct"""
+    try:
+        with rasterio.open(file_path) as src:
+            if src.count < 1:
+                return False, "Le fichier TIFF doit contenir au moins une bande"
+            if src.crs is None:
+                return False, "Le fichier TIFF doit avoir un système de coordonnées (CRS)"
+            return True, "Fichier TIFF valide"
+    except Exception as e:
+        return False, f"Erreur de validation: {e}"
+
+def load_shapefile(shp_path):
+    """Charge un shapefile et retourne les géométries"""
+    try:
+        import geopandas as gpd
+        gdf = gpd.read_file(shp_path)
+        
+        # Convertir en EPSG:4326 si nécessaire
+        if gdf.crs and gdf.crs.to_string() != "EPSG:4326":
+            gdf = gdf.to_crs("EPSG:4326")
+        
+        return gdf, None
+    except ImportError:
+        return None, "❌ GeoPandas non installé. Exécutez: pip install geopandas"
+    except Exception as e:
+        return None, f"❌ Erreur lors du chargement du shapefile: {e}"
+
+def load_csv_points(csv_path, lon_col="longitude", lat_col="latitude"):
+    """Charge des points depuis un CSV"""
+    try:
+        df = pd.read_csv(csv_path)
+        
+        # Vérifier les colonnes requises
+        if lon_col not in df.columns or lat_col not in df.columns:
+            available_cols = ", ".join(df.columns.tolist())
+            return None, f"❌ Colonnes requises: '{lon_col}' et '{lat_col}'. Colonnes disponibles: {available_cols}"
+        
+        # Supprimer les lignes avec des coordonnées manquantes
+        df = df.dropna(subset=[lon_col, lat_col])
+        
+        if len(df) == 0:
+            return None, "❌ Aucun point valide trouvé dans le CSV"
+        
+        return df, None
+    except Exception as e:
+        return None, f"❌ Erreur lors du chargement du CSV: {e}"
+
+def extract_shapefile_from_zip(zip_file):
+    """Extrait un shapefile d'un fichier ZIP"""
+    try:
+        extract_folder = "uploads/shapefiles"
+        if not os.path.exists(extract_folder):
+            os.makedirs(extract_folder)
+        
+        zip_path = save_uploaded_file(zip_file, "uploads")
+        if not zip_path:
+            return None, "Erreur lors de la sauvegarde du ZIP"
+        
+        with zipfile.ZipFile(zip_path, 'r') as zip_ref:
+            zip_ref.extractall(extract_folder)
+        
+        # Trouver le fichier .shp
+        for root, dirs, files in os.walk(extract_folder):
+            for file in files:
+                if file.endswith('.shp'):
+                    return os.path.join(root, file), None
+        
+        return None, "❌ Aucun fichier .shp trouvé dans le ZIP"
+    except Exception as e:
+        return None, f"❌ Erreur lors de l'extraction: {e}"
 
 # ============================================================================
 # FONCTIONS UTILITAIRES - GESTION DES FICHIERS TIFF
@@ -236,6 +273,80 @@ def get_mosaic_info(mosaic_file):
 # FONCTIONS UTILITAIRES - CARTOGRAPHIE
 # ============================================================================
 
+def add_shapefile_to_map(m, gdf, layer_name="Shapefile"):
+    """Ajoute un shapefile à la carte Folium"""
+    try:
+        feature_group = folium.FeatureGroup(name=layer_name, show=True)
+        
+        for idx, row in gdf.iterrows():
+            geom = row.geometry
+            
+            # Style selon le type de géométrie
+            if geom.geom_type == 'Point':
+                folium.CircleMarker(
+                    location=[geom.y, geom.x],
+                    radius=5,
+                    color='red',
+                    fill=True,
+                    fillColor='red',
+                    fillOpacity=0.6,
+                    popup=f"Point {idx}"
+                ).add_to(feature_group)
+            
+            elif geom.geom_type in ['LineString', 'MultiLineString']:
+                if geom.geom_type == 'LineString':
+                    coords = list(geom.coords)
+                    folium.PolyLine(
+                        locations=[(c[1], c[0]) for c in coords],
+                        color='blue',
+                        weight=2,
+                        opacity=0.8,
+                        popup=f"Ligne {idx}"
+                    ).add_to(feature_group)
+            
+            elif geom.geom_type in ['Polygon', 'MultiPolygon']:
+                if geom.geom_type == 'Polygon':
+                    coords = list(geom.exterior.coords)
+                    folium.Polygon(
+                        locations=[(c[1], c[0]) for c in coords],
+                        color='green',
+                        fill=True,
+                        fillColor='green',
+                        fillOpacity=0.3,
+                        weight=2,
+                        popup=f"Polygone {idx}"
+                    ).add_to(feature_group)
+        
+        feature_group.add_to(m)
+        return True
+    except Exception as e:
+        st.error(f"❌ Erreur lors de l'ajout du shapefile: {e}")
+        return False
+
+def add_csv_points_to_map(m, df, lon_col, lat_col, layer_name="Points CSV"):
+    """Ajoute des points CSV à la carte Folium"""
+    try:
+        feature_group = folium.FeatureGroup(name=layer_name, show=True)
+        
+        for idx, row in df.iterrows():
+            popup_text = "<br>".join([f"{col}: {row[col]}" for col in df.columns[:5]])
+            
+            folium.CircleMarker(
+                location=[row[lat_col], row[lon_col]],
+                radius=6,
+                color='orange',
+                fill=True,
+                fillColor='orange',
+                fillOpacity=0.7,
+                popup=folium.Popup(popup_text, max_width=200)
+            ).add_to(feature_group)
+        
+        feature_group.add_to(m)
+        return True
+    except Exception as e:
+        st.error(f"❌ Erreur lors de l'ajout des points CSV: {e}")
+        return False
+
 def create_advanced_map(mosaic_file, show_minimap=True, show_fullscreen=True):
     """Crée une carte Folium interactive avec fonctionnalités avancées"""
     
@@ -279,6 +390,16 @@ def create_advanced_map(mosaic_file, show_minimap=True, show_fullscreen=True):
             tooltip="Zone d'étude"
         ).add_to(mosaic_group)
         mosaic_group.add_to(m)
+    
+    # Ajout des shapefiles uploadés
+    for shp_data in st.session_state.get("shapefile_layers", []):
+        add_shapefile_to_map(m, shp_data['gdf'], shp_data['name'])
+    
+    # Ajout des points CSV
+    if st.session_state.get("uploaded_csv_data") is not None:
+        csv_info = st.session_state["uploaded_csv_data"]
+        add_csv_points_to_map(m, csv_info['df'], csv_info['lon_col'], 
+                             csv_info['lat_col'], csv_info['name'])
     
     # Outils de dessin avancés
     Draw(
@@ -327,7 +448,6 @@ def create_advanced_map(mosaic_file, show_minimap=True, show_fullscreen=True):
         lng_formatter="function(num) {return L.Util.formatNum(num, 5) + ' °E';}"
     ).add_to(m)
     
-    # Couches de fond supplémentaires
     # Couches de fond supplémentaires
     folium.TileLayer(
         tiles='https://tiles.stadiamaps.com/tiles/stamen_terrain/{z}/{x}/{y}.png',
@@ -576,6 +696,7 @@ def generate_advanced_profile(mosaic_file, coords, profile_title, show_slope=Tru
         slopes = []
         if show_slope and len(distances) > 1:
             for i in range(1, len(distances)):
+:
                 dh = elevations[i] - elevations[i-1]
                 dd = distances[i] - distances[i-1]
                 if dd > 0:
@@ -745,318 +866,226 @@ def export_results(format_type="PNG"):
         return pdf_buffer
 
 # ============================================================================
-# FONCTIONS RAPPORT PDF
+# INTERFACE - GESTION DES FICHIERS UPLOADÉS
 # ============================================================================
 
-def draw_metadata(c, metadata):
-    """Dessine les métadonnées sur le PDF"""
-    margin = 40
-    x_left = margin
-    y_top = PAGE_HEIGHT - margin
-    line_height = 16
-
-    logo_drawn = False
-    if metadata.get('logo'):
-        try:
-            if isinstance(metadata['logo'], bytes):
-                logo_stream = BytesIO(metadata['logo'])
-            else:
-                logo_stream = metadata['logo']
-            img = ImageReader(logo_stream)
-            img_width, img_height = img.getSize()
-            aspect = img_height / img_width
-            desired_width = 50
-            desired_height = desired_width * aspect
-            c.drawImage(img, x_left, y_top - desired_height, width=desired_width, 
-                       height=desired_height, preserveAspectRatio=True, mask='auto')
-            logo_drawn = True
-        except Exception as e:
-            st.error(f"❌ Erreur logo: {e}")
+def run_file_upload_interface():
+    """Interface pour uploader et gérer les fichiers"""
+    st.markdown("### 📂 Gestion des Fichiers")
     
-    x_title = x_left + 60 if logo_drawn else x_left
-    y_title = y_top - 20
+    tab1, tab2, tab3 = st.tabs(["🗺️ GeoTIFF", "📍 Shapefile", "📊 CSV/TXT"])
     
-    c.setFont("Helvetica-Bold", 22)
-    c.setFillColor(colors.HexColor("#1f77b4"))
-    if metadata.get('titre'):
-        c.drawString(x_title, y_title, metadata['titre'])
-    
-    c.setFont("Helvetica", 14)
-    c.setFillColor(colors.black)
-    y_company = y_title - 25
-    if metadata.get('company'):
-        c.drawString(x_title, y_company, metadata['company'])
-    
-    y_line = y_company - 10
-    c.setStrokeColor(colors.HexColor("#1f77b4"))
-    c.setLineWidth(2)
-    c.line(x_left, y_line, x_left + 200, y_line)
-    c.setLineWidth(1)
-    
-    y_text = y_line - 20
-    infos = [
-        ("📋 ID Rapport", metadata.get('report_id', 'N/A')),
-        ("📅 Date", metadata['date'].strftime('%d/%m/%Y') if hasattr(metadata.get('date'), "strftime") else str(metadata.get('date', 'N/A'))),
-        ("🕐 Heure", metadata['time'].strftime('%H:%M') if hasattr(metadata.get('time'), "strftime") else str(metadata.get('time', 'N/A'))),
-        ("👤 Éditeur", metadata.get('editor', 'N/A')),
-        ("📍 Localisation", metadata.get('location', 'N/A'))
-    ]
-    
-    value_x_offset = x_left + 90
-    for label, value in infos:
-        c.setFont("Helvetica-Bold", 10)
-        c.setFillColor(colors.black)
-        c.drawString(x_left, y_text, label)
-        c.setFont("Helvetica", 10)
-        c.setFillColor(colors.HexColor("#555555"))
-        c.drawString(value_x_offset, y_text, str(value))
-        y_text -= line_height
-
-def calculate_dimensions(size):
-    """Calcule les dimensions selon la taille"""
-    dimensions = {
-        "Grand": (PAGE_WIDTH, SECTION_HEIGHT),
-        "Moyen": (COLUMN_WIDTH, SECTION_HEIGHT),
-        "Petit": (COLUMN_WIDTH / 1.5, SECTION_HEIGHT)
-    }
-    return dimensions.get(size, (PAGE_WIDTH, SECTION_HEIGHT))
-
-def calculate_position(element):
-    """Calcule la position d'un élément"""
-    vertical_offset = {
-        "Haut": 0, 
-        "Milieu": SECTION_HEIGHT, 
-        "Bas": SECTION_HEIGHT*2
-    }[element['v_pos']]
-    
-    if element['size'] == "Grand":
-        return (0, PAGE_HEIGHT - vertical_offset - SECTION_HEIGHT)
-    
-    if element['h_pos'] == "Gauche":
-        x = 0
-    elif element['h_pos'] == "Droite":
-        x = COLUMN_WIDTH
-    else:
-        x = COLUMN_WIDTH / 2 - calculate_dimensions(element['size'])[0] / 2
-    
-    return (x, PAGE_HEIGHT - vertical_offset - SECTION_HEIGHT)
-
-def generate_pdf(elements, metadata):
-    """Génère le PDF du rapport"""
-    buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    
-    c.setAuthor(metadata.get('editor', 'CartoTools Pro'))
-    c.setTitle(metadata.get('report_id', 'Rapport Cartographique'))
-    
-    for element in elements:
-        width, height = calculate_dimensions(element['size'])
-        x, y = calculate_position(element)
+    # TAB 1: GeoTIFF
+    with tab1:
+        st.markdown("""
+        **📋 Format requis:**
+        - **Extension:** `.tif` ou `.tiff`
+        - **Système de coordonnées (CRS)** défini
+        - **Au moins une bande** de données d'élévation
+        - **Résolution recommandée:** < 10m pour de meilleurs résultats
         
-        if element['type'] == "Image":
-            if element.get("content") is not None:
-                try:
-                    if isinstance(element["content"], bytes):
-                        image_stream = BytesIO(element["content"])
+        💡 Le fichier sera utilisé à la place de l'orthomosaïque par défaut.
+        """)
+        
+        uploaded_tiff = st.file_uploader(
+            "📤 Téléverser un GeoTIFF personnalisé",
+            type=["tif", "tiff"],
+            key="upload_tiff",
+            help="Uploadez votre propre fichier d'élévation"
+        )
+        
+        if uploaded_tiff:
+            with st.spinner("Validation du fichier..."):
+                tiff_path = save_uploaded_file(uploaded_tiff, "uploads/tiff")
+                if tiff_path:
+                    is_valid, message = validate_tiff_file(tiff_path)
+                    
+                    if is_valid:
+                        st.success(f"✅ {message}")
+                        st.session_state["uploaded_tiff_path"] = tiff_path
+                        
+                        # Afficher les infos du fichier
+                        info = get_mosaic_info(tiff_path)
+                        if info:
+                            col1, col2, col3 = st.columns(3)
+                            with col1:
+                                st.metric("Largeur", f"{info['width']} px")
+                            with col2:
+                                st.metric("Hauteur", f"{info['height']} px")
+                            with col3:
+                                st.metric("CRS", info['crs'])
+                            
+                            st.info("✅ Fichier prêt à être utilisé. Activez-le dans les paramètres ci-dessous.")
                     else:
-                        image_stream = element["content"]
-                    img = ImageReader(image_stream)
+                        st.error(f"❌ {message}")
+    
+    # TAB 2: Shapefile
+    with tab2:
+        st.markdown("""
+        **📋 Format requis:**
+        - **Fichier ZIP** contenant tous les composants du shapefile:
+          - `.shp` (géométries) - **obligatoire**
+          - `.shx` (index) - **obligatoire**
+          - `.dbf` (attributs) - **obligatoire**
+          - `.prj` (projection) - recommandé
+        - **Système de coordonnées** défini (sinon, WGS84 sera assumé)
+        
+        💡 Les shapefiles seront affichés comme couches sur la carte.
+        """)
+        
+        uploaded_shp = st.file_uploader(
+            "📤 Téléverser un Shapefile (ZIP)",
+            type=["zip"],
+            key="upload_shapefile",
+            help="Uploadez un fichier ZIP contenant le shapefile complet"
+        )
+        
+        if uploaded_shp:
+            with st.spinner("Extraction et validation..."):
+                shp_path, error = extract_shapefile_from_zip(uploaded_shp)
+                
+                if error:
+                    st.error(error)
+                else:
+                    gdf, error = load_shapefile(shp_path)
                     
-                    top_margin = 20
-                    bottom_margin = 25
-                    horizontal_scale = 0.9
-                    image_actual_width = width * horizontal_scale
-                    image_actual_height = height - top_margin - bottom_margin
-                    image_x = x + (width - image_actual_width) / 2
-                    image_y = y + bottom_margin
+                    if error:
+                        st.error(error)
+                    else:
+                        st.success(f"✅ Shapefile chargé: {len(gdf)} entité(s)")
+                        
+                        # Informations sur le shapefile
+                        col1, col2, col3 = st.columns(3)
+                        with col1:
+                            st.metric("Entités", len(gdf))
+                        with col2:
+                            geom_types = gdf.geometry.geom_type.unique()
+                            st.metric("Type", ", ".join(geom_types))
+                        with col3:
+                            st.metric("CRS", str(gdf.crs) if gdf.crs else "Non défini")
+                        
+                        # Nom de la couche
+                        layer_name = st.text_input(
+                            "Nom de la couche",
+                            value=uploaded_shp.name.replace('.zip', ''),
+                            key="shapefile_layer_name"
+                        )
+                        
+                        if st.button("✅ Ajouter à la carte", key="add_shapefile_layer"):
+                            if "shapefile_layers" not in st.session_state:
+                                st.session_state["shapefile_layers"] = []
+                            
+                            st.session_state["shapefile_layers"].append({
+                                'gdf': gdf,
+                                'name': layer_name,
+                                'path': shp_path
+                            })
+                            st.success(f"✅ Couche '{layer_name}' ajoutée!")
+                            st.rerun()
+        
+        # Afficher les couches existantes
+        if st.session_state.get("shapefile_layers"):
+            st.markdown("---")
+            st.markdown("#### 📚 Couches chargées")
+            for idx, layer in enumerate(st.session_state["shapefile_layers"]):
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    st.write(f"**{layer['name']}** - {len(layer['gdf'])} entité(s)")
+                with col2:
+                    if st.button("🗑️", key=f"remove_shp_{idx}"):
+                        st.session_state["shapefile_layers"].pop(idx)
+                        st.rerun()
+    
+    # TAB 3: CSV/TXT
+    with tab3:
+        st.markdown("""
+        **📋 Format requis:**
+        - **Extension:** `.csv` ou `.txt`
+        - **Séparateur:** virgule (`,`) ou point-virgule (`;`)
+        - **Colonnes obligatoires:** longitude et latitude
+        - **Format des coordonnées:** décimal (ex: -73.5673, 45.5017)
+        
+        **📝 Exemple de structure:**
+        ```
+        nom,longitude,latitude,altitude
+        Point A,-73.5673,45.5017,125
+        Point B,-73.5680,45.5020,130
+        ```
+        
+        💡 Les points seront affichés sur la carte avec leurs attributs.
+        """)
+        
+        uploaded_csv = st.file_uploader(
+            "📤 Téléverser un fichier CSV/TXT",
+            type=["csv", "txt"],
+            key="upload_csv",
+            help="Uploadez un fichier contenant des coordonnées de points"
+        )
+        
+        if uploaded_csv:
+            csv_path = save_uploaded_file(uploaded_csv, "uploads/csv")
+            
+            if csv_path:
+                # Prévisualisation
+                try:
+                    preview_df = pd.read_csv(csv_path, nrows=5)
+                    st.markdown("**📊 Prévisualisation (5 premières lignes):**")
+                    st.dataframe(preview_df)
                     
-                    c.drawImage(img, image_x, image_y, width=image_actual_width, 
-                               height=image_actual_height, preserveAspectRatio=True, mask='auto')
+                    # Sélection des colonnes
+                    columns = preview_df.columns.tolist()
                     
-                    if element.get("image_title"):
-                        c.setFont("Helvetica-Bold", 12)
-                        c.setFillColor(colors.HexColor("#2c3e50"))
-                        image_title = element["image_title"].upper()
-                        c.drawCentredString(x + width / 2, y + height - top_margin / 2, image_title)
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        lon_col = st.selectbox(
+                            "Colonne Longitude",
+                            columns,
+                            index=columns.index('longitude') if 'longitude' in columns else 0,
+                            key="csv_lon_col"
+                        )
+                    with col2:
+                        lat_col = st.selectbox(
+                            "Colonne Latitude",
+                            columns,
+                            index=columns.index('latitude') if 'latitude' in columns else 0,
+                            key="csv_lat_col"
+                        )
                     
-                    if element.get("description"):
-                        c.setFont("Helvetica", 9)
-                        c.setFillColor(colors.gray)
-                        c.drawRightString(x + width - 10, y + bottom_margin / 2, 
-                                         element["description"][:100])
-                        c.setFillColor(colors.black)
+                    layer_name = st.text_input(
+                        "Nom de la couche",
+                        value=uploaded_csv.name.replace('.csv', '').replace('.txt', ''),
+                        key="csv_layer_name"
+                    )
+                    
+                    if st.button("✅ Charger les points", key="load_csv_points"):
+                        df, error = load_csv_points(csv_path, lon_col, lat_col)
+                        
+                        if error:
+                            st.error(error)
+                        else:
+                            st.success(f"✅ {len(df)} point(s) chargé(s)")
+                            st.session_state["uploaded_csv_data"] = {
+                                'df': df,
+                                'lon_col': lon_col,
+                                'lat_col': lat_col,
+                                'name': layer_name
+                            }
+                            st.rerun()
+                
                 except Exception as e:
-                    st.error(f"❌ Erreur image: {e}")
-        else:
-            text = element['content']
-            style = getSampleStyleSheet()["Normal"]
-            style.fontSize = 14 if element['size'] == "Grand" else 12 if element['size'] == "Moyen" else 10
-            p = Paragraph(text, style)
-            p.wrapOn(c, width - 20, height - 20)
-            p.drawOn(c, x + 10, y + 10)
-    
-    draw_metadata(c, metadata)
-    
-    c.save()
-    buffer.seek(0)
-    return buffer
-
-def generate_analysis_report():
-    """Génère un rapport automatique des analyses"""
-    buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    
-    c.setFont("Helvetica-Bold", 24)
-    c.setFillColor(colors.HexColor("#1f77b4"))
-    c.drawCentredString(PAGE_WIDTH/2, PAGE_HEIGHT - 100, "RAPPORT D'ANALYSE CARTOGRAPHIQUE")
-    
-    c.setFont("Helvetica", 14)
-    c.setFillColor(colors.black)
-    c.drawCentredString(PAGE_WIDTH/2, PAGE_HEIGHT - 140, f"Généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}")
-    
-    c.setFont("Helvetica", 12)
-    c.drawCentredString(PAGE_WIDTH/2, PAGE_HEIGHT - 170, "CartoTools Pro v2.0")
-    
-    y_pos = PAGE_HEIGHT - 220
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(50, y_pos, "📊 Résumé de l'analyse")
-    y_pos -= 30
-    
-    results = st.session_state.get("analysis_results", [])
-    c.setFont("Helvetica", 11)
-    c.drawString(70, y_pos, f"• Nombre d'analyses réalisées: {len(results)}")
-    y_pos -= 20
-    
-    contours = sum(1 for r in results if r['type'] == 'contour')
-    profiles = sum(1 for r in results if r['type'] == 'profile')
-    
-    c.drawString(70, y_pos, f"• Cartes de contours: {contours}")
-    y_pos -= 20
-    c.drawString(70, y_pos, f"• Profils d'élévation: {profiles}")
-    
-    for i, result in enumerate(results):
-        c.showPage()
-        c.setFont("Helvetica-Bold", 16)
-        c.drawString(50, PAGE_HEIGHT - 50, f"{i+1}. {result['title']}")
+                    st.error(f"❌ Erreur lors de la lecture du CSV: {e}")
         
-        try:
-            img = ImageReader(BytesIO(result['image']))
-            c.drawImage(img, 50, PAGE_HEIGHT - 550, width=PAGE_WIDTH - 100, 
-                       height=400, preserveAspectRatio=True, mask='auto')
-        except:
-            pass
-        
-        c.setFont("Helvetica", 10)
-        c.drawString(50, PAGE_HEIGHT - 570, 
-                    f"Créé le: {result['timestamp'].strftime('%d/%m/%Y à %H:%M')}")
-    
-    c.save()
-    buffer.seek(0)
-    return buffer
-
-# ============================================================================
-# FONCTIONS RAPPORT - CONTRÔLEURS
-# ============================================================================
-
-def create_analysis_card_controller():
-    """Contrôleur pour ajouter une carte d'analyse spatiale"""
-    with st.expander("➕ Ajouter une carte d'analyse spatiale", expanded=True):
-        if "analysis_results" not in st.session_state or not st.session_state["analysis_results"]:
-            st.info("ℹ️ Aucune carte d'analyse disponible. Générez d'abord des analyses dans l'onglet 'Analyse Spatiale'.")
-            return None
-        
-        options = {f"{i+1} - {res['title']}": i for i, res in enumerate(st.session_state["analysis_results"])}
-        chosen = st.selectbox("Choisissez une carte", list(options.keys()), key="analysis_card_select")
-        idx = options[chosen]
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            size = st.selectbox("Taille", ["Grand", "Moyen", "Petit"], key="analysis_card_size")
-        with col2:
-            v_pos = st.selectbox("Position verticale", ["Haut", "Milieu", "Bas"], key="analysis_card_v_pos")
-            h_pos = st.selectbox("Position horizontale", ["Gauche", "Droite", "Centre"], key="analysis_card_h_pos")
-        
-        title_input = st.text_input("Titre pour la carte", key="analysis_card_title", 
-                                    value=st.session_state["analysis_results"][idx]["title"])
-        description_input = st.text_input("Description pour la carte", key="analysis_card_description", 
-                                         value="Carte générée depuis l'analyse spatiale")
-        
-        if st.button("✅ Valider la carte d'analyse", key="validate_analysis_card"):
-            return {
-                "type": "Image",
-                "size": size,
-                "v_pos": v_pos,
-                "h_pos": h_pos,
-                "content": st.session_state["analysis_results"][idx]["image"],
-                "image_title": title_input,
-                "description": description_input,
-                "analysis_ref": idx
-            }
-    return None
-
-def create_element_controller():
-    """Contrôleur pour ajouter un élément personnalisé"""
-    with st.expander("➕ Ajouter un élément personnalisé", expanded=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            elem_type = st.selectbox("Type", ["Image", "Texte"], key="rapport_elem_type")
-            size = st.selectbox("Taille", ["Grand", "Moyen", "Petit"], key="rapport_elem_size")
-        with col2:
-            vertical_pos = st.selectbox("Position verticale", ["Haut", "Milieu", "Bas"], key="rapport_v_pos")
-            horizontal_options = ["Gauche", "Droite", "Centre"] if size == "Petit" else ["Gauche", "Droite"]
-            horizontal_pos = st.selectbox("Position horizontale", horizontal_options, key="rapport_h_pos")
-        
-        if elem_type == "Image":
-            content = st.file_uploader("Contenu (image)", type=["png", "jpg", "jpeg"], key="rapport_content_image")
-            image_title = st.text_input("Titre de l'image", max_chars=50, key="rapport_image_title")
-            description = st.text_input("Description brève (max 100 caractères)", max_chars=100, key="rapport_image_desc")
-        else:
-            content = st.text_area("Contenu", key="rapport_content_text")
-        
-        if st.button("✅ Valider l'élément", key="rapport_validate_element"):
-            if elem_type == "Image" and content is None:
-                st.error("❌ Veuillez charger une image pour cet élément.")
-                return None
-            element_data = {
-                "type": elem_type,
-                "size": size,
-                "v_pos": vertical_pos,
-                "h_pos": horizontal_pos,
-                "content": content,
-            }
-            if elem_type == "Image":
-                element_data["image_title"] = image_title
-                element_data["description"] = description
-            return element_data
-    return None
-
-def display_elements_preview(elements):
-    """Affiche l'aperçu des éléments validés"""
-    st.markdown("### 📋 Aperçu des éléments validés")
-    
-    if not elements:
-        st.info("ℹ️ Aucun élément ajouté pour le moment")
-        return
-    
-    for idx, element in enumerate(elements, start=1):
-        with st.expander(f"Élément {idx} - {element['type']} ({element['size']})", expanded=False):
+        # Afficher les données CSV chargées
+        if st.session_state.get("uploaded_csv_data"):
+            st.markdown("---")
+            st.markdown("#### 📍 Points chargés")
+            csv_info = st.session_state["uploaded_csv_data"]
             col1, col2 = st.columns([3, 1])
             with col1:
-                if element["type"] == "Image":
-                    st.image(element["content"], width=300)
-                    if element.get("image_title"):
-                        st.markdown(f"**Titre:** {element['image_title']}")
-                    if element.get("description"):
-                        st.markdown(f"*Description:* {element['description']}")
-                else:
-                    st.markdown(f"**Texte:** {element['content'][:100]}...")
-                
-                st.markdown(f"**Position:** {element['v_pos']} - {element['h_pos']}")
-            
+                st.write(f"**{csv_info['name']}** - {len(csv_info['df'])} point(s)")
             with col2:
-                if st.button("🗑️ Supprimer", key=f"delete_element_{idx}"):
-                    elements.pop(idx - 1)
-                    st.session_state["elements"] = elements
+                if st.button("🗑️ Supprimer", key="remove_csv"):
+                    st.session_state["uploaded_csv_data"] = None
                     st.rerun()
 
 # ============================================================================
@@ -1069,6 +1098,24 @@ def run_analysis_spatiale():
     
     with st.sidebar:
         st.markdown("### ⚙️ Configuration")
+        
+        with st.expander("🗺️ Source de Données", expanded=True):
+            # Choix entre mosaïque par défaut et TIFF uploadé
+            if st.session_state.get("uploaded_tiff_path"):
+                use_uploaded = st.checkbox(
+                    "Utiliser le TIFF uploadé",
+                    value=st.session_state.get("use_uploaded_tiff", False),
+                    key="use_uploaded_tiff_checkbox"
+                )
+                st.session_state["use_uploaded_tiff"] = use_uploaded
+                
+                if use_uploaded:
+                    st.success("✅ Utilisation du TIFF uploadé")
+                else:
+                    st.info("ℹ️ Utilisation de la mosaïque par défaut")
+            else:
+                st.info("ℹ️ Mosaïque par défaut")
+                st.caption("Uploadez un TIFF dans l'onglet Gestion des Fichiers")
         
         with st.expander("📈 Paramètres des Contours", expanded=True):
             st.session_state["contour_levels"] = st.slider(
@@ -1093,21 +1140,32 @@ def run_analysis_spatiale():
             show_minimap = st.checkbox("Mini-carte", True)
             show_fullscreen = st.checkbox("Plein écran", True)
     
-    folder_path = "TIFF"
-    if not os.path.exists(folder_path):
-        st.error("❌ Dossier TIFF introuvable")
-        st.info("💡 Créez un dossier nommé 'TIFF' et placez-y vos fichiers GeoTIFF")
-        return
+    # Bouton pour gérer les fichiers
+    with st.expander("📂 Gestion des Fichiers", expanded=False):
+        run_file_upload_interface()
     
-    tiff_files = load_tiff_files(folder_path)
-    if not tiff_files:
-        return
+    # Déterminer quel fichier TIFF utiliser
+    if st.session_state.get("use_uploaded_tiff") and st.session_state.get("uploaded_tiff_path"):
+        mosaic_path = st.session_state["uploaded_tiff_path"]
+        st.info("🗺️ Utilisation du TIFF uploadé pour l'analyse")
+    else:
+        folder_path = "TIFF"
+        if not os.path.exists(folder_path):
+            st.error("❌ Dossier TIFF introuvable")
+            st.info("💡 Créez un dossier nommé 'TIFF' et placez-y vos fichiers GeoTIFF, ou uploadez un fichier personnalisé")
+            return
+        
+        tiff_files = load_tiff_files(folder_path)
+        if not tiff_files:
+            st.warning("⚠️ Aucun fichier TIFF dans le dossier par défaut")
+            st.info("💡 Uploadez un fichier TIFF personnalisé dans la section 'Gestion des Fichiers'")
+            return
+        
+        mosaic_path = build_mosaic(tiff_files)
+        if not mosaic_path:
+            return
     
-    mosaic_path = build_mosaic(tiff_files)
-    if not mosaic_path:
-        return
-    
-    with st.expander("ℹ️ Informations de la Mosaïque", expanded=False):
+    with st.expander("ℹ️ Informations du Fichier", expanded=False):
         info = get_mosaic_info(mosaic_path)
         if info:
             col1, col2, col3 = st.columns(3)
@@ -1415,7 +1473,7 @@ def run_analysis_spatiale():
                     )
 
 # ============================================================================
-# INTERFACE - RAPPORT
+# INTERFACE - RAPPORT (reste inchangée)
 # ============================================================================
 
 def run_report():
@@ -1516,7 +1574,7 @@ def run_report():
                     )
 
 # ============================================================================
-# INTERFACE - TABLEAU DE BORD
+# INTERFACE - TABLEAU DE BORD (reste inchangée)
 # ============================================================================
 
 def run_dashboard():
@@ -1600,7 +1658,357 @@ def run_dashboard():
             st.rerun()
 
 # ============================================================================
-# INTERFACE - AIDE
+# FONCTIONS RAPPORT PDF (reste inchangées)
+# ============================================================================
+
+def draw_metadata(c, metadata):
+    """Dessine les métadonnées sur le PDF"""
+    margin = 40
+    x_left = margin
+    y_top = PAGE_HEIGHT - margin
+    line_height = 16
+
+    logo_drawn = False
+    if metadata.get('logo'):
+        try:
+            if isinstance(metadata['logo'], bytes):
+                logo_stream = BytesIO(metadata['logo'])
+            else:
+                logo_stream = metadata['logo']
+            img = ImageReader(logo_stream)
+            img_width, img_height = img.getSize()
+            aspect = img_height / img_width
+            desired_width = 50
+            desired_height = desired_width * aspect
+            c.drawImage(img, x_left, y_top - desired_height, width=desired_width, 
+                       height=desired_height, preserveAspectRatio=True, mask='auto')
+            logo_drawn = True
+        except Exception as e:
+            st.error(f"❌ Erreur logo: {e}")
+    
+    x_title = x_left + 60 if logo_drawn else x_left
+    y_title = y_top - 20
+    
+    c.setFont("Helvetica-Bold", 22)
+    c.setFillColor(colors.HexColor("#1f77b4"))
+    if metadata.get('titre'):
+        c.drawString(x_title, y_title, metadata['titre'])
+    
+    c.setFont("Helvetica", 14)
+    c.setFillColor(colors.black)
+    y_company = y_title - 25
+    if metadata.get('company'):
+        c.drawString(x_title, y_company, metadata['company'])
+    
+    y_line = y_company - 10
+    c.setStrokeColor(colors.HexColor("#1f77b4"))
+    c.setLineWidth(2)
+    c.line(x_left, y_line, x_left + 200, y_line)
+    c.setLineWidth(1)
+    
+    y_text = y_line - 20
+    infos = [
+        ("📋 ID Rapport", metadata.get('report_id', 'N/A')),
+        ("📅 Date", metadata['date'].strftime('%d/%m/%Y') if hasattr(metadata.get('date'), "strftime") else str(metadata.get('date', 'N/A'))),
+        ("🕐 Heure", metadata['time'].strftime('%H:%M') if hasattr(metadata.get('time'), "strftime") else str(metadata.get('time', 'N/A'))),
+        ("👤 Éditeur", metadata.get('editor', 'N/A')),
+        ("📍 Localisation", metadata.get('location', 'N/A'))
+    ]
+    
+    value_x_offset = x_left + 90
+    for label, value in infos:
+        c.setFont("Helvetica-Bold", 10)
+        c.setFillColor(colors.black)
+        c.drawString(x_left, y_text, label)
+        c.setFont("Helvetica", 10)
+        c.setFillColor(colors.HexColor("#555555"))
+        c.drawString(value_x_offset, y_text, str(value))
+        y_text -= line_height
+
+def calculate_dimensions(size):
+    """Calcule les dimensions selon la taille"""
+    dimensions = {
+        "Grand": (PAGE_WIDTH, SECTION_HEIGHT),
+        "Moyen": (COLUMN_WIDTH, SECTION_HEIGHT),
+        "Petit": (COLUMN_WIDTH / 1.5, SECTION_HEIGHT)
+    }
+    return dimensions.get(size, (PAGE_WIDTH, SECTION_HEIGHT))
+
+def calculate_position(element):
+    """Calcule la position d'un élément"""
+    vertical_offset = {
+        "Haut": 0, 
+        "Milieu": SECTION_HEIGHT, 
+        "Bas": SECTION_HEIGHT*2
+    }[element['v_pos']]
+    
+    if element['size'] == "Grand":
+        return (0, PAGE_HEIGHT - vertical_offset - SECTION_HEIGHT)
+    
+    if element['h_pos'] == "Gauche":
+        x = 0
+    elif element['h_pos'] == "Droite":
+        x = COLUMN_WIDTH
+    else:
+        x = COLUMN_WIDTH / 2 - calculate_dimensions(element['size'])[0] / 2
+    
+    return (x, PAGE_HEIGHT - vertical_offset - SECTION_HEIGHT)
+
+def generate_pdf(elements, metadata):
+    """Génère le PDF du rapport"""
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    
+    c.setAuthor(metadata.get('editor', 'CartoTools Pro'))
+    c.setTitle(metadata.get('report_id', 'Rapport Cartographique'))
+    
+    for element in elements:
+        width, height = calculate_dimensions(element['size'])
+        x, y = calculate_position(element)
+        
+        if element['type'] == "Image":
+            if element.get("content") is not None:
+                try:
+                    if isinstance(element["content"], bytes):
+                        image_stream = BytesIO(element["content"])
+                    else:
+                        image_stream = element["content"]
+                    img = ImageReader(image_stream)
+                    
+                    top_margin = 20
+                    bottom_margin = 25
+                    horizontal_scale = 0.9
+                    image_actual_width = width * horizontal_scale
+                    image_actual_height = height - top_margin - bottom_margin
+                    image_x = x + (width - image_actual_width) / 2
+                    image_y = y + bottom_margin
+                    
+                    c.drawImage(img, image_x, image_y, width=image_actual_width, 
+                               height=image_actual_height, preserveAspectRatio=True, mask='auto')
+                    
+                    if element.get("image_title"):
+                        c.setFont("Helvetica-Bold", 12)
+                        c.setFillColor(colors.HexColor("#2c3e50"))
+                        image_title = element["image_title"].upper()
+                        c.drawCentredString(x + width / 2, y + height - top_margin / 2, image_title)
+                    
+                    if element.get("description"):
+                        c.setFont("Helvetica", 9)
+                        c.setFillColor(colors.gray)
+                        c.drawRightString(x + width - 10, y + bottom_margin / 2, 
+                                         element["description"][:100])
+                        c.setFillColor(colors.black)
+                except Exception as e:
+                    st.error(f"❌ Erreur image: {e}")
+        else:
+            text = element['content']
+            style = getSampleStyleSheet()["Normal"]
+            style.fontSize = 14 if element['size'] == "Grand" else 12 if element['size'] == "Moyen" else 10
+            p = Paragraph(text, style)
+            p.wrapOn(c, width - 20, height - 20)
+            p.drawOn(c, x + 10, y + 10)
+    
+    draw_metadata(c, metadata)
+    
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+def generate_analysis_report():
+    """Génère un rapport automatique des analyses"""
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=A4)
+    
+    c.setFont("Helvetica-Bold", 24)
+    c.setFillColor(colors.HexColor("#1f77b4"))
+    c.drawCentredString(PAGE_WIDTH/2, PAGE_HEIGHT - 100, "RAPPORT D'ANALYSE CARTOGRAPHIQUE")
+    
+    c.setFont("Helvetica", 14)
+    c.setFillColor(colors.black)
+    c.drawCentredString(PAGE_WIDTH/2, PAGE_HEIGHT - 140, f"Généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}")
+    
+    c.setFont("Helvetica", 12)
+    c.drawCentredString(PAGE_WIDTH/2, PAGE_HEIGHT - 170, "CartoTools Pro v2.0")
+    
+    y_pos = PAGE_HEIGHT - 220
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(50, y_pos, "📊 Résumé de l'analyse")
+    y_pos -= 30
+    
+    results = st.session_state.get("analysis_results", [])
+    c.setFont("Helvetica", 11)
+    c.drawString(70, y_pos, f"• Nombre d'analyses réalisées: {len(results)}")
+    y_pos -= 20
+    
+    contours = sum(1 for r in results if r['type'] == 'contour')
+    profiles = sum(1 for r in results if r['type'] == 'profile')
+    
+    c.drawString(70, y_pos, f"• Cartes de contours: {contours}")
+    y_pos -= 20
+    c.drawString(70, y_pos, f"• Profils d'élévation: {profiles}")
+    
+    for i, result in enumerate(results):
+        c.showPage()
+        c.setFont("Helvetica-Bold", 16)
+        c.drawString(50, PAGE_HEIGHT - 50, f"{i+1}. {result['title']}")
+        
+        try:
+            img = ImageReader(BytesIO(result['image']))
+            c.drawImage(img, 50, PAGE_HEIGHT - 550, width=PAGE_WIDTH - 100, 
+                       height=400, preserveAspectRatio=True, mask='auto')
+        except:
+            pass
+        
+        c.setFont("Helvetica", 10)
+        c.drawString(50, PAGE_HEIGHT - 570, 
+                    f"Créé le: {result['timestamp'].strftime('%d/%m/%Y à %H:%M')}")
+    
+    c.save()
+    buffer.seek(0)
+    return buffer
+
+# ============================================================================
+# FONCTIONS RAPPORT - CONTRÔLEURS (reste inchangées)
+# ============================================================================
+
+def create_analysis_card_controller():
+    """Contrôleur pour ajouter une carte d'analyse spatiale"""
+    with st.expander("➕ Ajouter une carte d'analyse spatiale", expanded=True):
+        if "analysis_results" not in st.session_state or not st.session_state["analysis_results"]:
+            st.info("ℹ️ Aucune carte d'analyse disponible. Générez d'abord des analyses dans l'onglet 'Analyse Spatiale'.")
+            return None
+        
+        options = {f"{i+1} - {res['title']}": i for i, res in enumerate(st.session_state["analysis_results"])}
+        chosen = st.selectbox("Choisissez une carte", list(options.keys()), key="analysis_card_select")
+        idx = options[chosen]
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            size = st.selectbox("Taille", ["Grand", "Moyen", "Petit"], key="analysis_card_size")
+        with col2:
+            v_pos = st.selectbox("Position verticale", ["Haut", "Milieu", "Bas"], key="analysis_card_v_pos")
+            h_pos = st.selectbox("Position horizontale", ["Gauche", "Droite", "Centre"], key="analysis_card_h_pos")
+        
+        title_input = st.text_input("Titre pour la carte", key="analysis_card_title", 
+                                    value=st.session_state["analysis_results"][idx]["title"])
+        description_input = st.text_input("Description pour la carte", key="analysis_card_description", 
+                                         value="Carte générée depuis l'analyse spatiale")
+        
+        if st.button("✅ Valider la carte d'analyse", key="validate_analysis_card"):
+            return {
+                "type": "Image",
+                "size": size,
+                "v_pos": v_pos,
+                "h_pos": h_pos,
+                "content": st.session_state["analysis_results"][idx]["image"],
+                "image_title": title_input,
+                "description": description_input,
+                "analysis_ref": idx
+            }
+    return None
+
+def create_element_controller():
+    """Contrôleur pour ajouter un élément personnalisé"""
+    with st.expander("➕ Ajouter un élément personnalisé", expanded=True):
+        col1, col2 = st.columns(2)
+        with col1:
+            elem_type = st.selectbox("Type", ["Image", "Texte"], key="rapport_elem_type")
+            size = st.selectbox("Taille", ["Grand", "Moyen", "Petit"], key="rapport_elem_size")
+        with col2:
+            vertical_pos = st.selectbox("Position verticale", ["Haut", "Milieu", "Bas"], key="rapport_v_pos")
+            horizontal_options = ["Gauche", "Droite", "Centre"] if size == "Petit" else ["Gauche", "Droite"]
+            horizontal_pos = st.selectbox("Position horizontale", horizontal_options, key="rapport_h_pos")
+        
+        if elem_type == "Image":
+            content = st.file_uploader("Contenu (image)", type=["png", "jpg", "jpeg"], key="rapport_content_image")
+            image_title = st.text_input("Titre de l'image", max_chars=50, key="rapport_image_title")
+            description = st.text_input("Description brève (max 100 caractères)", max_chars=100, key="rapport_image_desc")
+        else:
+            content = st.text_area("Contenu", key="rapport_content_text")
+        
+        if st.button("✅ Valider l'élément", key="rapport_validate_element"):
+            if elem_type == "Image" and content is None:
+                st.error("❌ Veuillez charger une image pour cet élément.")
+                return None
+            element_data = {
+                "type": elem_type,
+                "size": size,
+                "v_pos": vertical_pos,
+                "h_pos": horizontal_pos,
+                "content": content,
+            }
+            if elem_type == "Image":
+                element_data["image_title"] = image_title
+                element_data["description"] = description
+            return element_data
+    return None
+
+def display_elements_preview(elements):
+    """Affiche l'aperçu des éléments validés"""
+    st.markdown("### 📋 Aperçu des éléments validés")
+    
+    if not elements:
+        st.info("ℹ️ Aucun élément ajouté pour le moment")
+        return
+    
+    for idx, element in enumerate(elements, start=1):
+        with st.expander(f"Élément {idx} - {element['type']} ({element['size']})", expanded=False):
+            col1, col2 = st.columns([3, 1])
+            with col1:
+                if element["type"] == "Image":
+                    st.image(element["content"], width=300)
+                    if element.get("image_title"):
+                        st.markdown(f"**Titre:** {element['image_title']}")
+                    if element.get("description"):
+                        st.markdown(f"*Description:* {element['description']}")
+                else:
+                    st.markdown(f"**Texte:** {element['content'][:100]}...")
+                
+                st.markdown(f"**Position:** {element['v_pos']} - {element['h_pos']}")
+            
+            with col2:
+                if st.button("🗑️ Supprimer", key=f"delete_element_{idx}"):
+                    elements.pop(idx - 1)
+                    st.session_state["elements"] = elements
+                    st.rerun()
+
+# ============================================================================
+# APPLICATION PRINCIPALE
+# ============================================================================
+
+def main():
+    initialize_session_state()
+    
+    st.sidebar.markdown("# 🗺️ CartoTools Pro")
+    st.sidebar.markdown("### Navigation")
+    
+    menu = st.sidebar.radio(
+        "Menu Principal",
+        ["📊 Tableau de Bord", "🔍 Analyse Spatiale", "📄 Rapport", "❓ Aide"],
+        key="main_menu"
+    )
+    
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("### 📌 À propos")
+    st.sidebar.info("""
+    **CartoTools Pro v2.0**
+    
+    Application professionnelle d'analyse cartographique et de génération de rapports.
+    
+    © 2024 CartoTools
+    """)
+    
+    if menu == "📊 Tableau de Bord":
+        run_dashboard()
+    elif menu == "🔍 Analyse Spatiale":
+        run_analysis_spatiale()
+    elif menu == "📄 Rapport":
+        run_report()
+    elif menu == "❓ Aide":
+        run_help()
+
+# ============================================================================
+# INTERFACE - AIDE (reste inchangée)
 # ============================================================================
 
 def run_help():
@@ -1665,6 +2073,11 @@ def run_help():
         - Vue d'ensemble de tous vos dessins
         - Calcul automatique des longueurs et surfaces
         - Export des données en tableau
+        
+        ### Gestion des Fichiers
+        - **TIFF personnalisés** : Uploadez vos propres fichiers d'élévation
+        - **Shapefiles** : Ajoutez des couches vectorielles
+        - **CSV/TXT** : Importez des points avec coordonnées
         """)
     
     with tab3:
@@ -1761,41 +2174,6 @@ def run_help():
     - Réduisez le nombre d'éléments si nécessaire
     - Vérifiez les métadonnées (tous les champs requis)
     """)
-
-# ============================================================================
-# APPLICATION PRINCIPALE
-# ============================================================================
-
-def main():
-    initialize_session_state()
-    
-    st.sidebar.markdown("# 🗺️ CartoTools Pro")
-    st.sidebar.markdown("### Navigation")
-    
-    menu = st.sidebar.radio(
-        "Menu Principal",
-        ["📊 Tableau de Bord", "🔍 Analyse Spatiale", "📄 Rapport", "❓ Aide"],
-        key="main_menu"
-    )
-    
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 📌 À propos")
-    st.sidebar.info("""
-    **CartoTools Pro v2.0**
-    
-    Application professionnelle d'analyse cartographique et de génération de rapports.
-    
-    © 2024 CartoTools
-    """)
-    
-    if menu == "📊 Tableau de Bord":
-        run_dashboard()
-    elif menu == "🔍 Analyse Spatiale":
-        run_analysis_spatiale()
-    elif menu == "📄 Rapport":
-        run_report()
-    elif menu == "❓ Aide":
-        run_help()
 
 if __name__ == "__main__":
     main()
