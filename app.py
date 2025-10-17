@@ -39,6 +39,11 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# Dimensions PDF
+PAGE_WIDTH, PAGE_HEIGHT = A4
+SECTION_HEIGHT = PAGE_HEIGHT / 3
+COLUMN_WIDTH = PAGE_WIDTH / 2
+
 # ============================================================================
 # FONCTIONS UTILITAIRES - INITIALISATION
 # ============================================================================
@@ -696,7 +701,6 @@ def generate_advanced_profile(mosaic_file, coords, profile_title, show_slope=Tru
         slopes = []
         if show_slope and len(distances) > 1:
             for i in range(1, len(distances)):
-:
                 dh = elevations[i] - elevations[i-1]
                 dd = distances[i] - distances[i-1]
                 if dd > 0:
@@ -797,1383 +801,512 @@ def create_statistics_chart(analysis_data):
     values = [stats['min'], stats['max'], stats['mean'], stats['median']]
     colors_bar = ['#3498db', '#e74c3c', '#2ecc71', '#f39c12']
     
-    ax1.bar(labels, values, color=colors_bar, alpha=0.7, edgecolor='black')
-    ax1.set_ylabel('Altitude (m)', fontsize=11)
-    ax1.set_title('Statistiques d\'Élévation', fontsize=12, fontweight='bold')
+    ax1.bar(labels, values, color=colors_bar, alpha=0.7)
+    ax1.set_title("Statistiques d'Élévation", fontweight='bold')
+    ax1.set_ylabel("Altitude (m)")
     ax1.grid(True, alpha=0.3, axis='y')
     
     for i, v in enumerate(values):
-        ax1.text(i, v + stats['range']*0.02, f'{v:.1f}m', 
-                ha='center', va='bottom', fontsize=9, fontweight='bold')
+        ax1.text(i, v + 0.1, f'{v:.1f}', ha='center', va='bottom', fontweight='bold')
     
     hist, bin_edges = analysis_data["histogram"]
     bin_centers = (bin_edges[:-1] + bin_edges[1:]) / 2
-    
-    ax2.bar(bin_centers, hist, width=np.diff(bin_edges), 
-           color='steelblue', alpha=0.7, edgecolor='black')
-    ax2.set_xlabel('Altitude (m)', fontsize=11)
-    ax2.set_ylabel('Fréquence', fontsize=11)
-    ax2.set_title('Distribution des Altitudes', fontsize=12, fontweight='bold')
-    ax2.grid(True, alpha=0.3, axis='y')
+    ax2.bar(bin_centers, hist, width=np.diff(bin_edges), alpha=0.7, color='#9b59b6')
+    ax2.set_title("Distribution des Élévations", fontweight='bold')
+    ax2.set_xlabel("Altitude (m)")
+    ax2.set_ylabel("Nombre de pixels")
+    ax2.grid(True, alpha=0.3)
     
     plt.tight_layout()
     return fig
 
 # ============================================================================
-# FONCTIONS DE STOCKAGE
+# FONCTIONS D'EXPORT
 # ============================================================================
 
-def store_figure(fig, result_type, title, metadata=None):
-    """Sauvegarde une figure dans la session"""
-    buf = BytesIO()
-    fig.savefig(buf, format="png", bbox_inches="tight", dpi=150)
-    buf.seek(0)
-    
-    if "analysis_results" not in st.session_state:
-        st.session_state["analysis_results"] = []
-    
-    result = {
-        "type": result_type,
-        "title": title,
-        "image": buf.getvalue(),
-        "timestamp": datetime.now(),
-        "metadata": metadata or {}
-    }
-    
-    st.session_state["analysis_results"].append(result)
-    return len(st.session_state["analysis_results"]) - 1
-
-def export_results(format_type="PNG"):
-    """Exporte tous les résultats"""
-    if not st.session_state.get("analysis_results"):
-        st.warning("⚠️ Aucun résultat à exporter")
-        return None
-    
-    if format_type == "PNG":
-        from zipfile import ZipFile
-        zip_buffer = BytesIO()
+def create_pdf_report(analysis_results, mosaic_info, filename="rapport_analyse.pdf"):
+    """Crée un rapport PDF complet"""
+    try:
+        buffer = BytesIO()
+        c = canvas.Canvas(buffer, pagesize=A4)
+        width, height = A4
         
-        with ZipFile(zip_buffer, 'w') as zip_file:
-            for i, result in enumerate(st.session_state["analysis_results"]):
-                filename = f"{i+1:02d}_{result['title']}.png"
-                zip_file.writestr(filename, result['image'])
-        
-        zip_buffer.seek(0)
-        return zip_buffer
-    
-    elif format_type == "PDF":
-        pdf_buffer = generate_analysis_report()
-        return pdf_buffer
-
-# ============================================================================
-# INTERFACE - GESTION DES FICHIERS UPLOADÉS
-# ============================================================================
-
-def run_file_upload_interface():
-    """Interface pour uploader et gérer les fichiers"""
-    st.markdown("### 📂 Gestion des Fichiers")
-    
-    tab1, tab2, tab3 = st.tabs(["🗺️ GeoTIFF", "📍 Shapefile", "📊 CSV/TXT"])
-    
-    # TAB 1: GeoTIFF
-    with tab1:
-        st.markdown("""
-        **📋 Format requis:**
-        - **Extension:** `.tif` ou `.tiff`
-        - **Système de coordonnées (CRS)** défini
-        - **Au moins une bande** de données d'élévation
-        - **Résolution recommandée:** < 10m pour de meilleurs résultats
-        
-        💡 Le fichier sera utilisé à la place de l'orthomosaïque par défaut.
-        """)
-        
-        uploaded_tiff = st.file_uploader(
-            "📤 Téléverser un GeoTIFF personnalisé",
-            type=["tif", "tiff"],
-            key="upload_tiff",
-            help="Uploadez votre propre fichier d'élévation"
-        )
-        
-        if uploaded_tiff:
-            with st.spinner("Validation du fichier..."):
-                tiff_path = save_uploaded_file(uploaded_tiff, "uploads/tiff")
-                if tiff_path:
-                    is_valid, message = validate_tiff_file(tiff_path)
-                    
-                    if is_valid:
-                        st.success(f"✅ {message}")
-                        st.session_state["uploaded_tiff_path"] = tiff_path
-                        
-                        # Afficher les infos du fichier
-                        info = get_mosaic_info(tiff_path)
-                        if info:
-                            col1, col2, col3 = st.columns(3)
-                            with col1:
-                                st.metric("Largeur", f"{info['width']} px")
-                            with col2:
-                                st.metric("Hauteur", f"{info['height']} px")
-                            with col3:
-                                st.metric("CRS", info['crs'])
-                            
-                            st.info("✅ Fichier prêt à être utilisé. Activez-le dans les paramètres ci-dessous.")
-                    else:
-                        st.error(f"❌ {message}")
-    
-    # TAB 2: Shapefile
-    with tab2:
-        st.markdown("""
-        **📋 Format requis:**
-        - **Fichier ZIP** contenant tous les composants du shapefile:
-          - `.shp` (géométries) - **obligatoire**
-          - `.shx` (index) - **obligatoire**
-          - `.dbf` (attributs) - **obligatoire**
-          - `.prj` (projection) - recommandé
-        - **Système de coordonnées** défini (sinon, WGS84 sera assumé)
-        
-        💡 Les shapefiles seront affichés comme couches sur la carte.
-        """)
-        
-        uploaded_shp = st.file_uploader(
-            "📤 Téléverser un Shapefile (ZIP)",
-            type=["zip"],
-            key="upload_shapefile",
-            help="Uploadez un fichier ZIP contenant le shapefile complet"
-        )
-        
-        if uploaded_shp:
-            with st.spinner("Extraction et validation..."):
-                shp_path, error = extract_shapefile_from_zip(uploaded_shp)
-                
-                if error:
-                    st.error(error)
-                else:
-                    gdf, error = load_shapefile(shp_path)
-                    
-                    if error:
-                        st.error(error)
-                    else:
-                        st.success(f"✅ Shapefile chargé: {len(gdf)} entité(s)")
-                        
-                        # Informations sur le shapefile
-                        col1, col2, col3 = st.columns(3)
-                        with col1:
-                            st.metric("Entités", len(gdf))
-                        with col2:
-                            geom_types = gdf.geometry.geom_type.unique()
-                            st.metric("Type", ", ".join(geom_types))
-                        with col3:
-                            st.metric("CRS", str(gdf.crs) if gdf.crs else "Non défini")
-                        
-                        # Nom de la couche
-                        layer_name = st.text_input(
-                            "Nom de la couche",
-                            value=uploaded_shp.name.replace('.zip', ''),
-                            key="shapefile_layer_name"
-                        )
-                        
-                        if st.button("✅ Ajouter à la carte", key="add_shapefile_layer"):
-                            if "shapefile_layers" not in st.session_state:
-                                st.session_state["shapefile_layers"] = []
-                            
-                            st.session_state["shapefile_layers"].append({
-                                'gdf': gdf,
-                                'name': layer_name,
-                                'path': shp_path
-                            })
-                            st.success(f"✅ Couche '{layer_name}' ajoutée!")
-                            st.rerun()
-        
-        # Afficher les couches existantes
-        if st.session_state.get("shapefile_layers"):
-            st.markdown("---")
-            st.markdown("#### 📚 Couches chargées")
-            for idx, layer in enumerate(st.session_state["shapefile_layers"]):
-                col1, col2 = st.columns([3, 1])
-                with col1:
-                    st.write(f"**{layer['name']}** - {len(layer['gdf'])} entité(s)")
-                with col2:
-                    if st.button("🗑️", key=f"remove_shp_{idx}"):
-                        st.session_state["shapefile_layers"].pop(idx)
-                        st.rerun()
-    
-    # TAB 3: CSV/TXT
-    with tab3:
-        st.markdown("""
-        **📋 Format requis:**
-        - **Extension:** `.csv` ou `.txt`
-        - **Séparateur:** virgule (`,`) ou point-virgule (`;`)
-        - **Colonnes obligatoires:** longitude et latitude
-        - **Format des coordonnées:** décimal (ex: -73.5673, 45.5017)
-        
-        **📝 Exemple de structure:**
-        ```
-        nom,longitude,latitude,altitude
-        Point A,-73.5673,45.5017,125
-        Point B,-73.5680,45.5020,130
-        ```
-        
-        💡 Les points seront affichés sur la carte avec leurs attributs.
-        """)
-        
-        uploaded_csv = st.file_uploader(
-            "📤 Téléverser un fichier CSV/TXT",
-            type=["csv", "txt"],
-            key="upload_csv",
-            help="Uploadez un fichier contenant des coordonnées de points"
-        )
-        
-        if uploaded_csv:
-            csv_path = save_uploaded_file(uploaded_csv, "uploads/csv")
-            
-            if csv_path:
-                # Prévisualisation
-                try:
-                    preview_df = pd.read_csv(csv_path, nrows=5)
-                    st.markdown("**📊 Prévisualisation (5 premières lignes):**")
-                    st.dataframe(preview_df)
-                    
-                    # Sélection des colonnes
-                    columns = preview_df.columns.tolist()
-                    
-                    col1, col2 = st.columns(2)
-                    with col1:
-                        lon_col = st.selectbox(
-                            "Colonne Longitude",
-                            columns,
-                            index=columns.index('longitude') if 'longitude' in columns else 0,
-                            key="csv_lon_col"
-                        )
-                    with col2:
-                        lat_col = st.selectbox(
-                            "Colonne Latitude",
-                            columns,
-                            index=columns.index('latitude') if 'latitude' in columns else 0,
-                            key="csv_lat_col"
-                        )
-                    
-                    layer_name = st.text_input(
-                        "Nom de la couche",
-                        value=uploaded_csv.name.replace('.csv', '').replace('.txt', ''),
-                        key="csv_layer_name"
-                    )
-                    
-                    if st.button("✅ Charger les points", key="load_csv_points"):
-                        df, error = load_csv_points(csv_path, lon_col, lat_col)
-                        
-                        if error:
-                            st.error(error)
-                        else:
-                            st.success(f"✅ {len(df)} point(s) chargé(s)")
-                            st.session_state["uploaded_csv_data"] = {
-                                'df': df,
-                                'lon_col': lon_col,
-                                'lat_col': lat_col,
-                                'name': layer_name
-                            }
-                            st.rerun()
-                
-                except Exception as e:
-                    st.error(f"❌ Erreur lors de la lecture du CSV: {e}")
-        
-        # Afficher les données CSV chargées
-        if st.session_state.get("uploaded_csv_data"):
-            st.markdown("---")
-            st.markdown("#### 📍 Points chargés")
-            csv_info = st.session_state["uploaded_csv_data"]
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                st.write(f"**{csv_info['name']}** - {len(csv_info['df'])} point(s)")
-            with col2:
-                if st.button("🗑️ Supprimer", key="remove_csv"):
-                    st.session_state["uploaded_csv_data"] = None
-                    st.rerun()
-
-# ============================================================================
-# INTERFACE - ANALYSE SPATIALE
-# ============================================================================
-
-def run_analysis_spatiale():
-    st.markdown("<h1 class='main-header'>🔍 Analyse Spatiale Avancée</h1>", 
-                unsafe_allow_html=True)
-    
-    with st.sidebar:
-        st.markdown("### ⚙️ Configuration")
-        
-        with st.expander("🗺️ Source de Données", expanded=True):
-            # Choix entre mosaïque par défaut et TIFF uploadé
-            if st.session_state.get("uploaded_tiff_path"):
-                use_uploaded = st.checkbox(
-                    "Utiliser le TIFF uploadé",
-                    value=st.session_state.get("use_uploaded_tiff", False),
-                    key="use_uploaded_tiff_checkbox"
-                )
-                st.session_state["use_uploaded_tiff"] = use_uploaded
-                
-                if use_uploaded:
-                    st.success("✅ Utilisation du TIFF uploadé")
-                else:
-                    st.info("ℹ️ Utilisation de la mosaïque par défaut")
-            else:
-                st.info("ℹ️ Mosaïque par défaut")
-                st.caption("Uploadez un TIFF dans l'onglet Gestion des Fichiers")
-        
-        with st.expander("📈 Paramètres des Contours", expanded=True):
-            st.session_state["contour_levels"] = st.slider(
-                "Nombre de niveaux", 5, 30, 15
-            )
-            st.session_state["color_scheme"] = st.selectbox(
-                "Palette de couleurs", 
-                ["terrain", "viridis", "plasma", "inferno", "coolwarm", "rainbow"]
-            )
-            st.session_state["basemap_opacity"] = st.slider(
-                "Opacité fond de carte", 0.0, 1.0, 0.5, 0.1
-            )
-            st.session_state["show_hillshade"] = st.checkbox("Afficher l'ombrage du relief", False)
-        
-        with st.expander("📊 Paramètres des Profils"):
-            st.session_state["profile_resolution"] = st.slider(
-                "Résolution (m)", 10, 200, 50, 10
-            )
-            st.session_state["show_slope"] = st.checkbox("Afficher les pentes", True)
-        
-        with st.expander("🗺️ Options de la Carte"):
-            show_minimap = st.checkbox("Mini-carte", True)
-            show_fullscreen = st.checkbox("Plein écran", True)
-    
-    # Bouton pour gérer les fichiers
-    with st.expander("📂 Gestion des Fichiers", expanded=False):
-        run_file_upload_interface()
-    
-    # Déterminer quel fichier TIFF utiliser
-    if st.session_state.get("use_uploaded_tiff") and st.session_state.get("uploaded_tiff_path"):
-        mosaic_path = st.session_state["uploaded_tiff_path"]
-        st.info("🗺️ Utilisation du TIFF uploadé pour l'analyse")
-    else:
-        folder_path = "TIFF"
-        if not os.path.exists(folder_path):
-            st.error("❌ Dossier TIFF introuvable")
-            st.info("💡 Créez un dossier nommé 'TIFF' et placez-y vos fichiers GeoTIFF, ou uploadez un fichier personnalisé")
-            return
-        
-        tiff_files = load_tiff_files(folder_path)
-        if not tiff_files:
-            st.warning("⚠️ Aucun fichier TIFF dans le dossier par défaut")
-            st.info("💡 Uploadez un fichier TIFF personnalisé dans la section 'Gestion des Fichiers'")
-            return
-        
-        mosaic_path = build_mosaic(tiff_files)
-        if not mosaic_path:
-            return
-    
-    with st.expander("ℹ️ Informations du Fichier", expanded=False):
-        info = get_mosaic_info(mosaic_path)
-        if info:
-            col1, col2, col3 = st.columns(3)
-            with col1:
-                st.metric("Largeur", f"{info['width']} px")
-                st.metric("Hauteur", f"{info['height']} px")
-            with col2:
-                st.metric("Résolution X", f"{info['resolution'][0]:.2f}")
-                st.metric("Résolution Y", f"{info['resolution'][1]:.2f}")
-            with col3:
-                st.metric("Système", info['crs'])
-                st.metric("Type", info['dtype'])
-    
-    map_name = st.text_input("📝 Nom de votre projet", value="Analyse Topographique", 
-                            key="analysis_map_name")
-    
-    st.markdown("### 🗺️ Carte Interactive")
-    st.info("🖊️ Utilisez les outils de dessin pour définir vos zones d'analyse")
-    
-    m = create_advanced_map(mosaic_path, show_minimap, show_fullscreen)
-    map_data = st_folium(m, width=None, height=600, key="analysis_map")
-    
-    if map_data and isinstance(map_data, dict) and "all_drawings" in map_data:
-        st.session_state["raw_drawings"] = map_data["all_drawings"]
-    
-    st.markdown("---")
-    st.markdown("### 🎯 Mode d'Analyse")
-    
-    if st.session_state["analysis_mode"] == "none":
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            if st.button("📈 Générer des Contours", use_container_width=True):
-                st.session_state["analysis_mode"] = "contours"
-                st.rerun()
-        
-        with col2:
-            if st.button("📊 Tracer des Profils", use_container_width=True):
-                st.session_state["analysis_mode"] = "profiles"
-                st.rerun()
-        
-        with col3:
-            if st.button("📐 Analyser une Zone", use_container_width=True):
-                st.session_state["analysis_mode"] = "zone_analysis"
-                st.rerun()
-        
-        with col4:
-            if st.button("📏 Mesures & Stats", use_container_width=True):
-                st.session_state["analysis_mode"] = "measurements"
-                st.rerun()
-    
-    elif st.session_state["analysis_mode"] == "contours":
-        st.markdown("<div class='sub-header'>📈 Génération de Contours</div>", 
-                   unsafe_allow_html=True)
-        
-        show_basemap = st.checkbox("Afficher le fond de carte", value=True)
-        
-        drawing_geometries = []
-        raw_drawings = st.session_state.get("raw_drawings") or []
-        
-        for drawing in raw_drawings:
-            if isinstance(drawing, dict) and drawing.get("geometry", {}).get("type") == "Polygon":
-                drawing_geometries.append(drawing.get("geometry"))
-        
-        if not drawing_geometries:
-            st.warning("⚠️ Dessinez au moins un rectangle/polygone sur la carte")
-        else:
-            options_list = [f"Zone {i+1}" for i in range(len(drawing_geometries))]
-            selected_indices = st.multiselect(
-                "Sélectionnez les zones à analyser", 
-                options=options_list,
-                default=[options_list[0]] if options_list else []
-            )
-            
-            col_btn1, col_btn2 = st.columns([3, 1])
-            with col_btn1:
-                generate_btn = st.button("🚀 Générer les Contours", 
-                                        type="primary", use_container_width=True)
-            with col_btn2:
-                if st.button("↩️ Retour", use_container_width=True):
-                    st.session_state["analysis_mode"] = "none"
-                    st.rerun()
-            
-            if generate_btn and selected_indices:
-                progress_bar = st.progress(0)
-                for idx, sel in enumerate(selected_indices):
-                    zone_idx = int(sel.split()[1]) - 1
-                    geometry = drawing_geometries[zone_idx]
-                    
-                    st.markdown(f"#### Zone {zone_idx + 1}")
-                    with st.spinner(f"Génération en cours..."):
-                        fig = generate_advanced_contours(
-                            mosaic_path, geometry, show_basemap,
-                            st.session_state["contour_levels"],
-                            st.session_state["color_scheme"],
-                            st.session_state["show_hillshade"]
-                        )
-                        
-                        if fig:
-                            st.pyplot(fig)
-                            store_figure(fig, "contour", 
-                                       f"{map_name} - Contours Zone {zone_idx+1}")
-                            plt.close(fig)
-                            st.success(f"✅ Contours générés pour la Zone {zone_idx+1}")
-                            
-                            if st.session_state.get("statistics"):
-                                stats = st.session_state["statistics"]
-                                col1, col2, col3, col4 = st.columns(4)
-                                col1.metric("🔻 Min", f"{stats['min']:.1f} m")
-                                col2.metric("🔺 Max", f"{stats['max']:.1f} m")
-                                col3.metric("📊 Moyenne", f"{stats['mean']:.1f} m")
-                                col4.metric("📏 Dénivelé", f"{stats['range']:.1f} m")
-                    
-                    progress_bar.progress((idx + 1) / len(selected_indices))
-                
-                progress_bar.empty()
-    
-    elif st.session_state["analysis_mode"] == "profiles":
-        st.markdown("<div class='sub-header'>📊 Profils d'Élévation</div>", 
-                   unsafe_allow_html=True)
-        
-        raw_drawings = st.session_state.get("raw_drawings") or []
-        current_drawings = [
-            d for d in raw_drawings 
-            if isinstance(d, dict) and d.get("geometry", {}).get("type") == "LineString"
-        ]
-        
-        if not current_drawings:
-            st.info("ℹ️ Dessinez des lignes sur la carte pour créer des profils")
-        else:
-            col_btn1, col_btn2 = st.columns([3, 1])
-            with col_btn1:
-                generate_all = st.button("🚀 Générer Tous les Profils", 
-                                        type="primary", use_container_width=True)
-            with col_btn2:
-                if st.button("↩️ Retour", use_container_width=True):
-                    st.session_state["analysis_mode"] = "none"
-                    st.rerun()
-            
-            if generate_all:
-                progress_bar = st.progress(0)
-                for i, drawing in enumerate(current_drawings):
-                    profile_title = f"{map_name} - Profil {i+1}"
-                    st.markdown(f"#### Profil {i+1}")
-                    
-                    with st.spinner(f"Génération du profil {i+1}..."):
-                        fig = generate_advanced_profile(
-                            mosaic_path, 
-                            drawing["geometry"]["coordinates"],
-                            profile_title,
-                            st.session_state["show_slope"]
-                        )
-                        
-                        if fig:
-                            st.pyplot(fig)
-                            store_figure(fig, "profile", profile_title)
-                            plt.close(fig)
-                            st.success(f"✅ Profil {i+1} généré")
-                    
-                    progress_bar.progress((i + 1) / len(current_drawings))
-                
-                progress_bar.empty()
-            else:
-                st.markdown(f"**{len(current_drawings)} profil(s) détecté(s)**")
-                for i in range(len(current_drawings)):
-                    st.write(f"• Profil {i+1}")
-    
-    elif st.session_state["analysis_mode"] == "zone_analysis":
-        st.markdown("<div class='sub-header'>📐 Analyse Statistique de Zone</div>", 
-                   unsafe_allow_html=True)
-        
-        raw_drawings = st.session_state.get("raw_drawings") or []
-        polygons = [
-            d for d in raw_drawings 
-            if isinstance(d, dict) and d.get("geometry", {}).get("type") == "Polygon"
-        ]
-        
-        if not polygons:
-            st.warning("⚠️ Dessinez un polygone sur la carte")
-        else:
-            selected_zone = st.selectbox(
-                "Sélectionnez une zone",
-                [f"Zone {i+1}" for i in range(len(polygons))]
-            )
-            
-            col_btn1, col_btn2 = st.columns([3, 1])
-            with col_btn1:
-                analyze_btn = st.button("🔍 Analyser", type="primary", use_container_width=True)
-            with col_btn2:
-                if st.button("↩️ Retour", use_container_width=True):
-                    st.session_state["analysis_mode"] = "none"
-                    st.rerun()
-            
-            if analyze_btn:
-                zone_idx = int(selected_zone.split()[1]) - 1
-                geometry = polygons[zone_idx]["geometry"]
-                
-                with st.spinner("Analyse en cours..."):
-                    analysis_data = analyze_zone(mosaic_path, geometry)
-                    
-                    if analysis_data:
-                        st.success("✅ Analyse terminée")
-                        
-                        stats = analysis_data["statistics"]
-                        col1, col2, col3 = st.columns(3)
-                        col1.metric("📐 Surface", f"{analysis_data['area']/10000:.2f} ha")
-                        col2.metric("📊 Altitude Moyenne", f"{stats['mean']:.1f} m")
-                        col3.metric("📏 Dénivelé Total", f"{stats['range']:.1f} m")
-                        
-                        fig = create_statistics_chart(analysis_data)
-                        st.pyplot(fig)
-                        store_figure(fig, "statistics", 
-                                   f"{map_name} - Statistiques Zone {zone_idx+1}")
-                        plt.close(fig)
-    
-    elif st.session_state["analysis_mode"] == "measurements":
-        st.markdown("<div class='sub-header'>📏 Mesures et Statistiques</div>", 
-                   unsafe_allow_html=True)
-        
-        raw_drawings = st.session_state.get("raw_drawings") or []
-        
-        if not raw_drawings:
-            st.info("ℹ️ Dessinez des éléments sur la carte pour obtenir des mesures")
-        else:
-            st.markdown("### 📊 Résumé des Dessins")
-            
-            lines = [d for d in raw_drawings if d.get("geometry", {}).get("type") == "LineString"]
-            polygons = [d for d in raw_drawings if d.get("geometry", {}).get("type") == "Polygon"]
-            points = [d for d in raw_drawings if d.get("geometry", {}).get("type") == "Point"]
-            
-            col1, col2, col3 = st.columns(3)
-            col1.metric("📍 Points", len(points))
-            col2.metric("📏 Lignes", len(lines))
-            col3.metric("🔶 Polygones", len(polygons))
-            
-            if lines or polygons:
-                st.markdown("### 📐 Détails des Mesures")
-                
-                measurements = []
-                
-                for i, line in enumerate(lines):
-                    coords = line["geometry"]["coordinates"]
-                    if len(coords) >= 2:
-                        distance = sum(
-                            haversine(coords[j][0], coords[j][1], coords[j+1][0], coords[j+1][1])
-                            for j in range(len(coords)-1)
-                        )
-                        measurements.append({
-                            "Type": "Ligne",
-                            "ID": f"L{i+1}",
-                            "Longueur (m)": f"{distance:.2f}",
-                            "Surface (ha)": "-"
-                        })
-                
-                for i, poly in enumerate(polygons):
-                    coords = poly["geometry"]["coordinates"][0]
-                    area = calculate_area(coords)
-                    perimeter = sum(
-                        haversine(coords[j][0], coords[j][1], coords[j+1][0], coords[j+1][1])
-                        for j in range(len(coords)-1)
-                    )
-                    measurements.append({
-                        "Type": "Polygone",
-                        "ID": f"P{i+1}",
-                        "Longueur (m)": f"{perimeter:.2f}",
-                        "Surface (ha)": f"{area/10000:.2f}"
-                    })
-                
-                df = pd.DataFrame(measurements)
-                st.dataframe(df, use_container_width=True)
-        
-        if st.button("↩️ Retour", use_container_width=True):
-            st.session_state["analysis_mode"] = "none"
-            st.rerun()
-    
-    st.markdown("---")
-    
-    if st.session_state.get("analysis_results"):
-        st.markdown("### 💾 Résultats Sauvegardés")
-        col1, col2, col3 = st.columns(3)
-        
-        with col1:
-            st.metric("📊 Total des analyses", len(st.session_state["analysis_results"]))
-        
-        with col2:
-            if st.button("📥 Exporter en ZIP (PNG)", use_container_width=True):
-                zip_buffer = export_results("PNG")
-                if zip_buffer:
-                    st.download_button(
-                        "⬇️ Télécharger ZIP",
-                        zip_buffer,
-                        "analyses_cartographiques.zip",
-                        "application/zip"
-                    )
-        
-        with col3:
-            if st.button("📄 Exporter en PDF", use_container_width=True):
-                pdf_buffer = export_results("PDF")
-                if pdf_buffer:
-                    st.download_button(
-                        "⬇️ Télécharger PDF",
-                        pdf_buffer,
-                        "rapport_analyses.pdf",
-                        "application/pdf"
-                    )
-
-# ============================================================================
-# INTERFACE - RAPPORT (reste inchangée)
-# ============================================================================
-
-def run_report():
-    st.markdown("<h1 class='main-header'>📄 Génération de Rapport</h1>", 
-                unsafe_allow_html=True)
-    
-    with st.sidebar:
-        st.markdown("### 📝 Métadonnées du Rapport")
-        titre = st.text_input("Titre principal", key="rapport_titre", value="RAPPORT CARTOGRAPHIQUE")
-        report_id = st.text_input("ID du rapport", key="rapport_id", value=f"CARTO-{datetime.now().strftime('%Y%m%d')}")
-        report_date = st.date_input("Date du rapport", date.today(), key="rapport_date")
-        report_time = st.time_input("Heure du rapport", datetime.now().time(), key="rapport_time")
-        editor = st.text_input("Éditeur", key="rapport_editor", value="CartoTools Pro")
-        location = st.text_input("Localisation", key="rapport_location", value="Zone d'étude")
-        company = st.text_input("Société", key="rapport_company", value="")
-        logo = st.file_uploader("Logo", type=["png", "jpg", "jpeg"], key="rapport_logo")
-    
-    metadata = {
-        'titre': titre,
-        'report_id': report_id,
-        'date': report_date,
-        'time': report_time,
-        'editor': editor,
-        'location': location,
-        'company': company,
-        'logo': logo
-    }
-    
-    if "elements" not in st.session_state:
-        st.session_state["elements"] = []
-    elements = st.session_state["elements"]
-    
-    tab1, tab2, tab3 = st.tabs(["➕ Ajouter Éléments", "👁️ Aperçu", "📄 Génération PDF"])
-    
-    with tab1:
-        st.markdown("### 📊 Ajouter une carte d'analyse spatiale")
-        analysis_card = create_analysis_card_controller()
-        if analysis_card:
-            if not any(el.get("analysis_ref") == analysis_card.get("analysis_ref") 
-                      for el in elements if el["type"] == "Image"):
-                elements.append(analysis_card)
-                st.session_state["elements"] = elements
-                st.success("✅ Carte d'analyse ajoutée avec succès !")
-                st.rerun()
-            else:
-                st.warning("⚠️ Cette carte a déjà été ajoutée")
-        
-        st.markdown("---")
-        st.markdown("### 📝 Ajouter un élément personnalisé")
-        new_element = create_element_controller()
-        if new_element:
-            elements.append(new_element)
-            st.session_state["elements"] = elements
-            st.success("✅ Élément validé avec succès !")
-            st.rerun()
-    
-    with tab2:
-        if elements:
-            display_elements_preview(elements)
-            
-            if st.button("🗑️ Supprimer tous les éléments", type="secondary"):
-                st.session_state["elements"] = []
-                st.rerun()
-        else:
-            st.info("ℹ️ Aucun élément ajouté pour le moment")
-    
-    with tab3:
-        if not elements:
-            st.warning("⚠️ Ajoutez au moins un élément avant de générer le PDF")
-        else:
-            st.markdown("### 🎯 Génération du Rapport PDF")
-            
-            col1, col2 = st.columns(2)
-            with col1:
-                st.markdown("#### 📋 Résumé")
-                st.write(f"**Nombre d'éléments:** {len(elements)}")
-                images = sum(1 for e in elements if e['type'] == 'Image')
-                texts = sum(1 for e in elements if e['type'] == 'Texte')
-                st.write(f"**Images:** {images} | **Textes:** {texts}")
-            
-            with col2:
-                st.markdown("#### ℹ️ Métadonnées")
-                st.write(f"**ID:** {metadata['report_id']}")
-                st.write(f"**Éditeur:** {metadata['editor']}")
-                st.write(f"**Date:** {metadata['date'].strftime('%d/%m/%Y')}")
-            
-            if st.button("🚀 Générer le PDF", type="primary", use_container_width=True):
-                with st.spinner("Génération du PDF en cours..."):
-                    pdf = generate_pdf(elements, metadata)
-                    st.success("✅ Rapport généré avec succès!")
-                    
-                    st.download_button(
-                        "⬇️ Télécharger le PDF",
-                        pdf,
-                        f"rapport_{metadata['report_id']}.pdf",
-                        "application/pdf",
-                        use_container_width=True
-                    )
-
-# ============================================================================
-# INTERFACE - TABLEAU DE BORD (reste inchangée)
-# ============================================================================
-
-def run_dashboard():
-    st.markdown("<h1 class='main-header'>📊 Tableau de Bord</h1>", 
-                unsafe_allow_html=True)
-    
-    col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.markdown("<div class='metric-card'>", unsafe_allow_html=True)
-        analyses_count = len(st.session_state.get("analysis_results", []))
-        st.metric("🔍 Analyses réalisées", analyses_count)
-        st.markdown("</div>", unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown("<div class='metric-card'>", unsafe_allow_html=True)
-        contours = sum(1 for r in st.session_state.get("analysis_results", []) if r.get('type') == 'contour')
-        st.metric("📈 Cartes de contours", contours)
-        st.markdown("</div>", unsafe_allow_html=True)
-    
-    with col3:
-        st.markdown("<div class='metric-card'>", unsafe_allow_html=True)
-        profiles = sum(1 for r in st.session_state.get("analysis_results", []) if r.get('type') == 'profile')
-        st.metric("📊 Profils d'élévation", profiles)
-        st.markdown("</div>", unsafe_allow_html=True)
-    
-    with col4:
-        st.markdown("<div class='metric-card'>", unsafe_allow_html=True)
-        elements_count = len(st.session_state.get("elements", []))
-        st.metric("📄 Éléments de rapport", elements_count)
-        st.markdown("</div>", unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    if st.session_state.get("analysis_results"):
-        st.markdown("### 📈 Historique des Analyses")
-        
-        for i, result in enumerate(st.session_state["analysis_results"][-5:], start=1):
-            with st.expander(f"{result['title']} - {result['timestamp'].strftime('%d/%m/%Y %H:%M')}", expanded=False):
-                col_img, col_info = st.columns([2, 1])
-                
-                with col_img:
-                    st.image(result['image'], use_container_width=True)
-                
-                with col_info:
-                    st.markdown(f"**Type:** {result['type'].upper()}")
-                    st.markdown(f"**Titre:** {result['title']}")
-                    st.markdown(f"**Date:** {result['timestamp'].strftime('%d/%m/%Y à %H:%M')}")
-                    
-                    if result.get('metadata'):
-                        st.markdown("**Métadonnées:**")
-                        for key, value in result['metadata'].items():
-                            st.markdown(f"- {key}: {value}")
-    else:
-        st.info("ℹ️ Aucune analyse réalisée pour le moment. Rendez-vous dans l'onglet 'Analyse Spatiale' pour commencer.")
-    
-    st.markdown("---")
-    st.markdown("### 🎯 Actions Rapides")
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        if st.button("🗑️ Effacer toutes les analyses", use_container_width=True):
-            if st.session_state.get("analysis_results"):
-                st.session_state["analysis_results"] = []
-                st.success("✅ Analyses effacées")
-                st.rerun()
-    
-    with col2:
-        if st.button("🗑️ Effacer les éléments de rapport", use_container_width=True):
-            if st.session_state.get("elements"):
-                st.session_state["elements"] = []
-                st.success("✅ Éléments effacés")
-                st.rerun()
-    
-    with col3:
-        if st.button("🔄 Réinitialiser l'application", use_container_width=True):
-            for key in list(st.session_state.keys()):
-                del st.session_state[key]
-            st.success("✅ Application réinitialisée")
-            st.rerun()
-
-# ============================================================================
-# FONCTIONS RAPPORT PDF (reste inchangées)
-# ============================================================================
-
-def draw_metadata(c, metadata):
-    """Dessine les métadonnées sur le PDF"""
-    margin = 40
-    x_left = margin
-    y_top = PAGE_HEIGHT - margin
-    line_height = 16
-
-    logo_drawn = False
-    if metadata.get('logo'):
-        try:
-            if isinstance(metadata['logo'], bytes):
-                logo_stream = BytesIO(metadata['logo'])
-            else:
-                logo_stream = metadata['logo']
-            img = ImageReader(logo_stream)
-            img_width, img_height = img.getSize()
-            aspect = img_height / img_width
-            desired_width = 50
-            desired_height = desired_width * aspect
-            c.drawImage(img, x_left, y_top - desired_height, width=desired_width, 
-                       height=desired_height, preserveAspectRatio=True, mask='auto')
-            logo_drawn = True
-        except Exception as e:
-            st.error(f"❌ Erreur logo: {e}")
-    
-    x_title = x_left + 60 if logo_drawn else x_left
-    y_title = y_top - 20
-    
-    c.setFont("Helvetica-Bold", 22)
-    c.setFillColor(colors.HexColor("#1f77b4"))
-    if metadata.get('titre'):
-        c.drawString(x_title, y_title, metadata['titre'])
-    
-    c.setFont("Helvetica", 14)
-    c.setFillColor(colors.black)
-    y_company = y_title - 25
-    if metadata.get('company'):
-        c.drawString(x_title, y_company, metadata['company'])
-    
-    y_line = y_company - 10
-    c.setStrokeColor(colors.HexColor("#1f77b4"))
-    c.setLineWidth(2)
-    c.line(x_left, y_line, x_left + 200, y_line)
-    c.setLineWidth(1)
-    
-    y_text = y_line - 20
-    infos = [
-        ("📋 ID Rapport", metadata.get('report_id', 'N/A')),
-        ("📅 Date", metadata['date'].strftime('%d/%m/%Y') if hasattr(metadata.get('date'), "strftime") else str(metadata.get('date', 'N/A'))),
-        ("🕐 Heure", metadata['time'].strftime('%H:%M') if hasattr(metadata.get('time'), "strftime") else str(metadata.get('time', 'N/A'))),
-        ("👤 Éditeur", metadata.get('editor', 'N/A')),
-        ("📍 Localisation", metadata.get('location', 'N/A'))
-    ]
-    
-    value_x_offset = x_left + 90
-    for label, value in infos:
-        c.setFont("Helvetica-Bold", 10)
-        c.setFillColor(colors.black)
-        c.drawString(x_left, y_text, label)
-        c.setFont("Helvetica", 10)
-        c.setFillColor(colors.HexColor("#555555"))
-        c.drawString(value_x_offset, y_text, str(value))
-        y_text -= line_height
-
-def calculate_dimensions(size):
-    """Calcule les dimensions selon la taille"""
-    dimensions = {
-        "Grand": (PAGE_WIDTH, SECTION_HEIGHT),
-        "Moyen": (COLUMN_WIDTH, SECTION_HEIGHT),
-        "Petit": (COLUMN_WIDTH / 1.5, SECTION_HEIGHT)
-    }
-    return dimensions.get(size, (PAGE_WIDTH, SECTION_HEIGHT))
-
-def calculate_position(element):
-    """Calcule la position d'un élément"""
-    vertical_offset = {
-        "Haut": 0, 
-        "Milieu": SECTION_HEIGHT, 
-        "Bas": SECTION_HEIGHT*2
-    }[element['v_pos']]
-    
-    if element['size'] == "Grand":
-        return (0, PAGE_HEIGHT - vertical_offset - SECTION_HEIGHT)
-    
-    if element['h_pos'] == "Gauche":
-        x = 0
-    elif element['h_pos'] == "Droite":
-        x = COLUMN_WIDTH
-    else:
-        x = COLUMN_WIDTH / 2 - calculate_dimensions(element['size'])[0] / 2
-    
-    return (x, PAGE_HEIGHT - vertical_offset - SECTION_HEIGHT)
-
-def generate_pdf(elements, metadata):
-    """Génère le PDF du rapport"""
-    buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    
-    c.setAuthor(metadata.get('editor', 'CartoTools Pro'))
-    c.setTitle(metadata.get('report_id', 'Rapport Cartographique'))
-    
-    for element in elements:
-        width, height = calculate_dimensions(element['size'])
-        x, y = calculate_position(element)
-        
-        if element['type'] == "Image":
-            if element.get("content") is not None:
-                try:
-                    if isinstance(element["content"], bytes):
-                        image_stream = BytesIO(element["content"])
-                    else:
-                        image_stream = element["content"]
-                    img = ImageReader(image_stream)
-                    
-                    top_margin = 20
-                    bottom_margin = 25
-                    horizontal_scale = 0.9
-                    image_actual_width = width * horizontal_scale
-                    image_actual_height = height - top_margin - bottom_margin
-                    image_x = x + (width - image_actual_width) / 2
-                    image_y = y + bottom_margin
-                    
-                    c.drawImage(img, image_x, image_y, width=image_actual_width, 
-                               height=image_actual_height, preserveAspectRatio=True, mask='auto')
-                    
-                    if element.get("image_title"):
-                        c.setFont("Helvetica-Bold", 12)
-                        c.setFillColor(colors.HexColor("#2c3e50"))
-                        image_title = element["image_title"].upper()
-                        c.drawCentredString(x + width / 2, y + height - top_margin / 2, image_title)
-                    
-                    if element.get("description"):
-                        c.setFont("Helvetica", 9)
-                        c.setFillColor(colors.gray)
-                        c.drawRightString(x + width - 10, y + bottom_margin / 2, 
-                                         element["description"][:100])
-                        c.setFillColor(colors.black)
-                except Exception as e:
-                    st.error(f"❌ Erreur image: {e}")
-        else:
-            text = element['content']
-            style = getSampleStyleSheet()["Normal"]
-            style.fontSize = 14 if element['size'] == "Grand" else 12 if element['size'] == "Moyen" else 10
-            p = Paragraph(text, style)
-            p.wrapOn(c, width - 20, height - 20)
-            p.drawOn(c, x + 10, y + 10)
-    
-    draw_metadata(c, metadata)
-    
-    c.save()
-    buffer.seek(0)
-    return buffer
-
-def generate_analysis_report():
-    """Génère un rapport automatique des analyses"""
-    buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=A4)
-    
-    c.setFont("Helvetica-Bold", 24)
-    c.setFillColor(colors.HexColor("#1f77b4"))
-    c.drawCentredString(PAGE_WIDTH/2, PAGE_HEIGHT - 100, "RAPPORT D'ANALYSE CARTOGRAPHIQUE")
-    
-    c.setFont("Helvetica", 14)
-    c.setFillColor(colors.black)
-    c.drawCentredString(PAGE_WIDTH/2, PAGE_HEIGHT - 140, f"Généré le {datetime.now().strftime('%d/%m/%Y à %H:%M')}")
-    
-    c.setFont("Helvetica", 12)
-    c.drawCentredString(PAGE_WIDTH/2, PAGE_HEIGHT - 170, "CartoTools Pro v2.0")
-    
-    y_pos = PAGE_HEIGHT - 220
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(50, y_pos, "📊 Résumé de l'analyse")
-    y_pos -= 30
-    
-    results = st.session_state.get("analysis_results", [])
-    c.setFont("Helvetica", 11)
-    c.drawString(70, y_pos, f"• Nombre d'analyses réalisées: {len(results)}")
-    y_pos -= 20
-    
-    contours = sum(1 for r in results if r['type'] == 'contour')
-    profiles = sum(1 for r in results if r['type'] == 'profile')
-    
-    c.drawString(70, y_pos, f"• Cartes de contours: {contours}")
-    y_pos -= 20
-    c.drawString(70, y_pos, f"• Profils d'élévation: {profiles}")
-    
-    for i, result in enumerate(results):
-        c.showPage()
+        # En-tête
         c.setFont("Helvetica-Bold", 16)
-        c.drawString(50, PAGE_HEIGHT - 50, f"{i+1}. {result['title']}")
-        
-        try:
-            img = ImageReader(BytesIO(result['image']))
-            c.drawImage(img, 50, PAGE_HEIGHT - 550, width=PAGE_WIDTH - 100, 
-                       height=400, preserveAspectRatio=True, mask='auto')
-        except:
-            pass
-        
+        c.drawString(50, height - 50, "Rapport d'Analyse Topographique")
         c.setFont("Helvetica", 10)
-        c.drawString(50, PAGE_HEIGHT - 570, 
-                    f"Créé le: {result['timestamp'].strftime('%d/%m/%Y à %H:%M')}")
-    
-    c.save()
-    buffer.seek(0)
-    return buffer
-
-# ============================================================================
-# FONCTIONS RAPPORT - CONTRÔLEURS (reste inchangées)
-# ============================================================================
-
-def create_analysis_card_controller():
-    """Contrôleur pour ajouter une carte d'analyse spatiale"""
-    with st.expander("➕ Ajouter une carte d'analyse spatiale", expanded=True):
-        if "analysis_results" not in st.session_state or not st.session_state["analysis_results"]:
-            st.info("ℹ️ Aucune carte d'analyse disponible. Générez d'abord des analyses dans l'onglet 'Analyse Spatiale'.")
-            return None
+        c.drawString(50, height - 70, f"Généré le: {datetime.now().strftime('%d/%m/%Y à %H:%M')}")
         
-        options = {f"{i+1} - {res['title']}": i for i, res in enumerate(st.session_state["analysis_results"])}
-        chosen = st.selectbox("Choisissez une carte", list(options.keys()), key="analysis_card_select")
-        idx = options[chosen]
+        # Informations de la mosaïque
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(50, height - 100, "Informations de la Mosaïque:")
+        c.setFont("Helvetica", 10)
         
-        col1, col2 = st.columns(2)
-        with col1:
-            size = st.selectbox("Taille", ["Grand", "Moyen", "Petit"], key="analysis_card_size")
-        with col2:
-            v_pos = st.selectbox("Position verticale", ["Haut", "Milieu", "Bas"], key="analysis_card_v_pos")
-            h_pos = st.selectbox("Position horizontale", ["Gauche", "Droite", "Centre"], key="analysis_card_h_pos")
+        y_pos = height - 120
+        info_lines = [
+            f"Dimensions: {mosaic_info['width']} x {mosaic_info['height']} pixels",
+            f"Résolution: {mosaic_info['resolution'][0]:.2f} x {mosaic_info['resolution'][1]:.2f} m/pixel",
+            f"Système de coordonnées: {mosaic_info['crs']}",
+            f"Type de données: {mosaic_info['dtype']}",
+            f"Nombre de bandes: {mosaic_info['count']}"
+        ]
         
-        title_input = st.text_input("Titre pour la carte", key="analysis_card_title", 
-                                    value=st.session_state["analysis_results"][idx]["title"])
-        description_input = st.text_input("Description pour la carte", key="analysis_card_description", 
-                                         value="Carte générée depuis l'analyse spatiale")
+        for line in info_lines:
+            c.drawString(70, y_pos, line)
+            y_pos -= 15
         
-        if st.button("✅ Valider la carte d'analyse", key="validate_analysis_card"):
-            return {
-                "type": "Image",
-                "size": size,
-                "v_pos": v_pos,
-                "h_pos": h_pos,
-                "content": st.session_state["analysis_results"][idx]["image"],
-                "image_title": title_input,
-                "description": description_input,
-                "analysis_ref": idx
-            }
-    return None
-
-def create_element_controller():
-    """Contrôleur pour ajouter un élément personnalisé"""
-    with st.expander("➕ Ajouter un élément personnalisé", expanded=True):
-        col1, col2 = st.columns(2)
-        with col1:
-            elem_type = st.selectbox("Type", ["Image", "Texte"], key="rapport_elem_type")
-            size = st.selectbox("Taille", ["Grand", "Moyen", "Petit"], key="rapport_elem_size")
-        with col2:
-            vertical_pos = st.selectbox("Position verticale", ["Haut", "Milieu", "Bas"], key="rapport_v_pos")
-            horizontal_options = ["Gauche", "Droite", "Centre"] if size == "Petit" else ["Gauche", "Droite"]
-            horizontal_pos = st.selectbox("Position horizontale", horizontal_options, key="rapport_h_pos")
-        
-        if elem_type == "Image":
-            content = st.file_uploader("Contenu (image)", type=["png", "jpg", "jpeg"], key="rapport_content_image")
-            image_title = st.text_input("Titre de l'image", max_chars=50, key="rapport_image_title")
-            description = st.text_input("Description brève (max 100 caractères)", max_chars=100, key="rapport_image_desc")
-        else:
-            content = st.text_area("Contenu", key="rapport_content_text")
-        
-        if st.button("✅ Valider l'élément", key="rapport_validate_element"):
-            if elem_type == "Image" and content is None:
-                st.error("❌ Veuillez charger une image pour cet élément.")
-                return None
-            element_data = {
-                "type": elem_type,
-                "size": size,
-                "v_pos": vertical_pos,
-                "h_pos": horizontal_pos,
-                "content": content,
-            }
-            if elem_type == "Image":
-                element_data["image_title"] = image_title
-                element_data["description"] = description
-            return element_data
-    return None
-
-def display_elements_preview(elements):
-    """Affiche l'aperçu des éléments validés"""
-    st.markdown("### 📋 Aperçu des éléments validés")
-    
-    if not elements:
-        st.info("ℹ️ Aucun élément ajouté pour le moment")
-        return
-    
-    for idx, element in enumerate(elements, start=1):
-        with st.expander(f"Élément {idx} - {element['type']} ({element['size']})", expanded=False):
-            col1, col2 = st.columns([3, 1])
-            with col1:
-                if element["type"] == "Image":
-                    st.image(element["content"], width=300)
-                    if element.get("image_title"):
-                        st.markdown(f"**Titre:** {element['image_title']}")
-                    if element.get("description"):
-                        st.markdown(f"*Description:* {element['description']}")
-                else:
-                    st.markdown(f"**Texte:** {element['content'][:100]}...")
-                
-                st.markdown(f"**Position:** {element['v_pos']} - {element['h_pos']}")
+        # Statistiques globales
+        if "statistics" in st.session_state and st.session_state["statistics"]:
+            stats = st.session_state["statistics"]
+            y_pos -= 20
+            c.setFont("Helvetica-Bold", 12)
+            c.drawString(50, y_pos, "Statistiques Globales:")
+            c.setFont("Helvetica", 10)
             
+            y_pos -= 15
+            stat_lines = [
+                f"Altitude minimale: {stats['min']:.2f} m",
+                f"Altitude maximale: {stats['max']:.2f} m",
+                f"Altitude moyenne: {stats['mean']:.2f} m",
+                f"Écart-type: {stats['std']:.2f} m",
+                f"Plage: {stats['range']:.2f} m"
+            ]
+            
+            for line in stat_lines:
+                c.drawString(70, y_pos, line)
+                y_pos -= 15
+        
+        # Résultats d'analyse
+        y_pos -= 20
+        c.setFont("Helvetica-Bold", 12)
+        c.drawString(50, y_pos, "Résultats d'Analyse:")
+        
+        for i, result in enumerate(analysis_results):
+            if y_pos < 100:
+                c.showPage()
+                y_pos = height - 50
+                c.setFont("Helvetica-Bold", 12)
+                c.drawString(50, y_pos, "Résultats d'Analyse (suite):")
+                y_pos -= 20
+            
+            y_pos -= 15
+            c.setFont("Helvetica", 10)
+            c.drawString(70, y_pos, f"Analyse {i+1}: {result['type']} - {result['description']}")
+            y_pos -= 10
+        
+        c.save()
+        buffer.seek(0)
+        return buffer
+        
+    except Exception as e:
+        st.error(f"❌ Erreur lors de la création du PDF: {e}")
+        return None
+
+def export_data(analysis_results, mosaic_info, format_type):
+    """Exporte les données dans différents formats"""
+    try:
+        if format_type == "PDF":
+            return create_pdf_report(analysis_results, mosaic_info)
+        elif format_type == "JSON":
+            export_data = {
+                "metadata": {
+                    "export_date": datetime.now().isoformat(),
+                    "mosaic_info": mosaic_info,
+                    "analysis_count": len(analysis_results)
+                },
+                "statistics": st.session_state.get("statistics", {}),
+                "analyses": analysis_results
+            }
+            buffer = BytesIO()
+            buffer.write(json.dumps(export_data, indent=2, default=str).encode())
+            buffer.seek(0)
+            return buffer
+        elif format_type == "CSV":
+            buffer = BytesIO()
+            lines = ["Type,Description,Surface(m²),Altitude Min,Altitude Max,Altitude Moyenne"]
+            for result in analysis_results:
+                line = f"{result['type']},{result['description']},{result.get('area', 0):.2f},"
+                line += f"{result.get('stats', {}).get('min', 0):.2f},"
+                line += f"{result.get('stats', {}).get('max', 0):.2f},"
+                line += f"{result.get('stats', {}).get('mean', 0):.2f}"
+                lines.append(line)
+            buffer.write("\n".join(lines).encode())
+            buffer.seek(0)
+            return buffer
+    except Exception as e:
+        st.error(f"❌ Erreur d'export: {e}")
+        return None
+
+# ============================================================================
+# INTERFACE UTILISATEUR - SIDEBAR
+# ============================================================================
+
+def render_sidebar():
+    """Affiche la barre latérale avec les contrôles"""
+    st.sidebar.title("🗺️ CartoTools Pro")
+    st.sidebar.markdown("---")
+    
+    # Sélection de la mosaïque
+    st.sidebar.subheader("📁 Source des données")
+    
+    mosaic_choice = st.sidebar.radio(
+        "Choisir la source:",
+        ["Mosaïque par défaut", "TIFF uploadé"],
+        key="mosaic_choice"
+    )
+    
+    if mosaic_choice == "TIFF uploadé":
+        st.session_state.use_uploaded_tiff = True
+        if st.session_state.uploaded_tiff_path:
+            st.sidebar.success(f"✅ TIFF chargé: {os.path.basename(st.session_state.uploaded_tiff_path)}")
+        else:
+            st.sidebar.warning("⚠️ Aucun TIFF uploadé")
+    else:
+        st.session_state.use_uploaded_tiff = False
+    
+    # Upload de fichiers
+    st.sidebar.subheader("📤 Upload de données")
+    
+    # Upload TIFF
+    uploaded_tiff = st.sidebar.file_uploader(
+        "📁 Uploader un TIFF personnalisé",
+        type=['tif', 'tiff'],
+        help="Format requis: GeoTIFF avec CRS défini. Bande unique (élévation) recommandée."
+    )
+    
+    if uploaded_tiff is not None:
+        if st.session_state.get("uploaded_tiff_path") is None or st.sidebar.button("🔄 Recharger TIFF"):
+            with st.spinner("📥 Sauvegarde du TIFF..."):
+                file_path = save_uploaded_file(uploaded_tiff, "uploads/tiff")
+                if file_path:
+                    is_valid, message = validate_tiff_file(file_path)
+                    if is_valid:
+                        st.session_state.uploaded_tiff_path = file_path
+                        st.sidebar.success("✅ TIFF validé et chargé")
+                    else:
+                        st.sidebar.error(f"❌ {message}")
+    
+    # Upload Shapefile
+    uploaded_shp = st.sidebar.file_uploader(
+        "🗺️ Uploader un Shapefile (ZIP)",
+        type=['zip'],
+        help="Archive ZIP contenant .shp, .shx, .dbf, .prj"
+    )
+    
+    if uploaded_shp is not None and st.sidebar.button("📥 Charger Shapefile"):
+        with st.spinner("📥 Extraction du shapefile..."):
+            shp_path, error = extract_shapefile_from_zip(uploaded_shp)
+            if shp_path:
+                gdf, error = load_shapefile(shp_path)
+                if gdf is not None:
+                    layer_name = f"Shapefile_{len(st.session_state.shapefile_layers) + 1}"
+                    st.session_state.shapefile_layers.append({
+                        'name': layer_name,
+                        'gdf': gdf,
+                        'path': shp_path
+                    })
+                    st.sidebar.success(f"✅ Shapefile chargé: {len(gdf)} entités")
+                else:
+                    st.sidebar.error(error)
+            else:
+                st.sidebar.error(error)
+    
+    # Upload CSV
+    uploaded_csv = st.sidebar.file_uploader(
+        "📊 Uploader des points CSV",
+        type=['csv', 'txt'],
+        help="Colonnes requises: longitude, latitude"
+    )
+    
+    if uploaded_csv is not None:
+        if st.sidebar.button("📥 Charger CSV"):
+            with st.spinner("📥 Traitement du CSV..."):
+                csv_path = save_uploaded_file(uploaded_csv, "uploads/csv")
+                if csv_path:
+                    df, error = load_csv_points(csv_path)
+                    if df is not None:
+                        st.session_state.uploaded_csv_data = {
+                            'df': df,
+                            'path': csv_path,
+                            'name': f"Points_{len(df)}",
+                            'lon_col': 'longitude',
+                            'lat_col': 'latitude'
+                        }
+                        st.sidebar.success(f"✅ CSV chargé: {len(df)} points")
+                    else:
+                        st.sidebar.error(error)
+    
+    # Gestion des couches
+    if st.session_state.shapefile_layers or st.session_state.uploaded_csv_data:
+        st.sidebar.subheader("🗂️ Couches chargées")
+        
+        for layer in st.session_state.shapefile_layers:
+            if st.sidebar.button(f"❌ Supprimer {layer['name']}", key=f"del_{layer['name']}"):
+                st.session_state.shapefile_layers.remove(layer)
+                st.rerun()
+        
+        if st.session_state.uploaded_csv_data:
+            if st.sidebar.button("❌ Supprimer points CSV"):
+                st.session_state.uploaded_csv_data = None
+                st.rerun()
+    
+    # Paramètres d'analyse
+    st.sidebar.subheader("⚙️ Paramètres d'analyse")
+    
+    st.session_state.color_scheme = st.sidebar.selectbox(
+        "Palette de couleurs:",
+        ["terrain", "viridis", "plasma", "inferno", "magma", "cividis"],
+        index=0
+    )
+    
+    st.session_state.contour_levels = st.sidebar.slider(
+        "Nombre de niveaux de contour:",
+        min_value=5, max_value=50, value=15, step=1
+    )
+    
+    st.session_state.profile_resolution = st.sidebar.slider(
+        "Résolution du profil (m):",
+        min_value=10, max_value=200, value=50, step=10
+    )
+    
+    st.session_state.basemap_opacity = st.sidebar.slider(
+        "Opacité de la carte de fond:",
+        min_value=0.0, max_value=1.0, value=0.5, step=0.1
+    )
+    
+    st.session_state.show_hillshade = st.sidebar.checkbox("Afficher l'ombrage", value=False)
+    st.session_state.show_slope = st.sidebar.checkbox("Afficher la pente", value=True)
+    
+    # Export
+    st.sidebar.subheader("📤 Export")
+    st.session_state.export_format = st.sidebar.selectbox(
+        "Format d'export:",
+        ["PNG", "PDF", "JSON", "CSV"],
+        index=0
+    )
+    
+    # Informations
+    st.sidebar.markdown("---")
+    st.sidebar.markdown("""
+    **📝 Instructions:**
+    1. Chargez vos données (TIFF, Shapefile, CSV)
+    2. Dessinez sur la carte pour analyser
+    3. Exportez vos résultats
+    """)
+
+# ============================================================================
+# INTERFACE UTILISATEUR - CONTENU PRINCIPAL
+# ============================================================================
+
+def render_main_content():
+    """Affiche le contenu principal de l'application"""
+    st.title("🗺️ CartoTools Pro - Analyse Topographique Avancée")
+    
+    # Vérification de la disponibilité des données
+    mosaic_file = None
+    if st.session_state.use_uploaded_tiff and st.session_state.uploaded_tiff_path:
+        mosaic_file = st.session_state.uploaded_tiff_path
+        mosaic_source = "TIFF uploadé"
+    else:
+        mosaic_file = "mosaic.tif"
+        mosaic_source = "Mosaïque par défaut"
+        if not os.path.exists(mosaic_file):
+            st.error("❌ La mosaïque par défaut n'est pas disponible. Veuillez uploader un TIFF.")
+            return
+    
+    # Affichage des informations de la mosaïque
+    mosaic_info = get_mosaic_info(mosaic_file)
+    if mosaic_info:
+        col1, col2, col3 = st.columns(3)
+        with col1:
+            st.metric("Source", mosaic_source)
+        with col2:
+            st.metric("Dimensions", f"{mosaic_info['width']}×{mosaic_info['height']}")
+        with col3:
+            st.metric("Résolution", f"{mosaic_info['resolution'][0]:.1f}m")
+    
+    # Carte interactive
+    st.subheader("🗺️ Carte Interactive")
+    
+    with st.spinner("🔄 Chargement de la carte..."):
+        m = create_advanced_map(mosaic_file)
+        map_data = st_folium(m, width=1200, height=500)
+    
+    # Gestion des dessins
+    if map_data and "last_active_drawing" in map_data and map_data["last_active_drawing"]:
+        drawing = map_data["last_active_drawing"]
+        geometry = drawing.get("geometry")
+        
+        if geometry and geometry not in [d.get("geometry") for d in st.session_state.raw_drawings]:
+            st.session_state.raw_drawings.append({
+                "geometry": geometry,
+                "type": drawing.get("geometry", {}).get("type"),
+                "properties": drawing.get("properties", {})
+            })
+    
+    # Sélection du mode d'analyse
+    st.subheader("🔍 Analyse des Données")
+    
+    if st.session_state.raw_drawings:
+        col1, col2, col3 = st.columns([2, 1, 1])
+        
+        with col1:
+            selected_drawing_idx = st.selectbox(
+                "Sélectionner un dessin à analyser:",
+                range(len(st.session_state.raw_drawings)),
+                format_func=lambda i: f"Dessin {i+1} - {st.session_state.raw_drawings[i]['type']}"
+            )
+        
+        with col2:
+            analysis_type = st.selectbox(
+                "Type d'analyse:",
+                ["Contours", "Profil", "Statistiques"]
+            )
+        
+        with col3:
+            if st.button("🚀 Lancer l'analyse", type="primary"):
+                selected_drawing = st.session_state.raw_drawings[selected_drawing_idx]
+                
+                with st.spinner("🔄 Analyse en cours..."):
+                    if analysis_type == "Contours":
+                        fig = generate_advanced_contours(
+                            mosaic_file,
+                            selected_drawing["geometry"],
+                            levels=st.session_state.contour_levels,
+                            colormap=st.session_state.color_scheme,
+                            show_hillshade=st.session_state.show_hillshade
+                        )
+                        if fig:
+                            st.pyplot(fig)
+                            result = {
+                                "type": "Contours",
+                                "description": f"Cartographie des contours - {st.session_state.contour_levels} niveaux",
+                                "timestamp": datetime.now()
+                            }
+                            st.session_state.analysis_results.append(result)
+                    
+                    elif analysis_type == "Profil":
+                        if selected_drawing["type"] in ["LineString", "MultiLineString"]:
+                            coords = selected_drawing["geometry"]["coordinates"]
+                            if selected_drawing["type"] == "MultiLineString":
+                                coords = coords[0]
+                            fig = generate_advanced_profile(
+                                mosaic_file,
+                                coords,
+                                f"Profil topographique - Dessin {selected_drawing_idx + 1}",
+                                show_slope=st.session_state.show_slope
+                            )
+                            if fig:
+                                st.pyplot(fig)
+                                result = {
+                                    "type": "Profil",
+                                    "description": f"Profil topographique - Longueur: {len(coords)} points",
+                                    "timestamp": datetime.now()
+                                }
+                                st.session_state.analysis_results.append(result)
+                        else:
+                            st.error("❌ Le profil nécessite une ligne")
+                    
+                    elif analysis_type == "Statistiques":
+                        analysis_data = analyze_zone(mosaic_file, selected_drawing["geometry"])
+                        if analysis_data:
+                            col_stat1, col_stat2 = st.columns(2)
+                            
+                            with col_stat1:
+                                st.subheader("📊 Statistiques détaillées")
+                                stats = analysis_data["statistics"]
+                                st.metric("Altitude min", f"{stats['min']:.2f} m")
+                                st.metric("Altitude max", f"{stats['max']:.2f} m")
+                                st.metric("Altitude moyenne", f"{stats['mean']:.2f} m")
+                                st.metric("Écart-type", f"{stats['std']:.2f} m")
+                                st.metric("Surface", f"{analysis_data['area']:.2f} m²")
+                            
+                            with col_stat2:
+                                fig_stats = create_statistics_chart(analysis_data)
+                                st.pyplot(fig_stats)
+                            
+                            result = {
+                                "type": "Statistiques",
+                                "description": f"Analyse statistique - Surface: {analysis_data['area']:.0f} m²",
+                                "stats": stats,
+                                "area": analysis_data["area"],
+                                "timestamp": datetime.now()
+                            }
+                            st.session_state.analysis_results.append(result)
+        
+        # Gestion des dessins existants
+        st.subheader("📝 Dessins existants")
+        for i, drawing in enumerate(st.session_state.raw_drawings):
+            col1, col2, col3 = st.columns([3, 1, 1])
+            with col1:
+                st.write(f"**Dessin {i+1}** - {drawing['type']}")
             with col2:
-                if st.button("🗑️ Supprimer", key=f"delete_element_{idx}"):
-                    elements.pop(idx - 1)
-                    st.session_state["elements"] = elements
+                if st.button(f"🔍 Analyser", key=f"analyze_{i}"):
+                    st.session_state.raw_drawings[selected_drawing_idx] = drawing
+            with col3:
+                if st.button(f"🗑️ Supprimer", key=f"delete_{i}"):
+                    st.session_state.raw_drawings.pop(i)
                     st.rerun()
+    
+    else:
+        st.info("🎨 Dessinez sur la carte pour commencer l'analyse")
+    
+    # Export des résultats
+    if st.session_state.analysis_results:
+        st.subheader("📤 Export des résultats")
+        
+        col1, col2 = st.columns([1, 3])
+        with col1:
+            if st.button("💾 Exporter les résultats", type="primary"):
+                with st.spinner("🔄 Préparation de l'export..."):
+                    export_buffer = export_data(
+                        st.session_state.analysis_results,
+                        mosaic_info,
+                        st.session_state.export_format
+                    )
+                    
+                    if export_buffer:
+                        filename = f"analyse_topographique_{datetime.now().strftime('%Y%m%d_%H%M')}.{st.session_state.export_format.lower()}"
+                        
+                        st.download_button(
+                            label=f"📥 Télécharger {st.session_state.export_format}",
+                            data=export_buffer,
+                            file_name=filename,
+                            mime={
+                                "PNG": "image/png",
+                                "PDF": "application/pdf",
+                                "JSON": "application/json",
+                                "CSV": "text/csv"
+                            }[st.session_state.export_format]
+                        )
+        
+        with col2:
+            st.write(f"**{len(st.session_state.analysis_results)}** analyses effectuées")
 
 # ============================================================================
 # APPLICATION PRINCIPALE
 # ============================================================================
 
 def main():
+    """Fonction principale de l'application"""
+    
+    # Initialisation
     initialize_session_state()
     
-    st.sidebar.markdown("# 🗺️ CartoTools Pro")
-    st.sidebar.markdown("### Navigation")
+    # Interface utilisateur
+    render_sidebar()
+    render_main_content()
     
-    menu = st.sidebar.radio(
-        "Menu Principal",
-        ["📊 Tableau de Bord", "🔍 Analyse Spatiale", "📄 Rapport", "❓ Aide"],
-        key="main_menu"
-    )
-    
-    st.sidebar.markdown("---")
-    st.sidebar.markdown("### 📌 À propos")
-    st.sidebar.info("""
-    **CartoTools Pro v2.0**
-    
-    Application professionnelle d'analyse cartographique et de génération de rapports.
-    
-    © 2024 CartoTools
-    """)
-    
-    if menu == "📊 Tableau de Bord":
-        run_dashboard()
-    elif menu == "🔍 Analyse Spatiale":
-        run_analysis_spatiale()
-    elif menu == "📄 Rapport":
-        run_report()
-    elif menu == "❓ Aide":
-        run_help()
-
-# ============================================================================
-# INTERFACE - AIDE (reste inchangée)
-# ============================================================================
-
-def run_help():
-    st.markdown("<h1 class='main-header'>❓ Aide & Documentation</h1>", 
-                unsafe_allow_html=True)
-    
-    tab1, tab2, tab3, tab4 = st.tabs(["🚀 Démarrage Rapide", "📈 Analyse Spatiale", "📄 Rapports", "⚙️ Configuration"])
-    
-    with tab1:
-        st.markdown("""
-        ## 🚀 Démarrage Rapide
-        
-        ### Préparation des données
-        1. **Créez un dossier `TIFF`** à la racine du projet
-        2. **Placez vos fichiers GeoTIFF** (.tif, .tiff) dans ce dossier
-        3. Les fichiers seront automatiquement fusionnés en mosaïque
-        
-        ### Première utilisation
-        1. Lancez l'application avec `streamlit run app.py`
-        2. Accédez à l'onglet **Analyse Spatiale**
-        3. La carte interactive se charge avec votre mosaïque
-        4. Utilisez les outils de dessin pour créer vos analyses
-        
-        ### Navigation
-        - **📊 Tableau de Bord** : Vue d'ensemble de vos analyses
-        - **🔍 Analyse Spatiale** : Création de contours, profils et statistiques
-        - **📄 Rapport** : Génération de rapports PDF personnalisés
-        - **❓ Aide** : Documentation complète
-        """)
-    
-    with tab2:
-        st.markdown("""
-        ## 📈 Analyse Spatiale
-        
-        ### Génération de Contours
-        1. **Dessinez un rectangle/polygone** sur la zone d'intérêt
-        2. Cliquez sur **"Générer des Contours"**
-        3. Sélectionnez les zones à analyser
-        4. Configurez les paramètres :
-           - Nombre de niveaux (5-30)
-           - Palette de couleurs
-           - Opacité du fond de carte
-           - Ombrage du relief
-        
-        ### Profils d'Élévation
-        1. **Dessinez une ligne** sur votre tracé
-        2. Cliquez sur **"Tracer des Profils"**
-        3. Les profils incluent :
-           - Graphique d'élévation
-           - Analyse des pentes
-           - Statistiques (min, max, dénivelé)
-        
-        ### Analyse de Zone
-        1. **Dessinez un polygone** sur la zone
-        2. Cliquez sur **"Analyser une Zone"**
-        3. Obtenez :
-           - Surface en hectares
-           - Statistiques d'élévation
-           - Distribution des altitudes
-        
-        ### Mesures & Statistiques
-        - Vue d'ensemble de tous vos dessins
-        - Calcul automatique des longueurs et surfaces
-        - Export des données en tableau
-        
-        ### Gestion des Fichiers
-        - **TIFF personnalisés** : Uploadez vos propres fichiers d'élévation
-        - **Shapefiles** : Ajoutez des couches vectorielles
-        - **CSV/TXT** : Importez des points avec coordonnées
-        """)
-    
-    with tab3:
-        st.markdown("""
-        ## 📄 Génération de Rapports
-        
-        ### Métadonnées
-        Configurez les informations du rapport dans la barre latérale :
-        - Titre principal
-        - ID du rapport
-        - Date et heure
-        - Éditeur
-        - Localisation
-        - Logo (optionnel)
-        
-        ### Ajout d'éléments
-        
-        #### Cartes d'analyse
-        1. Générez d'abord des analyses
-        2. Dans l'onglet Rapport, sélectionnez une carte
-        3. Configurez la taille et position
-        4. Ajoutez un titre et description
-        
-        #### Éléments personnalisés
-        - **Images** : Téléversez vos propres images
-        - **Textes** : Ajoutez des commentaires
-        - Configurez taille et position pour chaque élément
-        
-        ### Mise en page
-        - **Tailles** : Grand (pleine page), Moyen (demi-page), Petit
-        - **Positions verticales** : Haut, Milieu, Bas
-        - **Positions horizontales** : Gauche, Droite, Centre
-        
-        ### Génération PDF
-        1. Vérifiez l'aperçu des éléments
-        2. Cliquez sur **"Générer le PDF"**
-        3. Téléchargez votre rapport
-        """)
-    
-    with tab4:
-        st.markdown("""
-        ## ⚙️ Configuration
-        
-        ### Paramètres des Contours
-        - **Nombre de niveaux** : Plus de niveaux = contours plus détaillés
-        - **Palette de couleurs** : Choisissez selon vos besoins
-          - `terrain` : Naturel (vert-brun-blanc)
-          - `viridis` : Contraste élevé
-          - `plasma` : Chaud (violet-orange)
-          - `coolwarm` : Bleu-rouge
-        - **Opacité fond de carte** : 0 (transparent) à 1 (opaque)
-        - **Ombrage du relief** : Ajoute un effet 3D
-        
-        ### Paramètres des Profils
-        - **Résolution** : Distance entre points (10-200m)
-          - Basse (10-30m) : Détails précis, calculs longs
-          - Moyenne (40-70m) : Bon compromis
-          - Haute (80-200m) : Vue d'ensemble rapide
-        - **Afficher les pentes** : Graphique des variations
-        
-        ### Options de la Carte
-        - **Mini-carte** : Navigation rapide
-        - **Plein écran** : Vue étendue
-        - **Mesures** : Outils de mesure intégrés
-        
-        ### Format d'Export
-        - **PNG (ZIP)** : Images individuelles
-        - **PDF** : Rapport automatique complet
-        """)
-    
-    st.markdown("---")
-    st.markdown("""
-    ## 💡 Conseils & Astuces
-    
-    - **Performance** : Pour de grandes zones, utilisez moins de niveaux de contours
-    - **Précision** : Dessinez des zones plus petites pour des analyses détaillées
-    - **Organisation** : Nommez clairement vos projets pour les retrouver facilement
-    - **Sauvegarde** : Exportez régulièrement vos analyses
-    - **Qualité PDF** : Limitez à 10-15 éléments par rapport pour une meilleure lisibilité
-    
-    ## 🐛 Résolution de problèmes
-    
-    **La mosaïque ne se charge pas**
-    - Vérifiez que le dossier TIFF existe
-    - Vérifiez que les fichiers sont au format .tif ou .tiff
-    - Vérifiez les droits d'accès au dossier
-    
-    **Les contours ne s'affichent pas**
-    - Dessinez un rectangle/polygone valide
-    - Vérifiez que la zone intersecte la mosaïque
-    
-    **Le PDF ne se génère pas**
-    - Vérifiez que tous les éléments sont valides
-    - Réduisez le nombre d'éléments si nécessaire
-    - Vérifiez les métadonnées (tous les champs requis)
-    """)
+    # Nettoyage temporaire
+    if st.sidebar.button("🧹 Nettoyer les fichiers temporaires"):
+        try:
+            for folder in ["uploads", "temp"]:
+                if os.path.exists(folder):
+                    shutil.rmtree(folder)
+                    os.makedirs(folder)
+            st.sidebar.success("✅ Fichiers temporaires nettoyés")
+        except Exception as e:
+            st.sidebar.error(f"❌ Erreur lors du nettoyage: {e}")
 
 if __name__ == "__main__":
     main()
